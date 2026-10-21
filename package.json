@@ -1,0 +1,23 @@
+{
+  "name": "creatorhive-desktop",
+  "productName": "CreatorHive",
+  "version": "1.0.0",
+  "description": "CreatorHive for Mac",
+  "author": "Hey Social Inc.",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "scripts/build.sh",
+    "release": "scripts/build.sh release"
+  },
+  "dependencies": {
+    "ably": "2.29.0",
+    "electron-updater": "6.8.10"
+  },
+  "devDependencies": {
+    "electron": "44.6.0",
+    "electron-builder": "26.17.0"
+  }
+}
