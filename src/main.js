@@ -506,6 +506,7 @@ function configureUpdates() {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on("update-downloaded", (info) => {
+    debug("update downloaded", info.version);
     updateReady = info.version;
     updateTray();
   });
