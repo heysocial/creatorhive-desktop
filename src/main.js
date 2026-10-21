@@ -203,8 +203,9 @@ function configureSession() {
   ses.setPermissionRequestHandler((contents, permission, callback, details) => {
     callback(allowed.has(permission) && isOwnUrl(details.requestingUrl ?? contents.getURL()));
   });
+  // Electron hands over the origin with a trailing slash, so compare as URLs.
   ses.setPermissionCheckHandler((_contents, permission, requestingOrigin) => (
-    allowed.has(permission) && requestingOrigin === ORIGIN
+    allowed.has(permission) && isOwnUrl(requestingOrigin)
   ));
 }
 
