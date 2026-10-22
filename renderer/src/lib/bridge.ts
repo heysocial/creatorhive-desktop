@@ -33,6 +33,10 @@ export interface NativeMenuItem {
   submenu?: NativeMenuItem[];
 }
 
+export type UploadResult =
+  | { ok: true; url: string; pathname: string; contentType: string; size: number }
+  | { ok: false; error: string };
+
 type Unsubscribe = () => void;
 type Listen<T> = (callback: (payload: T) => void) => Unsubscribe;
 
@@ -67,8 +71,20 @@ export interface Bridge {
     onCommand: Listen<string>;
     onNavigate: Listen<string>;
     onUpdateReady: Listen<string>;
+    openMain(target: string): void;
+    onNavigateView: Listen<string>;
   };
-  window: { onFullscreen: Listen<boolean>; onFocus: Listen<boolean> };
+  files: {
+    upload(request: { route: string; name: string; type: string; bytes: ArrayBuffer }): Promise<UploadResult>;
+    quickLook(url: string, name: string): Promise<{ ok: boolean }>;
+    save(url: string, name: string): Promise<{ ok: boolean }>;
+    addToCalendar(ics: string, name: string): Promise<{ ok: boolean }>;
+  };
+  window: {
+    popout(target: { kind: "dm" | "channel" | "thread"; id: string; title?: string }): void;
+    onFullscreen: Listen<boolean>;
+    onFocus: Listen<boolean>;
+  };
 }
 
 declare global {

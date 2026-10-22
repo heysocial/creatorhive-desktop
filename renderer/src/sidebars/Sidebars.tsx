@@ -9,6 +9,8 @@ import { commands } from "../lib/commands";
 import { nav, useNav } from "../lib/nav";
 import { Avatar, channelName } from "../lib/ui";
 import { SidebarHead, SidebarItem, SidebarSection, Skeleton } from "./parts";
+import { useTodayCount } from "../views/home/Today";
+import { useNextEventDay } from "../views/events/Events";
 
 const byRecent = (a: Conversation, b: Conversation) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? "");
 
@@ -57,13 +59,15 @@ function DmList({ workspace, limit = 12 }: { workspace: Workspace; limit?: numbe
 }
 
 function CreatorHiveHome() {
+  const today = useTodayCount();
+  const nextEvent = useNextEventDay();
   return (
     <>
       <SidebarHead title="CreatorHive" action={() => commands.run("new-message")} />
       <div className="sb-scroll">
         <SidebarItem icon={<House />} label="Home" view={{ kind: "feed" }} />
-        <SidebarItem icon={<Sun />} label="Today" view={{ kind: "today" }} />
-        <SidebarItem icon={<Calendar />} label="Events" view={{ kind: "events" }} />
+        <SidebarItem icon={<Sun />} label="Today" view={{ kind: "today" }} quietCount={today} honeyCount />
+        <SidebarItem icon={<Calendar />} label="Events" view={{ kind: "events" }} meta={nextEvent} />
         <SidebarItem icon={<Trophy />} label="Leaderboard" view={{ kind: "leaderboard" }} />
         <SidebarItem icon={<Users />} label="Members" view={{ kind: "members" }} />
         <ChannelList workspace="creatorhive" />

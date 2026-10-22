@@ -12,9 +12,12 @@ import { Sidebar } from "./sidebars/Sidebars";
 import { Main } from "./views/Main";
 import { QuickSwitcher } from "./overlays/QuickSwitcher";
 import { SettingsSheet, ShortcutsSheet } from "./overlays/Sheets";
+import { NewMessage } from "./overlays/NewMessage";
+import { api } from "./lib/api";
+import { usePresence } from "./lib/realtime";
 
 type Auth = { state: "loading" } | { state: "signedOut" } | { state: "signedIn"; user: SessionUser };
-type Overlay = null | "quick-open" | "shortcuts" | "settings";
+type Overlay = null | "quick-open" | "shortcuts" | "settings" | "new-message";
 
 /* ⌥↑/⌥↓ walk the sidebar; with ⇧ they skip to the next unread item. */
 function moveInSidebar(direction: 1 | -1, unreadOnly: boolean) {
@@ -33,7 +36,8 @@ function moveInSidebar(direction: 1 | -1, unreadOnly: boolean) {
 
 function Workspace({ user, info }: { user: SessionUser; info: { version: string; preview: boolean; fullscreen: boolean } }) {
   useNav();
-  useRealtimeRefresh();
+  useRealtimeRefresh(user.id);
+  usePresence();
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [sidebar, setSidebar] = useState(true);
   const [fullscreen, setFullscreen] = useState(info.fullscreen);
@@ -45,14 +49,22 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
   useEffect(() => ch.window.onFullscreen(setFullscreen), []);
   useEffect(() => ch.app.onUpdateReady(setUpdateReady), []);
   useEffect(() => ch.app.onNavigate((path) => openPath(path)), []);
+  // From a pop-out: "dm:<id>", "channel:<id>", "profile:<id>".
+  useEffect(() => ch.app.onNavigateView((target) => {
+    const [kind, id] = target.split(":");
+    if (!id) return;
+    if (kind === "profile") nav.open({ kind: "profile", id });
+    if (kind === "dm" || kind === "channel") nav.open({ kind, id }, nav.get().section === "dms" ? "dms" : "home");
+  }), []);
+  // Opening the app counts for the day's streak, as on the website.
+  useEffect(() => {
+    void api("/api/points/daily-login", { method: "POST" }).then(() => queryClient.invalidateQueries({ queryKey: ["points"] })).catch(() => {});
+  }, []);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(timer);
   }, [toast]);
-
-  // Nothing in the app shows a conversation's messages yet, so no notification is ever "already seen".
-  useEffect(() => ch.app.setViewing(null), []);
 
   const run = useCallback((command: Command) => {
     switch (command) {
@@ -70,8 +82,15 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       case "settings": return setOverlay("settings");
       case "toggle-sidebar": return setSidebar((open) => !open);
       case "new-message":
-        nav.section("dms");
-        return setToast("Writing a new message comes in Phase 2. Pick a conversation, or open it on the website.");
+        return setOverlay("new-message");
+      case "new-post":
+        nav.open({ kind: "feed" }, "home", "ch");
+        return void setTimeout(() => window.dispatchEvent(new Event("ch:new-post")), 50);
+      case "popout": {
+        const { view } = nav.get();
+        if (view.kind === "dm" || view.kind === "channel") ch.window.popout({ kind: view.kind, id: view.id });
+        return;
+      }
       case "sign-out":
         return void ch.auth.signOut();
     }
@@ -97,10 +116,11 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       <TopBar preview={info.preview} updateReady={updateReady} />
       <Rail user={user} />
       <Sidebar user={user} />
-      <Main />
+      <Main user={user} />
       {overlay === "quick-open" ? <QuickSwitcher onClose={close} /> : null}
       {overlay === "shortcuts" ? <ShortcutsSheet onClose={close} /> : null}
       {overlay === "settings" ? <SettingsSheet user={user} version={info.version} onClose={close} /> : null}
+      {overlay === "new-message" ? <NewMessage onClose={close} workspace={nav.get().ws === "hs" ? "heysocial" : "creatorhive"} /> : null}
       {toast ? <div className="toast" role="status">{toast}</div> : null}
     </div>
   );

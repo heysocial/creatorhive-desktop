@@ -16,13 +16,15 @@ export function locationForPath(target: string): Location | null {
     return null;
   }
   const params = url.searchParams;
+  const postHash = /^#post-([0-9a-f-]{36})$/.exec(url.hash)?.[1];
+  if (url.pathname === "/" && postHash) params.set("post", postHash);
   const here = nav.get();
   // A DM or channel opens inside Home, unless the DMs view is already open.
   const chatSection = here.section === "dms" ? "dms" : "home";
 
   switch (url.pathname) {
     case "/":
-      return params.get("post") ? null : { ws: "ch", section: "home", view: { kind: "feed" } };
+      return { ws: "ch", section: "home", view: params.get("post") ? { kind: "feed", postId: params.get("post")! } : { kind: "feed" } };
     case "/messages": {
       const id = params.get("convo");
       if (!id) return { ws: here.ws, section: "dms", view: { kind: "dms-home" } };
@@ -64,10 +66,12 @@ export function locationForPath(target: string): Location | null {
       return { ws: "ch", section: "hub", view: { kind: "hub", page: "clients" } };
     case "/events":
       return { ws: "ch", section: "home", view: { kind: "events" } };
+    case "/profile":
+      return null;
     case "/leaderboard":
       return { ws: "ch", section: "home", view: { kind: "leaderboard" } };
     case "/members":
-      return params.get("member") ? null : { ws: "ch", section: "home", view: { kind: "members" } };
+      return { ws: "ch", section: "home", view: params.get("member") ? { kind: "profile", id: params.get("member")! } : { kind: "members" } };
     case "/courses":
       return { ws: "ch", section: "learn", view: { kind: "learn", page: "courses" } };
     default:

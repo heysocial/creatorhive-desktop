@@ -3,11 +3,18 @@ import {
   AtSign, Bell, Bookmark, BookOpen, Calendar, ChartNoAxesCombined, Contact, ExternalLink, GraduationCap, Hash, House,
   Kanban, Lightbulb, Lock, MessageCircle, MessagesSquare, Receipt, Sun, Trophy, Users, type LucideIcon,
 } from "lucide-react";
-import { ch } from "../lib/bridge";
+import { ch, type SessionUser } from "../lib/bridge";
 import { useChannels, useConversations, type Workspace } from "../lib/api";
 import { useNav, type Location } from "../lib/nav";
 import { sitePathFor } from "../lib/sitePaths";
 import { Avatar, channelName } from "../lib/ui";
+import { Conversation } from "./messages/Conversation";
+import { Home } from "./home/Home";
+import { TodayPage } from "./home/Today";
+import { Events } from "./events/Events";
+import { Leaderboard } from "./people/Leaderboard";
+import { Members } from "./people/Members";
+import { ProfilePage } from "./people/Profile";
 
 interface Screen {
   icon: LucideIcon;
@@ -70,7 +77,8 @@ function useScreen(location: Location): Screen {
       };
     }
     case "dms-home":
-      return { icon: MessageCircle, title: "Direct messages", phase: PHASES.community, what: "Pick a conversation on the left. New messages start with ⌘N." };
+    case "profile":
+      return { icon: MessageCircle, title: "Direct messages", phase: PHASES.community, what: "" };
     case "hub": {
       const pages = {
         deals: { icon: Kanban, title: "Deals", what: "Outreach, Campaigns and Payment boards with drag and drop, and deals in their own window." },
@@ -99,8 +107,41 @@ function useScreen(location: Location): Screen {
   }
 }
 
-export function Main() {
+/** The screens that are built; everything else still shows its placeholder. */
+function Built({ location, user }: { location: Location; user: SessionUser }) {
+  const workspace: Workspace = location.ws === "hs" ? "heysocial" : "creatorhive";
+  const { view } = location;
+  switch (view.kind) {
+    case "feed":
+      return <Home user={user} openPostId={view.postId ?? null} />;
+    case "today":
+      return <TodayPage />;
+    case "events":
+      return <Events eventId={view.eventId} />;
+    case "leaderboard":
+      return <Leaderboard />;
+    case "members":
+      return <Members />;
+    case "profile":
+      return <ProfilePage key={view.id} id={view.id} user={user} />;
+    case "channel":
+    case "dm":
+      return <Conversation key={`${view.kind}:${view.id}`} where={{ kind: view.kind, id: view.id }} user={user} workspace={workspace} />;
+    case "dms-home":
+      return <div className="empty-state"><div><MessageCircle style={{ width: 34, height: 34, color: "var(--ink-4)" }} /><p style={{ marginTop: 8 }}>Pick a conversation, or start a new one with ⌘N.</p></div></div>;
+    default:
+      return null;
+  }
+}
+
+export function Main({ user }: { user: SessionUser }) {
   const { current } = useNav();
+  const built = Built({ location: current, user });
+  if (built) return <main className="main">{built}</main>;
+  return <Placeholder current={current} />;
+}
+
+function Placeholder({ current }: { current: Location }) {
   const screen = useScreen(current);
   const Icon = screen.icon;
   return (

@@ -4,7 +4,7 @@
 */
 
 export type Command =
-  | "back" | "forward" | "quick-open" | "shortcuts" | "settings" | "new-message" | "toggle-sidebar" | "sign-out"
+  | "back" | "forward" | "quick-open" | "shortcuts" | "settings" | "new-message" | "new-post" | "popout" | "toggle-sidebar" | "sign-out"
   | "go:home" | "go:dms" | "go:hub" | "go:learn" | "go:activity"
   | "workspace:ch" | "workspace:hs";
 

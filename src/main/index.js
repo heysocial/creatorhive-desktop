@@ -31,6 +31,9 @@ const { ORIGIN, IS_PREVIEW, RENDERER_URL, debug } = require("./config");
 const site = require("./site");
 const google = require("./google");
 const realtime = require("./realtime");
+const media = require("./media");
+const popouts = require("./popouts");
+const files = require("./files");
 
 /* Must match DESKTOP_NOTIFICATION_EVENT in the web app's lib/realtime/channels.ts. */
 const DESKTOP_NOTIFICATION_EVENT = "notification:desktop";
@@ -48,6 +51,8 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
   process.exit(0);
 }
+
+media.registerScheme();
 
 app.setAppUserModelId(IS_PREVIEW ? "com.creatorhive.desktop.preview" : "com.creatorhive.desktop");
 
@@ -88,6 +93,12 @@ let viewing = null; // the conversation or channel id the person has open
 
 function send(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
+
+/** To the main window and every pop-out (live updates, sign-out). */
+function broadcast(channel, payload) {
+  send(channel, payload);
+  popouts.broadcast(channel, payload);
 }
 
 function openExternally(url) {
@@ -215,6 +226,7 @@ function setSignedIn(next) {
     setUnread(0);
     heySocialAccess = false;
     viewing = null;
+    popouts.closeAll();
     send("auth:changed", null);
   }
   createAppMenu();
@@ -266,9 +278,17 @@ function configureIpc() {
   ipcMain.on("realtime:watch", (_event, name) => realtime.watch(name));
   ipcMain.on("realtime:unwatch", (_event, name) => realtime.unwatch(name));
 
-  ipcMain.on("app:viewing", (_event, id) => {
+  ipcMain.on("app:viewing", (event, id) => {
+    // Pop-outs report what they show themselves; only the main window sets this.
+    if (mainWindow && event.sender !== mainWindow.webContents) return;
     viewing = typeof id === "string" && id ? id : null;
   });
+  ipcMain.on("window:popout", (_event, target) => popouts.open(target, windowChrome));
+  ipcMain.on("app:openMain", (_event, target) => {
+    showWindow();
+    if (typeof target === "string") send("navigate:view", target);
+  });
+  files.configure(ipcMain);
   ipcMain.on("app:heySocialAccess", (_event, value) => {
     heySocialAccess = Boolean(value);
     createAppMenu();
@@ -313,9 +333,11 @@ const shownByTag = new Map();
 
 /** Already looking at the conversation this is about: say nothing, like the web. */
 function isViewing(payload) {
-  if (!mainWindow || !mainWindow.isVisible() || !mainWindow.isFocused() || !viewing) return false;
   const data = payload?.data ?? {};
-  return viewing === (data.conversationId ?? data.channelId);
+  const about = data.conversationId ?? data.channelId;
+  if (about && popouts.isFocusedOn(about)) return true;
+  if (!mainWindow || !mainWindow.isVisible() || !mainWindow.isFocused() || !viewing) return false;
+  return viewing === about;
 }
 
 function showNotification(payload) {
@@ -349,9 +371,9 @@ function configureRealtime() {
       // Every signal on this channel can move the unread count.
       refreshBadgeSoon();
     }
-    send("realtime:message", message);
+    broadcast("realtime:message", message);
   });
-  realtime.on("state", (state) => send("realtime:state", state));
+  realtime.on("state", (state) => broadcast("realtime:state", state));
   realtime.on("connected", () => void refreshBadge());
   realtime.on("signedOut", () => setSignedIn(false));
 }
@@ -485,6 +507,9 @@ function createAppMenu() {
       label: "File",
       submenu: [
         go("New Message", "CommandOrControl+N", "new-message"),
+        go("New Post", "Shift+CommandOrControl+N", "new-post"),
+        { type: "separator" },
+        go("Open in New Window", "Shift+CommandOrControl+O", "popout"),
         { type: "separator" },
         { role: "close" },
       ],
@@ -600,6 +625,7 @@ app.on("window-all-closed", () => {});
 
 app.whenReady().then(async () => {
   loadSettings();
+  media.handle();
   site.configureUserAgent();
   configureIpc();
   configureRealtime();

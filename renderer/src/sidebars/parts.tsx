@@ -18,12 +18,13 @@ export function SidebarHead({ title, action, actionLabel = "New message" }: { ti
 }
 
 /** One row. Knows whether it's the open view, and offers a native right-click menu. */
-export function SidebarItem({ icon, label, view, count, quietCount, meta, unread = false, extraMenu = [], onMenu }: {
+export function SidebarItem({ icon, label, view, count, quietCount, honeyCount = false, meta, unread = false, extraMenu = [], onMenu }: {
   icon: ReactNode;
   label: string;
   view: View;
   count?: number;
   quietCount?: number;
+  honeyCount?: boolean;
   meta?: string;
   unread?: boolean;
   extraMenu?: NativeMenuItem[];
@@ -63,7 +64,7 @@ export function SidebarItem({ icon, label, view, count, quietCount, meta, unread
       {icon}
       <span className="label">{label}</span>
       {count ? <span className="cnt">{count > 99 ? "99+" : count}</span> : null}
-      {!count && quietCount ? <span className="cnt quiet">{quietCount}</span> : null}
+      {!count && quietCount ? <span className={`cnt quiet ${honeyCount ? "honey" : ""}`}>{quietCount}</span> : null}
       {!count && !quietCount && meta ? <span className="meta">{meta}</span> : null}
     </button>
   );

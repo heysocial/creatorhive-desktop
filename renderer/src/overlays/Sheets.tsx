@@ -33,6 +33,17 @@ const SHORTCUTS: [string, [string, string][]][] = [
     ["Previous or next item in the sidebar", "⌥↑ / ⌥↓"],
     ["Previous or next unread", "⌥⇧↑ / ⌥⇧↓"],
   ]],
+  ["Messages", [
+    ["New message", "⌘N"],
+    ["New post on Home", "⇧⌘N"],
+    ["Open the conversation in its own window", "⇧⌘O"],
+    ["Send", "Return"],
+    ["New line", "⇧Return"],
+    ["Bold, italic, strikethrough", "⌘B, ⌘I, ⇧⌘X"],
+    ["Link", "⇧⌘U"],
+    ["Edit (in the message's menu)", "Right-click"],
+    ["Close a thread or panel", "Esc"],
+  ]],
   ["Workspaces", [
     ["CreatorHive", "⌃⌘1"],
     ["Hey Social Inc.", "⌃⌘2"],

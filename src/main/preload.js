@@ -47,8 +47,18 @@ contextBridge.exposeInMainWorld("ch", {
     onCommand: listen("command"),
     onNavigate: listen("navigate"),
     onUpdateReady: listen("update:ready"),
+    /** From a pop-out: show something in the main window ("dm:<id>", "channel:<id>"). */
+    openMain: (target) => ipcRenderer.send("app:openMain", target),
+    onNavigateView: listen("navigate:view"),
+  },
+  files: {
+    upload: (request) => ipcRenderer.invoke("files:upload", request),
+    quickLook: (url, name) => ipcRenderer.invoke("files:quickLook", { url, name }),
+    save: (url, name) => ipcRenderer.invoke("files:save", { url, name }),
+    addToCalendar: (ics, name) => ipcRenderer.invoke("files:addToCalendar", { ics, name }),
   },
   window: {
+    popout: (target) => ipcRenderer.send("window:popout", target),
     onFullscreen: listen("window:fullscreen"),
     onFocus: listen("window:focus"),
   },

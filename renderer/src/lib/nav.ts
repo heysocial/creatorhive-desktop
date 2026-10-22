@@ -10,15 +10,16 @@ export type WorkspaceKey = "ch" | "hs";
 export type Section = "home" | "dms" | "hub" | "learn" | "activity" | "later";
 
 export type View =
-  | { kind: "feed" }
+  | { kind: "feed"; postId?: string }
   | { kind: "today" }
-  | { kind: "events" }
+  | { kind: "events"; eventId?: string }
+  | { kind: "profile"; id: string }
   | { kind: "leaderboard" }
   | { kind: "members" }
   | { kind: "channel"; id: string }
   | { kind: "dm"; id: string }
   | { kind: "dms-home" }
-  | { kind: "hub"; page: "deals" | "dashboard" | "clients" | "invoices" }
+  | { kind: "hub"; page: "deals" | "dashboard" | "clients" | "invoices"; dealId?: string }
   | { kind: "learn"; page: "courses" | "improve" | "resources" }
   | { kind: "activity" }
   | { kind: "threads" }

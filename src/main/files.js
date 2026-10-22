@@ -1,0 +1,115 @@
+"use strict";
+
+/*
+  Files in and out of the Mac: uploads (drag and drop, paste, the + button),
+  Quick Look, saving a file to Downloads, and handing an event to Calendar.
+
+  Uploads use the website's own Vercel Blob routes (`/api/upload`,
+  `/api/upload/feed-attachments`, ...): the route hands out a short-lived
+  client token for the signed-in member, and the file goes straight to Blob.
+*/
+
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { app, BrowserWindow, dialog, shell } = require("electron");
+const { siteFetch, signedOut } = require("./site");
+const { ORIGIN, debug } = require("./config");
+
+const UPLOAD_ROUTE = /^\/api\/(upload(\/[a-z-]+)?|[a-z-]+\/[A-Za-z0-9-]+\/[a-z/-]*upload)$/;
+const MAX_BYTES = 200 * 1024 * 1024;
+
+const safeName = (name) => String(name || "file").replace(/[/\\:\0]/g, "-").slice(0, 120) || "file";
+
+async function clientToken(route, pathname) {
+  const response = await siteFetch(route, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "blob.generate-client-token", payload: { pathname, clientPayload: null, multipart: false } }),
+  });
+  if (signedOut(response)) throw Object.assign(new Error("signed out"), { code: "signed_out" });
+  const body = await response.json().catch(() => null);
+  if (!response.ok || !body?.clientToken) throw Object.assign(new Error(body?.error || `token ${response.status}`), { code: "refused" });
+  return body.clientToken;
+}
+
+async function upload({ route, name, type, bytes } = {}) {
+  if (typeof route !== "string" || !UPLOAD_ROUTE.test(route)) return { ok: false, error: "bad_route" };
+  if (!(bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes))) return { ok: false, error: "no_file" };
+  const buffer = Buffer.from(bytes instanceof ArrayBuffer ? bytes : bytes.buffer);
+  if (buffer.length > MAX_BYTES) return { ok: false, error: "too_big" };
+  try {
+    const { put } = await import("@vercel/blob/client");
+    const pathname = safeName(name);
+    const token = await clientToken(route, pathname);
+    const blob = await put(pathname, buffer, {
+      access: "public",
+      token,
+      contentType: typeof type === "string" && type ? type : undefined,
+    });
+    return { ok: true, url: blob.url, pathname: blob.pathname, contentType: blob.contentType, size: buffer.length };
+  } catch (error) {
+    debug("upload failed", error?.message);
+    return { ok: false, error: error?.code ?? "failed" };
+  }
+}
+
+/** A site path or a public https URL, fetched with the member's cookies when it's the site. */
+async function download(url) {
+  const target = url.startsWith("/") ? `${ORIGIN}${url}` : url;
+  const { protocol, origin } = new URL(target);
+  if (protocol !== "https:" && origin !== ORIGIN) throw new Error("bad url");
+  const response = origin === ORIGIN
+    ? await siteFetch(target.slice(ORIGIN.length), { headers: { Accept: "*/*" } })
+    : await fetch(target);
+  if (!response.ok) throw new Error(`download ${response.status}`);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+async function toTemp(url, name) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "creatorhive-"));
+  const file = path.join(dir, safeName(name));
+  fs.writeFileSync(file, await download(url));
+  return file;
+}
+
+function configure(ipcMain) {
+  ipcMain.handle("files:upload", (_event, request) => upload(request));
+
+  ipcMain.handle("files:quickLook", async (event, { url, name } = {}) => {
+    try {
+      const file = await toTemp(String(url), name);
+      BrowserWindow.fromWebContents(event.sender)?.previewFile(file, safeName(name));
+      return { ok: true };
+    } catch (error) {
+      debug("quick look failed", error?.message);
+      return { ok: false };
+    }
+  });
+
+  ipcMain.handle("files:save", async (event, { url, name } = {}) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const result = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath("downloads"), safeName(name)) });
+      if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+      fs.writeFileSync(result.filePath, await download(String(url)));
+      shell.showItemInFolder(result.filePath);
+      return { ok: true };
+    } catch (error) {
+      debug("save failed", error?.message);
+      return { ok: false };
+    }
+  });
+
+  // The interface builds the .ics; Calendar opens it and asks where to add it.
+  ipcMain.handle("files:addToCalendar", async (_event, { ics, name } = {}) => {
+    if (typeof ics !== "string" || !ics.startsWith("BEGIN:VCALENDAR") || ics.length > 20_000) return { ok: false };
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "creatorhive-"));
+    const file = path.join(dir, `${safeName(name).replace(/\.ics$/i, "")}.ics`);
+    fs.writeFileSync(file, ics);
+    const error = await shell.openPath(file);
+    return { ok: !error };
+  });
+}
+
+module.exports = { configure, upload };

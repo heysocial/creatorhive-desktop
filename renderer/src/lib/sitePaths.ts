@@ -18,6 +18,10 @@ export function sitePathFor({ ws, view }: Location): string {
       return ws === "hs" ? "/hey-social/dm" : "/messages";
     case "events":
       return "/events";
+    case "profile":
+      return `/members?member=${encodeURIComponent(view.id)}`;
+    case "feed":
+      return view.postId ? `/?post=${encodeURIComponent(view.postId)}` : "/";
     case "leaderboard":
       return "/leaderboard";
     case "members":
