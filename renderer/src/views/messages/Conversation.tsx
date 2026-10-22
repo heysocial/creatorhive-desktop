@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ExternalLink, Hash, Info, Lock, Pin, SquareArrowOutUpRight, Upload, Users, X } from "lucide-react";
+import { Bell, BellOff, ExternalLink, Hash, Info, Lock, Pin, SquareArrowOutUpRight, Star, Upload, Users, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, keys, queryClient, useChannels, useConversations, type Workspace } from "../../lib/api";
@@ -15,6 +15,8 @@ import { Avatar, channelName } from "../../lib/ui";
 import { Composer, type ComposerHandle, type ComposerSend, type MentionCandidate } from "./Composer";
 import { MessageRow, type RowActions } from "./MessageRow";
 import { RichText } from "../../lib/html";
+import { huddleFor, setPrefs, toggleSaved, useHsSidebar, useHuddles } from "../../lib/heysocial";
+import { HuddleButton } from "../heysocial/Huddle";
 
 const GROUP_GAP_MS = 5 * 60_000;
 
@@ -100,7 +102,8 @@ function MessageList({ where, actions, header, empty }: { where: Thread; actions
 }
 
 /** Replies beside the channel (or alone, in a pop-out). */
-export function ThreadPanel({ where, parentId, user, onClose, title, popout = false, realtimeChannel }: {
+export function ThreadPanel({ where, parentId, user, onClose, title, popout = false, realtimeChannel, workspace = "creatorhive" }: {
+  workspace?: Workspace;
   where: Thread;
   parentId: string;
   user: SessionUser;
@@ -112,7 +115,7 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
   const query = useReplies(where, parentId);
   const people = useMentionSearch(where);
   const scroller = useRef<HTMLDivElement>(null);
-  const actions = useRowActions(where, user, { inThread: true });
+  const actions = useRowActions(where, user, { inThread: true, heySocial: workspace === "heysocial" });
   const count = query.data?.replies.length ?? 0;
   useLiveThread(where, popout ? realtimeChannel : null, user.id);
 
@@ -145,7 +148,7 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
           ) : null}
         </div>
       </div>
-      <Composer compact draftKey={`thread:${parentId}`} placeholder="Reply in thread…" searchPeople={where.kind === "channel" ? people : undefined}
+      <Composer compact draftKey={`thread:${parentId}`} uploadFolder={workspace === "heysocial" ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder="Reply in thread…" searchPeople={where.kind === "channel" ? people : undefined}
         onTyping={typingSignal(realtimeChannel)}
         onSend={(input) => sendMessage(where, { ...input, parentMessageId: parentId }, toAuthor(user))} />
     </aside>
@@ -164,13 +167,20 @@ function useMentionSearch(where: Thread) {
   }, [channelMembers, everyone]);
 }
 
-function useRowActions(where: Thread, user: SessionUser, { inThread = false, onOpenThread, onReply }: {
+function useRowActions(where: Thread, user: SessionUser, { inThread = false, onOpenThread, onReply, heySocial = false }: {
   inThread?: boolean;
   onOpenThread?: (message: Message) => void;
   onReply?: (message: Message) => void;
+  heySocial?: boolean;
 } = {}): RowActions {
   const isStaff = user.role === "owner" || user.role === "team";
+  const saved = useHsSidebar(heySocial).data?.savedMessageIds;
   return useMemo(() => ({
+    ...(heySocial ? {
+      quickEmoji: ["✅", "👀", "🙌"],
+      isSaved: (id: string) => Boolean(saved?.includes(id)),
+      onSave: (message: Message, value: boolean) => void toggleSaved(message.id, value),
+    } : {}),
     meId: user.id,
     isStaff,
     onReact: (message, emoji) => void toggleReaction(where, message, emoji),
@@ -215,7 +225,7 @@ function useRowActions(where: Thread, user: SessionUser, { inThread = false, onO
       const path = where.kind === "channel" ? `${sitePathFor({ ...nav.get(), view: { kind: "channel", id: where.id } })}&m=${message.id}` : `${sitePathFor({ ...nav.get(), view: { kind: "dm", id: where.id } })}&m=${message.id}`;
       void navigator.clipboard.writeText(`${origin}${path}`);
     },
-  }), [where.kind, where.id, user.id, isStaff, inThread, onOpenThread, onReply]);
+  }), [where.kind, where.id, user.id, isStaff, inThread, onOpenThread, onReply, heySocial, saved]);
 }
 
 function PinsPopover({ channelId, onClose, onJump }: { channelId: string; onClose: () => void; onJump: (id: string) => void }) {
@@ -244,7 +254,10 @@ function PinsPopover({ channelId, onClose, onJump }: { channelId: string; onClos
 }
 
 /** A channel or DM: header, messages, composer, and threads beside it. */
-export function Conversation({ where, user, workspace, popout = false }: { where: Thread; user: SessionUser; workspace: Workspace; popout?: boolean }) {
+export function Conversation({ where, user, workspace, popout = false, threadId: initialThread }: { where: Thread; user: SessionUser; workspace: Workspace; popout?: boolean; threadId?: string }) {
+  const heySocial = workspace === "heysocial";
+  const hsSidebar = useHsSidebar(heySocial).data;
+  const huddles = useHuddles(heySocial).data;
   const channels = useChannels(workspace, where.kind === "channel").data;
   const conversations = useConversations(workspace, where.kind === "dm").data;
   const channel = where.kind === "channel" ? channels?.find((c) => c.id === where.id) : undefined;
@@ -259,13 +272,17 @@ export function Conversation({ where, user, workspace, popout = false }: { where
   const typing = useLiveThread(where, realtimeChannel, user.id);
   const sendTyping = useMemo(() => typingSignal(realtimeChannel), [realtimeChannel]);
   const actions = useRowActions(where, user, {
-    onOpenThread: (message) => setThreadId(message.id),
+    // Threads: every channel, and Hey Social Inc. DMs (CreatorHive DMs reply inline instead).
+    onOpenThread: where.kind === "channel" || heySocial ? (message) => setThreadId(message.id) : undefined,
     onReply: where.kind === "dm" ? (message) => { setReplyTo(message); composer.current?.focus(); } : undefined,
+    heySocial,
   });
+  const prefs = heySocial ? (where.kind === "channel" ? hsSidebar?.channels.find((c) => c.id === where.id) : hsSidebar?.dms.find((d) => d.id === where.id)) : undefined;
+  const huddle = heySocial ? huddleFor(huddles?.huddles, where.kind, where.id) : undefined;
 
   // Mark read on open and whenever the window comes back to it.
   useEffect(() => {
-    setThreadId(null);
+    setThreadId(initialThread ?? null);
     setReplyTo(null);
     void markRead(where).then(() => {
       void queryClient.invalidateQueries({ queryKey: where.kind === "channel" ? keys.channels(workspace) : keys.conversations(workspace) });
@@ -295,7 +312,11 @@ export function Conversation({ where, user, workspace, popout = false }: { where
   const head = (
     <div className={`mhead ${popout ? "popout-head" : ""}`}>
       {where.kind === "channel" ? (
-        <h1>{channel?.isPrivate ? <Lock /> : <Hash />}{title}</h1>
+        <h1>
+          {heySocial && prefs ? <button className={`star ${prefs.starred ? "on" : ""}`} title={prefs.starred ? "Unstar" : "Star"} onClick={() => void setPrefs("channel", where.id, { starred: !prefs.starred })}><Star /></button> : null}
+          {channel?.isPrivate && !(channel as { workspaceOpen?: boolean }).workspaceOpen ? <Lock /> : <Hash />}{title}
+          {heySocial && prefs ? <button className="mute-btn" title="Mute: only @mentions notify you" onClick={() => void setPrefs("channel", where.id, { muted: !prefs.muted })}>{prefs.muted ? <BellOff /> : <Bell />}{prefs.muted ? "Muted" : ""}</button> : null}
+        </h1>
       ) : (
         <h1>
           {conversation ? <Avatar name={conversation.displayName} src={conversation.isGroup ? null : other?.avatarUrl} seed={conversation.isGroup ? conversation.id : other?.id}
@@ -308,6 +329,7 @@ export function Conversation({ where, user, workspace, popout = false }: { where
       {conversation?.isGroup ? <span className="sub">{conversation.participants.length + 1} people</span> : null}
       <div className="acts">
         {where.kind === "channel" && channel ? <span className="faint member-count" title="Members"><Users />{channel.memberCount}</span> : null}
+        {heySocial && huddles?.configured ? <HuddleButton kind={where.kind} id={where.id} label={where.kind === "channel" ? `#${title}` : title} huddle={huddle} meId={user.id} /> : null}
         {where.kind === "channel" ? (
           <span style={{ position: "relative" }}>
             <button className="iconbtn" title="Pinned messages" onClick={() => setPins(!pins)}><Pin /></button>
@@ -343,7 +365,7 @@ export function Conversation({ where, user, workspace, popout = false }: { where
         {replyTo ? (
           <div className="replying"><span>Replying to <b>{replyTo.author.name}</b>: {replyTo.body.slice(0, 120)}</span><button className="iconbtn" onClick={() => setReplyTo(null)}><X /></button></div>
         ) : null}
-        <Composer ref={composer} draftKey={`${where.kind}:${where.id}`} placeholder={where.kind === "channel" ? `Message #${title}` : `Message ${title}`}
+        <Composer ref={composer} draftKey={`${where.kind}:${where.id}`} uploadFolder={heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder={where.kind === "channel" ? `Message #${title}` : `Message ${title}`}
           searchPeople={where.kind === "channel" ? people : undefined} onTyping={sendTyping}
           onSend={async (input: ComposerSend) => {
             const ok = await sendMessage(where, { ...input, replyToMessageId: replyTo?.id ?? null }, toAuthor(user));
@@ -357,11 +379,11 @@ export function Conversation({ where, user, workspace, popout = false }: { where
               setDragging(false);
               composer.current?.addFiles([...event.dataTransfer.files]);
             }}>
-            <div><Upload /><b>Drop to share in {where.kind === "channel" ? `#${title}` : title}</b><span>Pictures and documents (PDF, Word, Excel, PowerPoint)</span></div>
+            <div><Upload /><b>{heySocial ? "Upload to" : "Drop to share in"} {where.kind === "channel" ? `#${title}` : title}</b><span>{heySocial ? "Any file up to 1 GB, 10 at a time" : "Pictures and documents (PDF, Word, Excel, PowerPoint)"}</span></div>
           </div>
         ) : null}
       </div>
-      {threadId ? <ThreadPanel where={where} parentId={threadId} user={user} title={where.kind === "channel" ? `#${title}` : title} onClose={() => setThreadId(null)} realtimeChannel={realtimeChannel} /> : null}
+      {threadId ? <ThreadPanel where={where} parentId={threadId} user={user} title={where.kind === "channel" ? `#${title}` : title} onClose={() => setThreadId(null)} realtimeChannel={realtimeChannel} workspace={workspace} /> : null}
     </div>
   );
 }

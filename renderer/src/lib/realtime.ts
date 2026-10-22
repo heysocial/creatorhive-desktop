@@ -29,6 +29,9 @@ export function useRealtimeRefresh(userId: string) {
           case "notifications:changed":
             soon(["notifications"]);
             break;
+          case "huddles:changed":
+            soon(["hey-social", "huddles"], 150);
+            break;
           default:
             soon(["channels"]);
             soon(["conversations"]);

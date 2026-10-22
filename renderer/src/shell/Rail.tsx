@@ -5,6 +5,7 @@ import { commands } from "../lib/commands";
 import { nav, useNav, type Section, SECTIONS } from "../lib/nav";
 import { Avatar, countLabel } from "../lib/ui";
 import { useActivityRows } from "../views/activity/Activity";
+import { useHsSidebar } from "../lib/heysocial";
 
 const SECTION_META: Record<Section, { label: string; icon: LucideIcon; shortcut: string }> = {
   home: { label: "Home", icon: House, shortcut: "⌘1" },
@@ -34,6 +35,7 @@ export function Rail({ user }: { user: SessionUser }) {
   const here = current.ws === "hs" ? hsUnread : chUnread;
   const other = current.ws === "hs" ? chUnread : hsUnread;
   const activity = useActivityRows().filter((r) => r.unread && r.kind !== "dm").length;
+  const hsCounts = useHsSidebar(heySocial && current.ws === "hs").data?.counts;
 
   async function meMenu() {
     const choice = await ch.menu.popup([
@@ -63,7 +65,7 @@ export function Rail({ user }: { user: SessionUser }) {
       {SECTIONS[current.ws].map((section) => {
         const meta = SECTION_META[section];
         const Icon = meta.icon;
-        const count = section === "dms" ? here.dms : section === "activity" && current.ws === "ch" ? activity : 0;
+        const count = section === "dms" ? here.dms : section === "activity" ? (current.ws === "ch" ? activity : hsCounts?.activity ?? 0) : 0;
         return (
           <button key={section} className={`ritem ${current.section === section ? "on" : ""}`}
             title={meta.shortcut ? `${meta.label} (${meta.shortcut})` : meta.label} onClick={() => nav.section(section)}>

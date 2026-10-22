@@ -23,8 +23,8 @@ mac:
   entitlementsInherit: build/entitlements.mac.plist
   notarize: true
   extendInfo:
-    NSMicrophoneUsageDescription: CreatorHive uses the microphone to record voice memos.
-    NSCameraUsageDescription: CreatorHive uses the camera when you record a video to send.
+    NSMicrophoneUsageDescription: CreatorHive uses the microphone for voice memos and huddles.
+    NSCameraUsageDescription: CreatorHive uses the camera for video in huddles and videos you send.
 dmg:
   title: CreatorHive
   artifactName: CreatorHive-${version}-mac.${ext}

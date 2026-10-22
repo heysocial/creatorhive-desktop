@@ -21,6 +21,8 @@ const {
   Tray,
   dialog,
   session,
+  desktopCapturer,
+  globalShortcut,
   ipcMain,
   nativeImage,
   nativeTheme,
@@ -344,6 +346,18 @@ function configureIpc() {
     if (typeof target === "string") send("navigate:view", target);
   });
   files.configure(ipcMain);
+  ipcMain.on("app:relay", (_event, message) => {
+    if (message && typeof message.topic === "string") broadcast("app:relay", message);
+  });
+  // ⇧⌘Space mutes the huddle from any app, only while you're in one.
+  popouts.onWindowsChanged(() => {
+    const accelerator = "Shift+CommandOrControl+Space";
+    if (popouts.inHuddle() && !globalShortcut.isRegistered(accelerator)) {
+      globalShortcut.register(accelerator, () => broadcast("app:relay", { topic: "huddle", action: "toggle-mic" }));
+    } else if (!popouts.inHuddle() && globalShortcut.isRegistered(accelerator)) {
+      globalShortcut.unregister(accelerator);
+    }
+  });
   ipcMain.on("app:heySocialAccess", (_event, value) => {
     heySocialAccess = Boolean(value);
     createAppMenu();
@@ -688,6 +702,12 @@ app.whenReady().then(async () => {
   loadSettings();
   applyLook();
   media.handle();
+  // Huddle screen sharing: the Mac's own picker where it has one, else the main screen.
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    desktopCapturer.getSources({ types: ["screen", "window"] }).then((sources) => {
+      callback({ video: sources.find((s) => s.id.startsWith("screen:")) ?? sources[0], audio: "loopback" });
+    }).catch(() => callback({}));
+  }, { useSystemPicker: true });
   // YouTube refuses to play embeds without a Referer; the lesson player sends the site's.
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ["https://www.youtube.com/*", "https://www.youtube-nocookie.com/*"] }, (details, callback) => {
     callback({ requestHeaders: { ...details.requestHeaders, Referer: `${ORIGIN}/` } });

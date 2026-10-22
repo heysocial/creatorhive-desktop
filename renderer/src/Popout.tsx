@@ -8,6 +8,7 @@ import { HubDialogs } from "./views/hub/parts";
 import { DealFormHost } from "./views/hub/DealForm";
 import { LessonVideo } from "./views/learn/Courses";
 import { SettingsWindow } from "./views/settings/Settings";
+import { HuddleWindow } from "./views/heysocial/Huddle";
 
 /*
   A pop-out window (⌘⇧O): one DM, channel or thread, nothing else. It shares
@@ -36,6 +37,7 @@ function PopoutBody({ kind, id, user }: { kind: string; id: string; user: Sessio
   const inHeySocial = Boolean(hsChannels?.some((c) => c.id === id) || hsConversations?.some((c) => c.id === id));
   const workspace = inHeySocial ? "heysocial" : "creatorhive";
   if (kind === "settings") return <SettingsWindow user={user} />;
+  if (kind === "huddle") return <HuddleWindow target={id} user={user} />;
   if (kind === "lesson") {
     const [courseId, lessonId] = id.split(":");
     return <LessonVideo courseId={courseId} lessonId={lessonId} />;

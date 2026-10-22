@@ -57,6 +57,10 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     ["Move a deal", "Drag it to another stage"],
     ["Close the deal", "Esc"],
   ]],
+  ["Hey Social Inc.", [
+    ["Mute or unmute the huddle, from any app", "⇧⌘Space"],
+    ["Save a message for later", "Hover it, then the bookmark"],
+  ]],
   ["Workspaces", [
     ["CreatorHive", "⌃⌘1"],
     ["Hey Social Inc.", "⌃⌘2"],

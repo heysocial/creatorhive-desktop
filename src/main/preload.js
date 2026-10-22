@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld("ch", {
     onUpdateReady: listen("update:ready"),
     /** From a pop-out: show something in the main window ("dm:<id>", "channel:<id>"). */
     openMain: (target) => ipcRenderer.send("app:openMain", target),
+    relay: (message) => ipcRenderer.send("app:relay", message),
+    onRelay: listen("app:relay"),
     onNavigateView: listen("navigate:view"),
   },
   files: {

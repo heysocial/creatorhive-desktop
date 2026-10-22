@@ -45,7 +45,14 @@ const DRAFTS = new Map<string, string>();
 const MAX_FILES = 10;
 
 /** Uploads one file through the website's Blob route, the same one its composer uses. */
-async function uploadFile(file: File): Promise<SentFile | null> {
+async function uploadFile(file: File, folder?: string): Promise<SentFile | null> {
+  // Hey Social Inc. takes any file up to 1 GB into its own folder; pictures show inline only for these four types.
+  if (folder) {
+    const inline = /^image\/(jpeg|png|webp|gif)$/.test(file.type);
+    const result = await ch.files.upload({ route: "/api/upload/hey-social", name: `hey-social-files/${folder}/${Date.now()}-${file.name}`, type: file.type || "application/octet-stream", bytes: await file.arrayBuffer() });
+    if (!result.ok) return null;
+    return { url: result.url, name: file.name, size: file.size, mimeType: file.type || "application/octet-stream", kind: inline ? "image" : "file" };
+  }
   const image = file.type.startsWith("image/") && file.type !== "image/svg+xml";
   const result = await ch.files.upload({
     route: image ? "/api/upload" : "/api/upload/feed-attachments",
@@ -71,7 +78,9 @@ export const Composer = forwardRef<ComposerHandle, {
   compact?: boolean;
   allowFiles?: boolean;
   autoFocus?: boolean;
-}>(function Composer({ draftKey, placeholder, onSend, searchPeople, onTyping, compact = false, allowFiles = true, autoFocus = true }, ref) {
+  /** Hey Social Inc.: where files go (a channel id, or dm-<conversation id>). */
+  uploadFolder?: string;
+}>(function Composer({ draftKey, placeholder, onSend, searchPeople, onTyping, compact = false, allowFiles = true, autoFocus = true, uploadFolder }, ref) {
   const [value, setValue] = useState(() => DRAFTS.get(draftKey) ?? "");
   const [picked, setPicked] = useState<MentionCandidate[]>([]);
   const [staged, setStaged] = useState<Staged[]>([]);
@@ -123,12 +132,12 @@ export const Composer = forwardRef<ComposerHandle, {
     if (next.length === 0) return;
     setStaged((current) => [...current, ...next]);
     for (const item of next) {
-      void uploadFile(item.file).then((sent) => {
+      void uploadFile(item.file, uploadFolder).then((sent) => {
         setStaged((current) => current.map((s) => (s.key === item.key ? { ...s, state: sent ? "done" : "failed", sent: sent ?? undefined } : s)));
       });
     }
     input.current?.focus();
-  }, [allowFiles, staged.length]);
+  }, [allowFiles, staged.length, uploadFolder]);
 
   const insert = useCallback((text: string) => {
     const el = input.current;

@@ -46,7 +46,7 @@ export function locationForPath(target: string): Location | null {
         ? queryClient.getQueryData<Channel[]>(keys.channels("heysocial"))?.find((c) => c.slug === slug)
         : null;
       if (slug && !channel) return null;
-      return { ws: "hs", section: "home", view: channel ? { kind: "channel", id: channel.id } : { kind: "threads" } };
+      return { ws: "hs", section: "home", view: channel ? { kind: "channel", id: channel.id, threadId: params.get("thread") ?? undefined } : { kind: "threads" } };
     }
     case "/hey-social/dm": {
       const id = params.get("convo");

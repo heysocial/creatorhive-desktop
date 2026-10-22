@@ -18,6 +18,7 @@ import { DealFormHost, openDealForm } from "./views/hub/DealForm";
 import { ExportHost, openExport } from "./views/hub/Export";
 import { PromptHost } from "./views/hub/DealPanel";
 import { STATUS_LABELS, type DealStatus } from "./lib/hub";
+import { BrowseChannels, CreateChannel } from "./views/heysocial/Lists";
 import { api } from "./lib/api";
 import { usePresence } from "./lib/realtime";
 
@@ -48,6 +49,14 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
   const [fullscreen, setFullscreen] = useState(info.fullscreen);
   const [updateReady, setUpdateReady] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [hsDialog, setHsDialog] = useState<null | "create" | "browse">(null);
+  useEffect(() => {
+    const create = () => setHsDialog("create");
+    const browse = () => setHsDialog("browse");
+    window.addEventListener("ch:hs-create-channel", create);
+    window.addEventListener("ch:hs-browse", browse);
+    return () => { window.removeEventListener("ch:hs-create-channel", create); window.removeEventListener("ch:hs-browse", browse); };
+  }, []);
   const heySocial = useHeySocialAccess().data === true;
 
   useEffect(() => ch.app.setHeySocialAccess(heySocial), [heySocial]);
@@ -148,6 +157,8 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       <DealFormHost />
       <ExportHost />
       <PromptHost />
+      {hsDialog === "create" ? <CreateChannel onClose={() => setHsDialog(null)} /> : null}
+      {hsDialog === "browse" ? <BrowseChannels onClose={() => setHsDialog(null)} /> : null}
     </div>
   );
 }

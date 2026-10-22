@@ -1,5 +1,5 @@
 import { memo, useState } from "react";
-import { FileText, MessageSquareText, MoreHorizontal, Pin, Play, Reply, SmilePlus, TriangleAlert } from "lucide-react";
+import { Headphones, Bookmark, BookmarkCheck, FileText, MessageSquareText, MoreHorizontal, Pin, Play, Reply, SmilePlus, TriangleAlert } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import type { Message, Reactions, VideoAttachment } from "../../lib/community";
 import { bytes, clock } from "../../lib/format";
@@ -21,6 +21,10 @@ export interface RowActions {
   onRetry?: (message: Message) => void;
   onProfile?: (userId: string) => void;
   copyLink?: (message: Message) => void;
+  /** Hey Social Inc.: Slack's ✅ 👀 🙌, and Save for later. */
+  quickEmoji?: string[];
+  isSaved?: (id: string) => boolean;
+  onSave?: (message: Message, saved: boolean) => void;
 }
 
 export function Badge({ badge, role }: { badge?: { kind: string; label: string } | null; role?: string }) {
@@ -100,6 +104,23 @@ function Media({ message }: { message: Message }) {
   );
 }
 
+interface Recap { durationSeconds: number; participants: { id: string; name: string; avatarUrl: string | null }[] }
+
+/** "A huddle happened": who was there and for how long, as the website shows it. */
+function HuddleRecap({ recap }: { recap: Recap }) {
+  const names = recap.participants.map((p) => p.name.split(" ")[0]);
+  const who = names.length <= 1 ? names[0] ?? "Someone" : names.length === 2 ? `${names[0]} and ${names[1]}` : `${names[0]} and ${names.length - 1} others`;
+  const s = recap.durationSeconds;
+  const length = s < 60 ? `${s} s` : s < 3600 ? `${Math.round(s / 60)} m` : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} m`;
+  return (
+    <div className="huddle-recap">
+      <span className="hr-ico"><Headphones /></span>
+      <span><b>A huddle happened</b><small>{who} {names.length === 1 ? "was" : "were"} in the huddle for {length}.</small></span>
+      <span className="hr-people">{recap.participants.slice(0, 5).map((p) => <Avatar key={p.id} name={p.name} src={p.avatarUrl} seed={p.id} size={24} />)}</span>
+    </div>
+  );
+}
+
 export function ThreadLine({ message, onOpen }: { message: Message; onOpen: () => void }) {
   const summary = message.threadSummary;
   if (!summary || summary.replyCount === 0) return null;
@@ -170,7 +191,7 @@ export const MessageRow = memo(function MessageRow({ message, grouped, actions, 
           {message.replyTo ? (
             <div className="quote"><b>{message.replyTo.author.name}</b> {message.replyTo.body}</div>
           ) : null}
-          {editing !== null ? (
+          {message.huddle ? <HuddleRecap recap={message.huddle as Recap} /> : editing !== null ? (
             <div className="inline-edit">
               <textarea autoFocus value={editing} onChange={(e) => setEditing(e.target.value)}
                 onKeyDown={async (e) => {
@@ -201,13 +222,17 @@ export const MessageRow = memo(function MessageRow({ message, grouped, actions, 
       </div>
       {!local ? (
         <div className={`hover-bar ${picker ? "show" : ""}`}>
-          {["❤️", "👍", "😂", "🔥"].map((emoji) => <button key={emoji} className="qe" onClick={() => actions.onReact(message, emoji)}>{emoji}</button>)}
+          {(actions.quickEmoji ?? ["❤️", "👍", "😂", "🔥"]).map((emoji) => <button key={emoji} className="qe" onClick={() => actions.onReact(message, emoji)}>{emoji}</button>)}
           <span style={{ position: "relative" }}>
             <button title="Add reaction" onClick={() => setPicker(!picker)}><SmilePlus /></button>
             {picker ? <EmojiPicker onPick={(e) => { actions.onReact(message, e); setPicker(false); }} onClose={() => setPicker(false)} /> : null}
           </span>
           {actions.onOpenThread && !inThread ? <button title="Reply in thread" onClick={() => actions.onOpenThread?.(message)}><MessageSquareText /></button> : null}
           {actions.onReply ? <button title="Reply" onClick={() => actions.onReply?.(message)}><Reply /></button> : null}
+          {actions.onSave ? (
+            <button title={actions.isSaved?.(message.id) ? "Remove from saved" : "Save for later"} className={actions.isSaved?.(message.id) ? "saved" : ""}
+              onClick={() => actions.onSave?.(message, !actions.isSaved?.(message.id))}>{actions.isSaved?.(message.id) ? <BookmarkCheck /> : <Bookmark />}</button>
+          ) : null}
           <button title="More" onClick={() => void more()}><MoreHorizontal /></button>
         </div>
       ) : null}

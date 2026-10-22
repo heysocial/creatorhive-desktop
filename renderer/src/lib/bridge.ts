@@ -87,6 +87,9 @@ export interface Bridge {
     onNavigate: Listen<string>;
     onUpdateReady: Listen<string>;
     openMain(target: string): void;
+    /** A message to every window (the huddle window listens for "leave" and "toggle-mic"). */
+    relay(message: { topic: string; action: string; data?: unknown }): void;
+    onRelay: Listen<{ topic: string; action: string; data?: unknown }>;
     onNavigateView: Listen<string>;
   };
   files: {
@@ -97,7 +100,7 @@ export interface Bridge {
     uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer }): Promise<{ ok: boolean; error?: string; data?: unknown }>;
   };
   window: {
-    popout(target: { kind: "dm" | "channel" | "thread" | "deal" | "lesson" | "settings"; id: string; title?: string }): void;
+    popout(target: { kind: "dm" | "channel" | "thread" | "deal" | "lesson" | "settings" | "huddle"; id: string; title?: string }): void;
     onFullscreen: Listen<boolean>;
     onFocus: Listen<boolean>;
   };

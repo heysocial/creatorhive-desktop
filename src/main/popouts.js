@@ -11,7 +11,7 @@ const { BrowserWindow, shell } = require("electron");
 const { RENDERER_URL } = require("./config");
 
 const windows = new Map(); // "dm:<id>" -> BrowserWindow
-const KINDS = new Set(["dm", "channel", "thread", "deal", "lesson", "settings"]);
+const KINDS = new Set(["dm", "channel", "thread", "deal", "lesson", "settings", "huddle"]);
 const ID = /^[A-Za-z0-9:_-]{1,120}$/;
 
 function open(target, chrome) {
@@ -28,6 +28,7 @@ function open(target, chrome) {
 
   const shape = kind === "settings" ? { width: 760, height: 720, minWidth: 640, minHeight: 520, resizable: true, maximizable: false, fullscreenable: false }
     : kind === "lesson" ? { width: 640, height: 380, minWidth: 320, minHeight: 200, alwaysOnTop: true }
+    : kind === "huddle" ? { width: 760, height: 520, minWidth: 420, minHeight: 320, alwaysOnTop: true, backgroundColor: "#1A1D21" }
     : kind === "deal" ? { width: 1000, height: 760, minWidth: 720, minHeight: 520 }
     : { width: 560, height: 680, minWidth: 380, minHeight: 420 };
   const win = new BrowserWindow({
@@ -35,6 +36,7 @@ function open(target, chrome) {
     title: typeof target.title === "string" ? target.title.slice(0, 120) : "CreatorHive",
     show: false,
     ...chrome(),
+    ...(kind === "huddle" ? { vibrancy: undefined, backgroundColor: "#1A1D21" } : {}),
     trafficLightPosition: { x: 16, y: 18 },
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -44,9 +46,17 @@ function open(target, chrome) {
       spellcheck: true,
     },
   });
+  // One huddle at a time: starting another leaves the first.
+  if (kind === "huddle") for (const [k, w] of windows) if (k.startsWith("huddle:") && !w.isDestroyed()) w.close();
   windows.set(key, win);
-  win.on("closed", () => windows.delete(key));
+  win.on("closed", () => { windows.delete(key); onChange(); });
+  onChange();
   win.once("ready-to-show", () => win.show());
+  if (process.env.CREATORHIVE_DEBUG) {
+    for (const event of ["did-start-loading", "did-navigate", "did-navigate-in-page", "render-process-gone", "destroyed"]) {
+      win.webContents.on(event, (_e, ...args) => console.log("[popout]", key, event, JSON.stringify(args).slice(0, 200)));
+    }
+  }
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) void shell.openExternal(url);
     return { action: "deny" };
@@ -60,6 +70,9 @@ function open(target, chrome) {
   if (RENDERER_URL) void win.loadURL(`${RENDERER_URL}#${hash}`);
   else void win.loadFile(path.join(__dirname, "..", "..", "renderer", "dist", "index.html"), { hash });
 }
+
+let onChange = () => {};
+const inHuddle = () => [...windows.keys()].some((k) => k.startsWith("huddle:"));
 
 function broadcast(channel, payload) {
   for (const win of windows.values()) {
@@ -80,4 +93,4 @@ function closeAll() {
   windows.clear();
 }
 
-module.exports = { open, broadcast, isFocusedOn, closeAll };
+module.exports = { open, broadcast, isFocusedOn, closeAll, inHuddle, onWindowsChanged: (fn) => { onChange = fn; } };

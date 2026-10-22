@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import {
-  AtSign, Bell, Bookmark, Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
-  Lightbulb, Lock, MessagesSquare, Receipt, Search, Sun, Trophy, Users, BookOpen,
+  AtSign, Bell, Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
+  Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen,
 } from "lucide-react";
 import { useChannels, useConversations, type Conversation, type Workspace } from "../lib/api";
 import type { SessionUser } from "../lib/bridge";
@@ -20,6 +20,7 @@ import { Clock3, Hourglass, Repeat, Heart, Megaphone, MessageCircle as Bubble, P
 import { percent, useCourses, useImprove } from "../lib/learn";
 import { useResourcePages, useResourcesAccess, useWikiPages } from "../views/learn/Resources";
 import { useActivityRows } from "../views/activity/Activity";
+import { HeySocialSidebar } from "./HeySocialSidebar";
 
 const byRecent = (a: Conversation, b: Conversation) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? "");
 
@@ -86,20 +87,6 @@ function CreatorHiveHome() {
   );
 }
 
-function HeySocialHome() {
-  return (
-    <>
-      <SidebarHead title="Hey Social Inc." action={() => commands.run("new-message")} />
-      <div className="sb-scroll">
-        <SidebarItem icon={<MessagesSquare />} label="Threads" view={{ kind: "threads" }} />
-        <SidebarItem icon={<AtSign />} label="Mentions & reactions" view={{ kind: "mentions" }} />
-        <SidebarItem icon={<Bookmark />} label="Saved for later" view={{ kind: "saved" }} />
-        <ChannelList workspace="heysocial" />
-        <DmList workspace="heysocial" />
-      </div>
-    </>
-  );
-}
 
 /** The DMs view from the rail: every conversation with a preview, newest first. */
 function DirectMessages({ workspace, user }: { workspace: Workspace; user: SessionUser }) {
@@ -244,16 +231,6 @@ function Activity({ title }: { title: string }) {
   );
 }
 
-function Later() {
-  return (
-    <>
-      <SidebarHead title="Later" />
-      <div className="sb-scroll">
-        <SidebarItem icon={<Bookmark />} label="Saved for later" view={{ kind: "saved" }} />
-      </div>
-    </>
-  );
-}
 
 export function Sidebar({ user }: { user: SessionUser }) {
   const { current } = useNav();
@@ -270,13 +247,13 @@ export function Sidebar({ user }: { user: SessionUser }) {
       content = <Learn />;
       break;
     case "activity":
-      content = <Activity title="Activity" />;
+      content = current.ws === "hs" ? <HeySocialSidebar /> : <Activity title="Activity" />;
       break;
     case "later":
-      content = <Later />;
+      content = <HeySocialSidebar />;
       break;
     default:
-      content = current.ws === "hs" ? <HeySocialHome /> : <CreatorHiveHome />;
+      content = current.ws === "hs" ? <HeySocialSidebar /> : <CreatorHiveHome />;
   }
   return <aside className="sidebar" aria-label="Sidebar">{content}</aside>;
 }

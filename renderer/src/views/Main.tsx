@@ -25,6 +25,7 @@ import { ImprovePage } from "./learn/Improve";
 import { Resources } from "./learn/Resources";
 import { ScriptWriter } from "./learn/ScriptWriter";
 import { Activity } from "./activity/Activity";
+import { HsMentions, HsSaved, HsThreads } from "./heysocial/Lists";
 
 interface Screen {
   icon: LucideIcon;
@@ -139,7 +140,13 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
       return <ProfilePage key={view.id} id={view.id} user={user} />;
     case "channel":
     case "dm":
-      return <Conversation key={`${view.kind}:${view.id}`} where={{ kind: view.kind, id: view.id }} user={user} workspace={workspace} />;
+      return <Conversation key={`${view.kind}:${view.id}`} where={{ kind: view.kind, id: view.id }} user={user} workspace={workspace} threadId={view.threadId} />;
+    case "threads":
+      return <HsThreads />;
+    case "mentions":
+      return <HsMentions />;
+    case "saved":
+      return <HsSaved />;
     case "hub": {
       const page = view.page === "dashboard" ? <Dashboard /> : view.page === "clients" ? <Clients /> : view.page === "invoices" ? <Invoices /> : <Deals board={view.board} smart={view.smart} />;
       return <>{page}{view.dealId ? <DealOverlay key={view.dealId} id={view.dealId} /> : null}</>;

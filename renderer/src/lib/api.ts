@@ -27,6 +27,7 @@ export interface Participant {
 
 export interface Conversation {
   id: string;
+  createdAt?: string;
   isGroup: boolean;
   workspace: Workspace;
   displayName: string;

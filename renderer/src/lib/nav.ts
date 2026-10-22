@@ -16,8 +16,8 @@ export type View =
   | { kind: "profile"; id: string }
   | { kind: "leaderboard" }
   | { kind: "members" }
-  | { kind: "channel"; id: string }
-  | { kind: "dm"; id: string }
+  | { kind: "channel"; id: string; threadId?: string }
+  | { kind: "dm"; id: string; threadId?: string }
   | { kind: "dms-home" }
   | { kind: "hub"; page: "deals" | "dashboard" | "clients" | "invoices"; dealId?: string; board?: "outreach" | "campaigns" | "payment"; smart?: "due" | "awaiting" | "retainers" }
   | { kind: "learn"; page: "courses" | "improve" | "resources" }
@@ -51,7 +51,7 @@ const DEFAULT_VIEW: Record<WorkspaceKey, Partial<Record<Section, View>>> = {
   hs: {
     home: { kind: "threads" },
     dms: { kind: "dms-home" },
-    activity: { kind: "activity" },
+    activity: { kind: "mentions" },
     later: { kind: "saved" },
   },
 };
