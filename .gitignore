@@ -4,3 +4,4 @@ dist/
 *.p8
 *.p12
 renderer/dist/
+dist-win/
