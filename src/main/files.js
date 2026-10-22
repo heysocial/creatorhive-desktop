@@ -82,6 +82,19 @@ async function toTemp(url, name) {
 function configure(ipcMain) {
   ipcMain.handle("files:upload", (_event, request) => upload(request));
 
+  // A video's bytes straight to Mux's upload URL (the server hands it out for this one file).
+  ipcMain.handle("files:putVideo", async (_event, { url, type, bytes } = {}) => {
+    try {
+      const { protocol, hostname } = new URL(String(url));
+      if (protocol !== "https:" || !(hostname.endsWith(".mux.com") || hostname === "storage.googleapis.com")) return { ok: false, error: "bad_url" };
+      const response = await fetch(String(url), { method: "PUT", headers: { "Content-Type": String(type || "application/octet-stream") }, body: Buffer.from(bytes) });
+      return { ok: response.ok, status: response.status };
+    } catch (error) {
+      debug("video put failed", error?.message);
+      return { ok: false, error: "failed" };
+    }
+  });
+
   ipcMain.handle("files:quickLook", async (event, { url, name } = {}) => {
     try {
       const file = await toTemp(String(url), name);

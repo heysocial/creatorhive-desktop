@@ -61,6 +61,10 @@ contextBridge.exposeInMainWorld("ch", {
     /** From a pop-out: show something in the main window ("dm:<id>", "channel:<id>"). */
     openMain: (target) => ipcRenderer.send("app:openMain", target),
     relay: (message) => ipcRenderer.send("app:relay", message),
+    share: (url, text) => ipcRenderer.send("app:share", { url, text }),
+    isLocked: () => ipcRenderer.invoke("app:isLocked"),
+    unlock: () => ipcRenderer.invoke("app:unlock"),
+    onLocked: listen("app:locked"),
     onRelay: listen("app:relay"),
     onNavigateView: listen("navigate:view"),
   },
@@ -70,6 +74,7 @@ contextBridge.exposeInMainWorld("ch", {
     save: (url, name) => ipcRenderer.invoke("files:save", { url, name }),
     addToCalendar: (ics, name) => ipcRenderer.invoke("files:addToCalendar", { ics, name }),
     uploadForm: (request) => ipcRenderer.invoke("files:uploadForm", request),
+    putVideo: (url, type, bytes) => ipcRenderer.invoke("files:putVideo", { url, type, bytes }),
   },
   window: {
     popout: (target) => ipcRenderer.send("window:popout", target),

@@ -40,6 +40,24 @@ function moveInSidebar(direction: 1 | -1, unreadOnly: boolean) {
   }
 }
 
+/** Touch ID is on and the Mac was locked, slept or just started: nothing shows until you unlock. */
+export function LockScreen() {
+  const [failed, setFailed] = useState(false);
+  const unlock = useCallback(async () => setFailed(!(await ch.app.unlock())), []);
+  useEffect(() => {
+    void unlock();
+    return ch.window.onFocus((focused) => { if (focused) void unlock(); });
+  }, [unlock]);
+  return (
+    <div className="lock-screen">
+      <img src="./ch-logo.svg" alt="" />
+      <h2>CreatorHive is locked</h2>
+      <p className="muted">{failed ? "Touch ID didn't unlock it. Try again." : "Use Touch ID to open it."}</p>
+      <button className="btn honey lg" onClick={() => void unlock()}>Unlock with Touch ID</button>
+    </div>
+  );
+}
+
 function Workspace({ user, info }: { user: SessionUser; info: { version: string; preview: boolean; fullscreen: boolean } }) {
   useNav();
   useRealtimeRefresh(user.id);
@@ -50,6 +68,11 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
   const [updateReady, setUpdateReady] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [hsDialog, setHsDialog] = useState<null | "create" | "browse">(null);
+  const [locked, setLocked] = useState(false);
+  useEffect(() => {
+    void ch.app.isLocked().then(setLocked);
+    return ch.app.onLocked(setLocked);
+  }, []);
   useEffect(() => {
     const create = () => setHsDialog("create");
     const browse = () => setHsDialog("browse");
@@ -153,6 +176,7 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       {overlay === "settings" ? <SettingsSheet user={user} version={info.version} onClose={close} /> : null}
       {overlay === "new-message" ? <NewMessage onClose={close} workspace={nav.get().ws === "hs" ? "heysocial" : "creatorhive"} /> : null}
       {toast ? <div className="toast" role="status">{toast}</div> : null}
+      {locked ? <LockScreen /> : null}
       <HubDialogs />
       <DealFormHost />
       <ExportHost />

@@ -42,6 +42,8 @@ export interface DesktopSettings {
   theme: "system" | "light" | "dark";
   zoom: number;
   openAtLogin: boolean;
+  touchId: boolean;
+  touchIdAvailable: boolean;
 }
 
 export type UploadResult =
@@ -89,6 +91,10 @@ export interface Bridge {
     openMain(target: string): void;
     /** A message to every window (the huddle window listens for "leave" and "toggle-mic"). */
     relay(message: { topic: string; action: string; data?: unknown }): void;
+    share(url: string, text?: string): void;
+    isLocked(): Promise<boolean>;
+    unlock(): Promise<boolean>;
+    onLocked: Listen<boolean>;
     onRelay: Listen<{ topic: string; action: string; data?: unknown }>;
     onNavigateView: Listen<string>;
   };
@@ -97,7 +103,8 @@ export interface Bridge {
     quickLook(url: string, name: string): Promise<{ ok: boolean }>;
     save(url: string, name: string): Promise<{ ok: boolean }>;
     addToCalendar(ics: string, name: string): Promise<{ ok: boolean }>;
-    uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer }): Promise<{ ok: boolean; error?: string; data?: unknown }>;
+    putVideo(url: string, type: string, bytes: ArrayBuffer): Promise<{ ok: boolean; status?: number; error?: string }>;
+    uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer; fields?: Record<string, string> }): Promise<{ ok: boolean; error?: string; data?: unknown }>;
   };
   window: {
     popout(target: { kind: "dm" | "channel" | "thread" | "deal" | "lesson" | "settings" | "huddle"; id: string; title?: string }): void;

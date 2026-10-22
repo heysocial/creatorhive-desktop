@@ -71,8 +71,8 @@ export function ProfilePage({ id, user }: { id: string; user: SessionUser }) {
               )}
               <button className="btn" onClick={async () => {
                 const { origin } = await ch.info();
-                void navigator.clipboard.writeText(`${origin}/members?member=${id}`);
-              }}><Share />Copy profile link</button>
+                ch.app.share(`${origin}/members?member=${id}`, p ? `${p.name} on CreatorHive` : undefined);
+              }}><Share />Share profile</button>
             </div>
             <div className="stat-row">
               {p?.incomeAmountUsd !== undefined ? <div className="card stat"><small>Earned {p.incomeMonthLabel ?? "this month"}</small><b>{money(p.incomeAmountUsd)}</b></div> : null}

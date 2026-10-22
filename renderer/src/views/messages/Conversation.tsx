@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, keys, queryClient, useChannels, useConversations, type Workspace } from "../../lib/api";
 import {
-  deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
+  addMessage, sendVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
 } from "../../lib/community";
 import { dayLabel } from "../../lib/format";
@@ -148,9 +148,16 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
           ) : null}
         </div>
       </div>
-      <Composer compact draftKey={`thread:${parentId}`} uploadFolder={workspace === "heysocial" ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder="Reply in thread…" searchPeople={where.kind === "channel" ? people : undefined}
+      <Composer compact draftKey={`thread:${parentId}`}
+        voice={where.kind === "dm" || workspace === "heysocial" ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, parentMessageId: parentId, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={workspace === "heysocial" ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder="Reply in thread…" searchPeople={where.kind === "channel" ? people : undefined}
         onTyping={typingSignal(realtimeChannel)}
-        onSend={(input) => sendMessage(where, { ...input, parentMessageId: parentId }, toAuthor(user))} />
+        onSend={async (input) => {
+          if (input.videos.length) {
+            try { await sendVideos(where, { files: input.videos, body: input.body, mentions: input.mentions, parentMessageId: parentId }); } catch { window.alert("The video couldn't be sent."); return false; }
+            return input.files.length ? sendMessage(where, { ...input, body: "", parentMessageId: parentId }, toAuthor(user)) : true;
+          }
+          return sendMessage(where, { ...input, parentMessageId: parentId }, toAuthor(user));
+        }} />
     </aside>
   );
 }
@@ -365,9 +372,20 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
         {replyTo ? (
           <div className="replying"><span>Replying to <b>{replyTo.author.name}</b>: {replyTo.body.slice(0, 120)}</span><button className="iconbtn" onClick={() => setReplyTo(null)}><X /></button></div>
         ) : null}
-        <Composer ref={composer} draftKey={`${where.kind}:${where.id}`} uploadFolder={heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder={where.kind === "channel" ? `Message #${title}` : `Message ${title}`}
+        <Composer ref={composer} draftKey={`${where.kind}:${where.id}`}
+          voice={where.kind === "dm" || heySocial ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder={where.kind === "channel" ? `Message #${title}` : `Message ${title}`}
           searchPeople={where.kind === "channel" ? people : undefined} onTyping={sendTyping}
           onSend={async (input: ComposerSend) => {
+            if (input.videos.length) {
+              try {
+                await sendVideos(where, { files: input.videos, body: input.body, mentions: input.mentions });
+                if (!input.files.length) return true;
+                input = { ...input, body: "" };
+              } catch {
+                window.alert("The video couldn't be sent. Videos up to 5 minutes work best.");
+                return false;
+              }
+            }
             const ok = await sendMessage(where, { ...input, replyToMessageId: replyTo?.id ?? null }, toAuthor(user));
             if (ok) setReplyTo(null);
             return ok;

@@ -272,11 +272,13 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
     const choice = await ch.menu.popup([
       { id: "comments", label: "Open comments" },
       { id: "copy", label: "Copy link" },
+      { id: "share", label: "Share…" },
       ...(staff ? [{ id: "pin", label: post.pinned ? "Unpin from Home" : "Pin to Home" }] : []),
       ...(own || staff ? [{ type: "separator" as const }, { id: "delete", label: "Delete post…" }] : []),
     ]);
     if (choice === "comments") onOpen(post);
     if (choice === "copy") void navigator.clipboard.writeText(`${(await ch.info()).origin}/?post=${post.id}`);
+    if (choice === "share") ch.app.share(`${(await ch.info()).origin}/?post=${post.id}`, `${post.author.name} on CreatorHive`);
     if (choice === "pin") {
       await api(`/api/feed-v2/posts/${post.id}/pin`, { method: "POST", body: { pinned: !post.pinned } }).catch(() => null);
       void queryClient.invalidateQueries({ queryKey: ["posts"] });

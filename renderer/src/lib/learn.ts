@@ -77,8 +77,9 @@ export function embedFor(url: string | null): Embed {
 const youtubeSrc = (id: string) => `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1&enablejsapi=1`;
 
 /* ---------- Timestamped lesson notes ----------
-   Kept on this Mac until the server's notes table ships (it needs a database
-   change, which Simon reviews first). Same shape the server will take. */
+   On the server (/api/lessons/<id>/notes) once that ships; until then, and
+   whenever it can't be reached, kept on this Mac. Notes made on the Mac move
+   up to the server the first time it answers. */
 
 export interface LessonNote { id: string; at: number | null; text: string; createdAt: string }
 const noteKey = (lessonId: string) => `ch.lesson-notes.${lessonId}`;
@@ -88,6 +89,22 @@ export function loadNotes(lessonId: string): LessonNote[] {
 export function saveNotes(lessonId: string, notes: LessonNote[]) {
   try { localStorage.setItem(noteKey(lessonId), JSON.stringify(notes)); } catch { /* storage full or blocked */ }
 }
+export async function serverNotes(lessonId: string): Promise<LessonNote[] | null> {
+  try {
+    const { notes } = await api<{ notes: { id: string; atSeconds: number | null; body: string; createdAt: string }[] }>(`/api/lessons/${lessonId}/notes`);
+    const local = loadNotes(lessonId);
+    if (local.length) {
+      // Move this Mac's notes up once, then forget them here.
+      for (const n of local) await api(`/api/lessons/${lessonId}/notes`, { method: "POST", body: { body: n.text, atSeconds: n.at } }).catch(() => null);
+      saveNotes(lessonId, []);
+      return serverNotes(lessonId);
+    }
+    return notes.map((n) => ({ id: n.id, at: n.atSeconds, text: n.body, createdAt: n.createdAt }));
+  } catch {
+    return null; // not shipped yet, or offline: notes stay on this Mac
+  }
+}
+
 export const stamp = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 
 /** The lesson someone was last on, per course, for "Continue where you left off". */

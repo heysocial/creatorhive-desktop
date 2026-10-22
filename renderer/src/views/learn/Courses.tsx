@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, ChevronLeft, CheckCircle2, Circle, Lock, PictureInPicture2, Play, PlayCircle, Plus, Trash2, VideoOff } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import {
-  embedFor, lastLesson, lastLessonIn, loadNotes, percent, rememberLesson, saveNotes, setComplete, stamp, useCourse, useCourses, useLesson,
+  embedFor, serverNotes, lastLesson, lastLessonIn, loadNotes, percent, rememberLesson, saveNotes, setComplete, stamp, useCourse, useCourses, useLesson,
   type Course, type LessonNote,
 } from "../../lib/learn";
 import { RichText } from "../../lib/html";
+import { api } from "../../lib/api";
 import { nav } from "../../lib/nav";
 
 const GRADIENTS = [
@@ -110,6 +111,12 @@ function useYouTube(frame: React.RefObject<HTMLIFrameElement | null>, enabled: b
 
 function Notes({ lessonId, timed, now, seek }: { lessonId: string; timed: boolean; now: () => number; seek: (s: number) => void }) {
   const [notes, setNotes] = useState<LessonNote[]>(() => loadNotes(lessonId));
+  const [onServer, setOnServer] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void serverNotes(lessonId).then((list) => { if (live && list) { setNotes(list); setOnServer(true); } });
+    return () => { live = false; };
+  }, [lessonId]);
   const [draft, setDraft] = useState("");
   const [at, setAt] = useState<number | null>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -119,22 +126,30 @@ function Notes({ lessonId, timed, now, seek }: { lessonId: string; timed: boolea
     window.addEventListener("ch:lesson-note", start);
     return () => window.removeEventListener("ch:lesson-note", start);
   }, [timed, now]);
-  const update = (next: LessonNote[]) => { setNotes(next); saveNotes(lessonId, next); };
+  const update = (next: LessonNote[]) => { setNotes(next); if (!onServer) saveNotes(lessonId, next); };
   function add() {
     if (!draft.trim()) return;
-    const note: LessonNote = { id: crypto.randomUUID(), at: timed ? at ?? now() : null, text: draft.trim(), createdAt: new Date().toISOString() };
+    const note: LessonNote = { id: crypto.randomUUID(), at: timed ? Math.floor(at ?? now()) : null, text: draft.trim(), createdAt: new Date().toISOString() };
     update([...notes, note].sort((a, b) => (a.at ?? 1e9) - (b.at ?? 1e9)));
+    if (onServer) {
+      void api<{ note: { id: string } }>(`/api/lessons/${lessonId}/notes`, { method: "POST", body: { body: note.text, atSeconds: note.at } })
+        .then(({ note: saved }) => setNotes((list) => list.map((n) => (n.id === note.id ? { ...n, id: saved.id } : n))))
+        .catch(() => window.alert("That note wasn't saved."));
+    }
     setDraft("");
     setAt(null);
   }
   return (
     <div className="card lesson-notes">
-      <div className="ln-head"><b>Your notes</b><span className="faint">Saved on this Mac · ⇧⌘N adds a note{timed ? " at the current time" : ""}</span></div>
+      <div className="ln-head"><b>Your notes</b><span className="faint">{onServer ? "Saved to this lesson" : "Saved on this Mac"} · ⇧⌘N adds a note{timed ? " at the current time" : ""}</span></div>
       {notes.map((n) => (
         <div key={n.id} className="ln-row">
           {n.at !== null ? <button className="ln-time" onClick={() => seek(n.at!)} title="Jump to this moment">{stamp(n.at)}</button> : <span className="ln-time none">•</span>}
           <span className="selectable">{n.text}</span>
-          <button className="iconbtn sm" aria-label="Delete note" onClick={() => update(notes.filter((x) => x.id !== n.id))}><Trash2 /></button>
+          <button className="iconbtn sm" aria-label="Delete note" onClick={() => {
+            update(notes.filter((x) => x.id !== n.id));
+            if (onServer) void api(`/api/lessons/${lessonId}/notes?noteId=${n.id}`, { method: "DELETE" }).catch(() => null);
+          }}><Trash2 /></button>
         </div>
       ))}
       <div className="ln-add">

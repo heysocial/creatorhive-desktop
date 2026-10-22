@@ -36,3 +36,18 @@ publish:
   owner: heysocial
   repo: creatorhive-desktop
   releaseType: release
+# Windows: an NSIS installer for x64 and arm64. Until a Windows code-signing
+# certificate is added, the .exe is unsigned (Windows warns before installing)
+# and its icon/metadata aren't stamped (that step needs signing or Wine).
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  icon: build/icon.png
+  artifactName: CreatorHive-${version}-windows-${arch}.${ext}
+  signAndEditExecutable: false
+nsis:
+  oneClick: true
+  perMachine: false
+  shortcutName: CreatorHive
+  uninstallDisplayName: CreatorHive

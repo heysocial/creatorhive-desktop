@@ -20,3 +20,13 @@ publish:
   releaseType: prerelease
   # Update file preview-mac.yml (electron-builder only infers alpha/beta channels).
   channel: preview
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+  icon: build/icon.png
+  artifactName: CreatorHive-Preview-${version}-windows-${arch}.${ext}
+  signAndEditExecutable: false
+nsis:
+  shortcutName: CreatorHive Preview
+  uninstallDisplayName: CreatorHive Preview

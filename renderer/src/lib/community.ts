@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
-import { api, queryClient } from "./api";
+import { api, ApiError, queryClient } from "./api";
+import { ch } from "./bridge";
 
 /* Phase 2 data: messages, the feed, events, the leaderboard and members. Shapes as the website's routes send them. */
 
@@ -236,6 +237,41 @@ export async function sendMessage(where: Thread, input: {
   } catch {
     patchMessage(where, optimistic.id, (m) => ({ ...m, sending: false, failed: true }));
     return false;
+  }
+}
+
+/** Videos go to Mux, then the message is made from them (the website's /videos/upload-url and /videos/finalize). */
+export async function sendVideos(where: Thread, input: { files: File[]; body: string; mentions?: { id: string; start: number; end: number }[]; parentMessageId?: string | null }) {
+  const tokens: string[] = [];
+  for (const file of input.files) {
+    const start = await api<{ uploadUrl: string; uploadToken: string }>(`${base(where)}/videos/upload-url`, {
+      method: "POST",
+      body: { fileName: file.name, mimeType: file.type || "video/mp4", sizeBytes: file.size, providers: ["mux"] },
+    });
+    const put = await ch.files.putVideo(start.uploadUrl, file.type || "video/mp4", await file.arrayBuffer());
+    if (!put.ok) throw new Error("upload failed");
+    tokens.push(start.uploadToken);
+  }
+  // Mux takes a moment to see the bytes: finalize answers 409 until then.
+  const finalize = async (body: Record<string, unknown>) => {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      try {
+        return await api<{ message: Message }>(`${base(where)}/videos/finalize`, { method: "POST", body });
+      } catch (error) {
+        if (!(error instanceof ApiError && error.status === 409 && !String(error.code).includes("ALREADY"))) throw error;
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+    throw new Error("video never finished uploading");
+  };
+  if (where.kind === "channel") {
+    const { message } = await finalize({ uploadTokens: tokens, body: input.body, mentions: input.mentions ?? [], clientMutationId: crypto.randomUUID(), parentMessageId: input.parentMessageId ?? null });
+    addMessage(where, message);
+  } else {
+    for (const [i, token] of tokens.entries()) {
+      const { message } = await finalize({ uploadToken: token, body: i === 0 ? input.body : "", clientMutationId: crypto.randomUUID() });
+      addMessage(where, message);
+    }
   }
 }
 

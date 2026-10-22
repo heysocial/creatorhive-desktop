@@ -1,10 +1,11 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { AtSign, Bold, Code, File as FileIcon, Italic, Link2, List, ListOrdered, Loader2, Plus, SendHorizontal, Smile, Strikethrough, X } from "lucide-react";
+import { Mic, AtSign, Bold, Code, File as FileIcon, Italic, Link2, List, ListOrdered, Loader2, Plus, SendHorizontal, Smile, Strikethrough, X } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import { convertEmoticon } from "../../lib/emoji";
 import { bytes } from "../../lib/format";
 import { Avatar } from "../../lib/ui";
 import { EmojiPicker } from "./EmojiPicker";
+import { VoiceRecorder } from "./VoiceRecorder";
 
 export interface MentionCandidate {
   id: string;
@@ -25,6 +26,8 @@ export interface ComposerSend {
   body: string;
   mentions: { id: string; start: number; end: number }[];
   files: SentFile[];
+  /** Videos that go to Mux when the message is sent (not Hey Social Inc., where videos are files). */
+  videos: File[];
 }
 
 export interface ComposerHandle {
@@ -37,7 +40,7 @@ interface Staged {
   key: string;
   file: File;
   preview: string | null;
-  state: "uploading" | "done" | "failed";
+  state: "uploading" | "done" | "failed" | "video";
   sent?: SentFile;
 }
 
@@ -80,7 +83,10 @@ export const Composer = forwardRef<ComposerHandle, {
   autoFocus?: boolean;
   /** Hey Social Inc.: where files go (a channel id, or dm-<conversation id>). */
   uploadFolder?: string;
-}>(function Composer({ draftKey, placeholder, onSend, searchPeople, onTyping, compact = false, allowFiles = true, autoFocus = true, uploadFolder }, ref) {
+  /** Voice memos: the route, the thread (if any), and what to do with the sent message. */
+  voice?: { path: string; parentMessageId?: string | null; onSent: (message: unknown) => void };
+}>(function Composer({ draftKey, placeholder, onSend, searchPeople, onTyping, compact = false, allowFiles = true, autoFocus = true, uploadFolder, voice }, ref) {
+  const [recording, setRecording] = useState(false);
   const [value, setValue] = useState(() => DRAFTS.get(draftKey) ?? "");
   const [picked, setPicked] = useState<MentionCandidate[]>([]);
   const [staged, setStaged] = useState<Staged[]>([]);
@@ -123,15 +129,15 @@ export const Composer = forwardRef<ComposerHandle, {
   const addFiles = useCallback((files: File[]) => {
     if (!allowFiles) return;
     const room = MAX_FILES - staged.length;
-    const next = files.slice(0, Math.max(0, room)).map((file) => ({
+    const next: Staged[] = files.slice(0, Math.max(0, room)).map((file) => ({
       key: `${file.name}-${file.size}-${Math.random()}`,
       file,
       preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
-      state: "uploading" as const,
+      state: !uploadFolder && file.type.startsWith("video/") ? "video" : "uploading",
     }));
     if (next.length === 0) return;
     setStaged((current) => [...current, ...next]);
-    for (const item of next) {
+    for (const item of next.filter((n) => n.state === "uploading")) {
       void uploadFile(item.file, uploadFolder).then((sent) => {
         setStaged((current) => current.map((s) => (s.key === item.key ? { ...s, state: sent ? "done" : "failed", sent: sent ?? undefined } : s)));
       });
@@ -226,13 +232,14 @@ export const Composer = forwardRef<ComposerHandle, {
 
   const uploading = staged.some((s) => s.state === "uploading");
   const ready = staged.filter((s) => s.state === "done" && s.sent).map((s) => s.sent!);
-  const canSend = !sending && !uploading && (value.trim().length > 0 || ready.length > 0);
+  const videos = staged.filter((s) => s.state === "video").map((s) => s.file);
+  const canSend = !sending && !uploading && (value.trim().length > 0 || ready.length > 0 || videos.length > 0);
 
   async function send() {
     if (!canSend) return;
     setSending(true);
     const body = value;
-    const ok = await onSend({ body, mentions: mentionRanges(body), files: ready });
+    const ok = await onSend({ body, mentions: mentionRanges(body), files: ready, videos });
     setSending(false);
     if (ok) {
       setValue("");
@@ -286,15 +293,21 @@ export const Composer = forwardRef<ComposerHandle, {
           {staged.map((s) => (
             <div key={s.key} className={`chip-file ${s.state}`}>
               {s.preview ? <img src={s.preview} alt="" /> : <span className="ficon"><FileIcon /></span>}
-              <span className="fmeta"><b>{s.file.name}</b><span>{s.state === "failed" ? "Couldn't upload" : s.state === "uploading" ? "Uploading…" : bytes(s.file.size)}</span></span>
+              <span className="fmeta"><b>{s.file.name}</b><span>{s.state === "failed" ? "Couldn't upload" : s.state === "uploading" ? "Uploading…" : s.state === "video" ? `Video · ${bytes(s.file.size)}` : bytes(s.file.size)}</span></span>
               {s.state === "uploading" ? <Loader2 className="spin" /> : null}
               <button aria-label="Remove" onClick={() => setStaged((c) => c.filter((x) => x.key !== s.key))}><X /></button>
             </div>
           ))}
         </div>
       ) : null}
+      {recording && voice ? (
+        <VoiceRecorder path={voice.path} body={value} parentMessageId={voice.parentMessageId}
+          onCancel={() => setRecording(false)}
+          onSent={(message) => { setRecording(false); setValue(""); DRAFTS.delete(draftKey); voice.onSent(message); }} />
+      ) : null}
       <textarea
         ref={input}
+        hidden={recording}
         rows={1}
         value={value}
         placeholder={placeholder}
@@ -338,6 +351,7 @@ export const Composer = forwardRef<ComposerHandle, {
           {emoji ? <EmojiPicker onPick={(e) => { insert(e); setEmoji(false); }} onClose={() => setEmoji(false)} placement="above" /> : null}
         </span>
         {searchPeople ? <button title="Mention someone" onClick={() => insert(value && !/\s$/.test(value) ? " @" : "@")}><AtSign /></button> : null}
+        {voice ? <button title="Record a voice memo" onClick={() => setRecording(true)}><Mic /></button> : null}
         <button className={`send ${canSend ? "on" : ""}`} disabled={!canSend} title="Send (Return)" onClick={() => void send()}>
           {sending ? <Loader2 className="spin" /> : <SendHorizontal />}
         </button>

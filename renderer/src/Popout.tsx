@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { LockScreen } from "./App";
 import { ch, type SessionUser } from "./lib/bridge";
 import { queryClient, useChannels, useConversations, useHeySocialAccess } from "./lib/api";
 import { useRealtimeRefresh } from "./lib/realtime";
@@ -16,6 +17,8 @@ import { HuddleWindow } from "./views/heysocial/Huddle";
 */
 export function Popout({ kind, id }: { kind: string; id: string }) {
   const [user, setUser] = useState<SessionUser | null | undefined>(undefined);
+  const [locked, setLocked] = useState(false);
+  useEffect(() => { void ch.app.isLocked().then(setLocked); return ch.app.onLocked(setLocked); }, []);
   useEffect(() => {
     void ch.auth.session().then(({ user: u }) => setUser(u ?? null));
     return ch.auth.onChanged(() => {
@@ -25,7 +28,7 @@ export function Popout({ kind, id }: { kind: string; id: string }) {
   }, []);
   if (user === undefined) return <div className="popout-shell" />;
   if (user === null) return <div className="popout-shell"><div className="empty-state">Sign in to CreatorHive first.</div></div>;
-  return <PopoutBody kind={kind} id={id} user={user} />;
+  return <><PopoutBody kind={kind} id={id} user={user} />{locked && kind !== "huddle" ? <LockScreen /> : null}</>;
 }
 
 function PopoutBody({ kind, id, user }: { kind: string; id: string; user: SessionUser }) {

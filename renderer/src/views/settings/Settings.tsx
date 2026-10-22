@@ -163,6 +163,7 @@ function HubInvoices() {
 }
 
 function Privacy() {
+  const { settings, update } = useDesktop();
   const income = useQuery({ queryKey: ["leaderboard", "income"], retry: false, queryFn: async () => { try { return await api<{ eligible: boolean; isSharing: boolean }>("/api/leaderboard/income"); } catch { return null; } } });
   const blocks = useQuery({ queryKey: ["blocks"], retry: false, queryFn: async () => { try { return (await api<{ blocks: { id: string; name: string; avatarUrl: string | null }[] }>("/api/moderation/blocks")).blocks; } catch { return null; } } });
   return (
@@ -171,6 +172,13 @@ function Privacy() {
         <Group title="Income leaderboard">
           <Row title="Show my income on the board" sub="Your collected amount this month, next to your name">
             <Toggle on={income.data.isSharing} onChange={async (v) => { await api("/api/leaderboard/income", { method: "PUT", body: { shareIncome: v } }).catch(() => null); void income.refetch(); }} />
+          </Row>
+        </Group>
+      ) : null}
+      {settings?.touchIdAvailable ? (
+        <Group title="On this Mac">
+          <Row title="Lock with Touch ID" sub="Asks for your fingerprint when CreatorHive opens and after the Mac sleeps or locks">
+            <Toggle on={settings.touchId} onChange={(v) => void update({ touchId: v })} />
           </Row>
         </Group>
       ) : null}

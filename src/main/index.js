@@ -23,6 +23,8 @@ const {
   session,
   desktopCapturer,
   globalShortcut,
+  ShareMenu,
+  systemPreferences,
   ipcMain,
   nativeImage,
   nativeTheme,
@@ -64,8 +66,17 @@ app.setAppUserModelId(IS_PREVIEW ? "com.creatorhive.desktop.preview" : "com.crea
 const settingsPath = () => path.join(app.getPath("userData"), "settings.json");
 const DEFAULT_SETTINGS = {
   notifications: !IS_PREVIEW, pausedUntil: 0, bounds: null,
-  sound: "honey", badge: "mentions", keepRunning: true, theme: "system", zoom: 1,
+  sound: "honey", badge: "mentions", keepRunning: true, theme: "system", zoom: 1, touchId: false,
 };
+
+/* Touch ID: when it's on, the window stays locked after launch, sleep or the Mac locking, until you unlock. */
+let locked = false;
+const touchIdAvailable = () => process.platform === "darwin" && systemPreferences.canPromptTouchID();
+function lockIfNeeded() {
+  if (!settings.touchId || !touchIdAvailable() || locked) return;
+  locked = true;
+  broadcast("app:locked", true);
+}
 let settings = { ...DEFAULT_SETTINGS };
 
 function loadSettings() {
@@ -104,6 +115,8 @@ function publicSettings() {
     theme: settings.theme,
     zoom: settings.zoom,
     openAtLogin: app.getLoginItemSettings().openAtLogin,
+    touchId: settings.touchId,
+    touchIdAvailable: touchIdAvailable(),
   };
 }
 
@@ -116,6 +129,7 @@ function changeSettings(patch = {}) {
   if (["system", "light", "dark"].includes(patch.theme)) settings.theme = patch.theme;
   if (Number.isFinite(patch.zoom)) settings.zoom = patch.zoom;
   if (typeof patch.openAtLogin === "boolean") app.setLoginItemSettings({ openAtLogin: patch.openAtLogin });
+  if (typeof patch.touchId === "boolean") settings.touchId = patch.touchId && touchIdAvailable();
   saveSettings();
   applyLook();
   setUnread(unread);
@@ -346,6 +360,24 @@ function configureIpc() {
     if (typeof target === "string") send("navigate:view", target);
   });
   files.configure(ipcMain);
+  ipcMain.handle("app:isLocked", () => locked);
+  ipcMain.handle("app:unlock", async () => {
+    if (!locked) return true;
+    try {
+      await systemPreferences.promptTouchID("unlock CreatorHive");
+      locked = false;
+      broadcast("app:locked", false);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  // The Mac's Share menu (Messages, Mail, AirDrop, Notes…) for a link.
+  ipcMain.on("app:share", (event, { url, text } = {}) => {
+    if (typeof url !== "string" || !/^https:\/\//.test(url)) return;
+    const menu = new ShareMenu({ urls: [url], texts: typeof text === "string" && text ? [text] : undefined });
+    menu.popup({ window: BrowserWindow.fromWebContents(event.sender) ?? undefined });
+  });
   ipcMain.on("app:relay", (_event, message) => {
     if (message && typeof message.topic === "string") broadcast("app:relay", message);
   });
@@ -417,14 +449,32 @@ function showNotification(payload) {
   }
   if (!Notification.isSupported()) return;
 
+  // A DM (or a mention in a channel) can be answered from the banner, as in Messages.
+  const data = payload.data ?? {};
+  const replyTarget = typeof data.conversationId === "string" ? { kind: "dms", id: data.conversationId }
+    : typeof data.channelId === "string" && /mention|thread|reply/.test(String(data.type ?? "")) ? { kind: "channels", id: data.channelId, parent: data.parentMessageId ?? data.threadId ?? null }
+    : null;
   const notification = new Notification({
     title: payload.title,
     body: typeof payload.body === "string" ? payload.body : "",
+    hasReply: Boolean(replyTarget),
+    replyPlaceholder: "Reply…",
     silent: settings.sound === "none",
     // The honey chime is macOS's Glass until the app ships its own sound.
     sound: settings.sound === "honey" ? "Glass" : undefined,
   });
   notification.on("click", () => openPath(payload.url));
+  notification.on("reply", (_event, reply) => {
+    if (!replyTarget || typeof reply !== "string" || !reply.trim()) return;
+    void site.apiRequest({
+      method: "POST",
+      path: `/api/${replyTarget.kind}/${replyTarget.id}/messages`,
+      body: { body: reply, clientMutationId: require("node:crypto").randomUUID(), ...(replyTarget.parent ? { parentMessageId: replyTarget.parent } : {}) },
+    }).then((result) => {
+      if (!result.ok) new Notification({ title: "Your reply wasn't sent", body: "Open CreatorHive to try again." }).show();
+      else void site.apiRequest({ method: "POST", path: "/api/messages/read", body: replyTarget.kind === "dms" ? { conversationId: replyTarget.id } : { channelId: replyTarget.id } }).then(refreshBadgeSoon);
+    });
+  });
   notification.on("close", () => {
     if (payload.tag && shownByTag.get(payload.tag) === notification) shownByTag.delete(payload.tag);
   });
@@ -726,6 +776,9 @@ app.whenReady().then(async () => {
   scheduleBadgePoll();
   configureUpdates();
 
+  lockIfNeeded();
+  powerMonitor.on("lock-screen", lockIfNeeded);
+  powerMonitor.on("suspend", lockIfNeeded);
   // After sleep the socket is stale; reconnect and correct the count.
   powerMonitor.on("resume", () => {
     realtime.reconnect();

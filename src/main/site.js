@@ -167,12 +167,17 @@ async function apiStream({ path, body } = {}, onLine) {
   }
 }
 
-/** A one-file multipart upload to a site route (the profile photo). */
-async function uploadForm({ path, field, name, type, bytes } = {}) {
-  if (path !== "/api/profile/avatar" || typeof field !== "string") return { ok: false, error: "bad_path" };
+const FORM_ROUTES = [/^\/api\/profile\/avatar$/, /^\/api\/(dms|channels)\/[0-9a-f-]{36}\/voice$/];
+
+/** A one-file multipart upload to a site route (the profile photo, a voice memo), with any extra text fields. */
+async function uploadForm({ path, field, name, type, bytes, fields } = {}) {
+  if (typeof path !== "string" || !FORM_ROUTES.some((r) => r.test(path)) || typeof field !== "string") return { ok: false, error: "bad_path" };
   try {
     const form = new FormData();
     form.append(field, new Blob([Buffer.from(bytes)], { type: String(type || "application/octet-stream") }), String(name || "file"));
+    for (const [key, value] of Object.entries(fields && typeof fields === "object" ? fields : {})) {
+      if (typeof value === "string") form.append(key, value);
+    }
     const response = await appSession().fetch(`${ORIGIN}${path}`, { method: "POST", body: form, headers: { Origin: ORIGIN, Accept: "application/json" } });
     const data = await response.json().catch(() => null);
     return response.ok ? { ok: true, data } : { ok: false, error: data?.error ?? `HTTP ${response.status}` };
