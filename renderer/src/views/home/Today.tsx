@@ -7,6 +7,7 @@ import { clock, money } from "../../lib/format";
 import { nav } from "../../lib/nav";
 import { Avatar, channelName } from "../../lib/ui";
 import { useGlance } from "./Home";
+import { STATUS_LABELS, type DealStatus } from "../../lib/hub";
 
 interface HubToday {
   tasks: { id: string; brand_name: string; amount_usd: number | string | null; status: string; draft_due_at: string | null; payment_expected_at: string | null }[];
@@ -84,7 +85,7 @@ export function TodayItems() {
       {hub?.tasks.slice(0, 3).map((deal) => (
         <button key={deal.id} className="t-card" onClick={() => nav.open({ kind: "hub", page: "deals", dealId: deal.id }, "hub", "ch")}>
           <Avatar name={deal.brand_name} size={34} radius="9px" />
-          <span><b>{deal.brand_name}</b><small>{deal.status.replace(/_/g, " ")}{deal.amount_usd ? ` · ${money(deal.amount_usd)}` : ""}</small></span>
+          <span><b>{deal.brand_name}</b><small>{STATUS_LABELS[deal.status as DealStatus] ?? deal.status}{deal.amount_usd ? ` · ${money(deal.amount_usd)}` : ""}</small></span>
         </button>
       ))}
 

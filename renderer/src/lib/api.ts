@@ -56,7 +56,7 @@ export interface SearchGroup {
 }
 
 export class ApiError extends Error {
-  constructor(readonly status: number, readonly code?: string) {
+  constructor(readonly status: number, readonly code?: string, readonly data?: Record<string, unknown> | null) {
     super(code ?? `HTTP ${status}`);
   }
 }
@@ -64,7 +64,7 @@ export class ApiError extends Error {
 /** A JSON call through the main process. Throws on anything but success. */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const result = await ch.api<T & { ok?: boolean; error?: string }>({ path, ...init });
-  if (!result.ok || !result.data) throw new ApiError(result.status, result.error ?? result.data?.error);
+  if (!result.ok || !result.data) throw new ApiError(result.status, result.error ?? result.data?.error, result.data as Record<string, unknown> | null);
   return result.data;
 }
 

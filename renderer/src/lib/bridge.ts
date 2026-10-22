@@ -81,7 +81,7 @@ export interface Bridge {
     addToCalendar(ics: string, name: string): Promise<{ ok: boolean }>;
   };
   window: {
-    popout(target: { kind: "dm" | "channel" | "thread"; id: string; title?: string }): void;
+    popout(target: { kind: "dm" | "channel" | "thread" | "deal"; id: string; title?: string }): void;
     onFullscreen: Listen<boolean>;
     onFocus: Listen<boolean>;
   };

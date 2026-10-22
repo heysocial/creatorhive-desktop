@@ -3,6 +3,9 @@ import { ch, type SessionUser } from "./lib/bridge";
 import { queryClient, useChannels, useConversations, useHeySocialAccess } from "./lib/api";
 import { useRealtimeRefresh } from "./lib/realtime";
 import { Conversation, ThreadPanel } from "./views/messages/Conversation";
+import { DealPanel, PromptHost } from "./views/hub/DealPanel";
+import { HubDialogs } from "./views/hub/parts";
+import { DealFormHost } from "./views/hub/DealForm";
 
 /*
   A pop-out window (⌘⇧O): one DM, channel or thread, nothing else. It shares
@@ -30,6 +33,14 @@ function PopoutBody({ kind, id, user }: { kind: string; id: string; user: Sessio
   const hsConversations = useConversations("heysocial", hs).data;
   const inHeySocial = Boolean(hsChannels?.some((c) => c.id === id) || hsConversations?.some((c) => c.id === id));
   const workspace = inHeySocial ? "heysocial" : "creatorhive";
+  if (kind === "deal") {
+    return (
+      <div className="popout-shell">
+        <DealPanel id={id} popout onClose={() => window.close()} />
+        <HubDialogs /><DealFormHost /><PromptHost />
+      </div>
+    );
+  }
   if (kind === "thread") {
     const [whereKind, whereId, parentId] = id.split(":");
     if ((whereKind !== "channel" && whereKind !== "dm") || !whereId || !parentId) return null;

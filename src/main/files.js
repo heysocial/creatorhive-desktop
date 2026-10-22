@@ -16,7 +16,12 @@ const { app, BrowserWindow, dialog, shell } = require("electron");
 const { siteFetch, signedOut } = require("./site");
 const { ORIGIN, debug } = require("./config");
 
-const UPLOAD_ROUTE = /^\/api\/(upload(\/[a-z-]+)?|[a-z-]+\/[A-Za-z0-9-]+\/[a-z/-]*upload)$/;
+const UPLOAD_ROUTES = [
+  /^\/api\/upload(\/(feed-attachments|hey-social))?$/,
+  /^\/api\/hub\/deals\/[0-9a-f-]{36}\/briefs\/upload$/,
+  /^\/api\/resources\/pages\/[0-9a-f-]{36}\/files\/upload$/,
+  /^\/api\/invoice-profile\/logo\/upload$/,
+];
 const MAX_BYTES = 200 * 1024 * 1024;
 
 const safeName = (name) => String(name || "file").replace(/[/\\:\0]/g, "-").slice(0, 120) || "file";
@@ -34,13 +39,14 @@ async function clientToken(route, pathname) {
 }
 
 async function upload({ route, name, type, bytes } = {}) {
-  if (typeof route !== "string" || !UPLOAD_ROUTE.test(route)) return { ok: false, error: "bad_route" };
+  if (typeof route !== "string" || !UPLOAD_ROUTES.some((r) => r.test(route))) return { ok: false, error: "bad_route" };
   if (!(bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes))) return { ok: false, error: "no_file" };
   const buffer = Buffer.from(bytes instanceof ArrayBuffer ? bytes : bytes.buffer);
   if (buffer.length > MAX_BYTES) return { ok: false, error: "too_big" };
   try {
     const { put } = await import("@vercel/blob/client");
-    const pathname = safeName(name);
+    // Some routes want a folder in the name (briefs/<dealId>/…); never anything that climbs out.
+    const pathname = String(name || "file").split("/").filter((part) => part && part !== "." && part !== "..").map(safeName).join("/") || "file";
     const token = await clientToken(route, pathname);
     const blob = await put(pathname, buffer, {
       access: "public",

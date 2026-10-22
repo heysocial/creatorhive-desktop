@@ -13,6 +13,11 @@ import { Main } from "./views/Main";
 import { QuickSwitcher } from "./overlays/QuickSwitcher";
 import { SettingsSheet, ShortcutsSheet } from "./overlays/Sheets";
 import { NewMessage } from "./overlays/NewMessage";
+import { HubDialogs, hubToast } from "./views/hub/parts";
+import { DealFormHost, openDealForm } from "./views/hub/DealForm";
+import { ExportHost, openExport } from "./views/hub/Export";
+import { PromptHost } from "./views/hub/DealPanel";
+import { STATUS_LABELS, type DealStatus } from "./lib/hub";
 import { api } from "./lib/api";
 import { usePresence } from "./lib/realtime";
 
@@ -56,6 +61,16 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
     if (kind === "profile") nav.open({ kind: "profile", id });
     if (kind === "dm" || kind === "channel") nav.open({ kind, id }, nav.get().section === "dms" ? "dms" : "home");
   }), []);
+  // A partner's change to the Shared Hub, said once, as the website does.
+  useEffect(() => ch.realtime.onMessage((message) => {
+    if (message.channel !== `user:${user.id}` || message.name !== "hub:changed") return;
+    const data = message.data as { by?: { id: string; name: string }; action?: string; brandName?: string; toStatus?: DealStatus } | null;
+    if (!data?.by || data.by.id === user.id || !data.brandName) return;
+    const first = data.by.name.split(" ")[0];
+    const text = data.action === "created" ? `${first} added ${data.brandName}` : data.action === "moved" && data.toStatus ? `${first} moved ${data.brandName} to ${STATUS_LABELS[data.toStatus]}`
+      : data.action === "deleted" ? `${first} deleted ${data.brandName}` : `${first} updated ${data.brandName}`;
+    hubToast(text);
+  }), [user.id]);
   // Opening the app counts for the day's streak, as on the website.
   useEffect(() => {
     void api("/api/points/daily-login", { method: "POST" }).then(() => queryClient.invalidateQueries({ queryKey: ["points"] })).catch(() => {});
@@ -83,6 +98,11 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       case "toggle-sidebar": return setSidebar((open) => !open);
       case "new-message":
         return setOverlay("new-message");
+      case "new-deal":
+        nav.section("hub", "ch");
+        return openDealForm({});
+      case "export":
+        return openExport();
       case "new-post":
         nav.open({ kind: "feed" }, "home", "ch");
         return void setTimeout(() => window.dispatchEvent(new Event("ch:new-post")), 50);
@@ -122,6 +142,10 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       {overlay === "settings" ? <SettingsSheet user={user} version={info.version} onClose={close} /> : null}
       {overlay === "new-message" ? <NewMessage onClose={close} workspace={nav.get().ws === "hs" ? "heysocial" : "creatorhive"} /> : null}
       {toast ? <div className="toast" role="status">{toast}</div> : null}
+      <HubDialogs />
+      <DealFormHost />
+      <ExportHost />
+      <PromptHost />
     </div>
   );
 }

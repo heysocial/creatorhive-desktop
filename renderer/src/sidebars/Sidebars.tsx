@@ -11,6 +11,12 @@ import { Avatar, channelName } from "../lib/ui";
 import { SidebarHead, SidebarItem, SidebarSection, Skeleton } from "./parts";
 import { useTodayCount } from "../views/home/Today";
 import { useNextEventDay } from "../views/events/Events";
+import { BOARDS, BOARD_LABELS, active, allDeals, total, useDeals } from "../lib/hub";
+import { smartDeals } from "../views/hub/Deals";
+import { openDealForm } from "../views/hub/DealForm";
+import { openExport } from "../views/hub/Export";
+import { money } from "../lib/format";
+import { Clock3, Hourglass, Repeat } from "lucide-react";
 
 const byRecent = (a: Conversation, b: Conversation) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? "");
 
@@ -152,15 +158,31 @@ function shortTime(iso: string | null) {
 }
 
 function Hub() {
+  const data = useDeals().data;
+  const deals = allDeals(data);
+  const awaiting = smartDeals("awaiting", deals);
   return (
     <>
-      <SidebarHead title="Creator Hub" actionLabel="New deal" />
+      <SidebarHead title="Creator Hub" actionLabel="New deal (⌥⌘N)" action={() => openDealForm({})} />
       <div className="sb-scroll">
-        <SidebarItem icon={<Kanban />} label="Deals" view={{ kind: "hub", page: "deals" }} />
+        <SidebarItem icon={<Kanban />} label="Deals" view={{ kind: "hub", page: "deals" }} meta={data ? String(active(deals).length) : undefined} />
         <SidebarItem icon={<ChartNoAxesCombined />} label="Dashboard" view={{ kind: "hub", page: "dashboard" }} />
         <SidebarItem icon={<Contact />} label="Past clients" view={{ kind: "hub", page: "clients" }} />
         <SidebarItem icon={<Receipt />} label="Invoices" view={{ kind: "hub", page: "invoices" }} />
-        <button className="sb-item" onClick={() => window.ch.app.openSite("/hub")}><Download />Export…</button>
+        <button className="sb-item" onClick={() => openExport()}><Download /><span className="label">Export…</span><span className="meta">⇧⌘E</span></button>
+        <SidebarSection id="hub-boards" title="Boards">
+          {BOARDS.map((b) => <SidebarItem key={b} icon={<span className={`board-dot b-${b}`} />} label={BOARD_LABELS[b]} view={{ kind: "hub", page: "deals", board: b }} meta={data ? String(active(data[b]).length) : undefined} />)}
+        </SidebarSection>
+        <SidebarSection id="hub-smart" title="Smart views">
+          <SidebarItem icon={<Clock3 />} label="Due this week" view={{ kind: "hub", page: "deals", smart: "due" }} meta={data ? String(smartDeals("due", deals).length) : undefined} />
+          <SidebarItem icon={<Hourglass />} label="Awaiting payment" view={{ kind: "hub", page: "deals", smart: "awaiting" }} meta={data ? money(total(awaiting)) : undefined} />
+          <SidebarItem icon={<Repeat />} label="Retainers" view={{ kind: "hub", page: "deals", smart: "retainers" }} meta={data ? String(smartDeals("retainers", deals).length) : undefined} />
+        </SidebarSection>
+        {data?.shared ? (
+          <SidebarSection id="hub-shared" title="Shared Hub">
+            {data.members.map((m) => <div key={m.id} className="sb-item static"><span className="mini-av">{m.initials}</span><span className="label">{m.name}</span></div>)}
+          </SidebarSection>
+        ) : null}
       </div>
     </>
   );

@@ -44,6 +44,13 @@ const SHORTCUTS: [string, [string, string][]][] = [
     ["Edit (in the message's menu)", "Right-click"],
     ["Close a thread or panel", "Esc"],
   ]],
+  ["Creator Hub", [
+    ["New deal", "⌥⌘N"],
+    ["Export deals", "⇧⌘E"],
+    ["Edit the open deal", "⌘E"],
+    ["Move a deal", "Drag it to another stage"],
+    ["Close the deal", "Esc"],
+  ]],
   ["Workspaces", [
     ["CreatorHive", "⌃⌘1"],
     ["Hey Social Inc.", "⌃⌘2"],

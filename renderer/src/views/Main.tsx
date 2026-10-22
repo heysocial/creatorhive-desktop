@@ -15,6 +15,11 @@ import { Events } from "./events/Events";
 import { Leaderboard } from "./people/Leaderboard";
 import { Members } from "./people/Members";
 import { ProfilePage } from "./people/Profile";
+import { Deals } from "./hub/Deals";
+import { Dashboard } from "./hub/Dashboard";
+import { Clients } from "./hub/Clients";
+import { Invoices } from "./hub/Invoices";
+import { DealOverlay } from "./hub/DealPanel";
 
 interface Screen {
   icon: LucideIcon;
@@ -127,6 +132,10 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
     case "channel":
     case "dm":
       return <Conversation key={`${view.kind}:${view.id}`} where={{ kind: view.kind, id: view.id }} user={user} workspace={workspace} />;
+    case "hub": {
+      const page = view.page === "dashboard" ? <Dashboard /> : view.page === "clients" ? <Clients /> : view.page === "invoices" ? <Invoices /> : <Deals board={view.board} smart={view.smart} />;
+      return <>{page}{view.dealId ? <DealOverlay key={view.dealId} id={view.dealId} /> : null}</>;
+    }
     case "dms-home":
       return <div className="empty-state"><div><MessageCircle style={{ width: 34, height: 34, color: "var(--ink-4)" }} /><p style={{ marginTop: 8 }}>Pick a conversation, or start a new one with ⌘N.</p></div></div>;
     default:

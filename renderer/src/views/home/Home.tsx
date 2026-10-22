@@ -131,10 +131,10 @@ function Breakdown({ glance, pct, onClose }: { glance: Glance; pct: number; onCl
 
 /* ---------- Writing a post ---------- */
 
-function NewPost({ user, open, onOpen, onClose }: { user: SessionUser; open: boolean; onOpen: () => void; onClose: () => void }) {
+function NewPost({ user, open, draft, onOpen, onClose }: { user: SessionUser; open: boolean; draft: { category: CategoryKey; text: string } | null; onOpen: () => void; onClose: () => void }) {
   const staff = user.role === "owner" || user.role === "team";
-  const [text, setText] = useState("");
-  const [category, setCategory] = useState<CategoryKey>("general");
+  const [text, setText] = useState(draft?.text ?? "");
+  const [category, setCategory] = useState<CategoryKey>(draft?.category ?? "general");
   const [media, setMedia] = useState<{ url: string; preview: string }[]>([]);
   const [uploading, setUploading] = useState(0);
   const [poll, setPoll] = useState<{ question: string; options: string[] } | null>(null);
@@ -435,9 +435,15 @@ export function Home({ user, openPostId }: { user: SessionUser; openPostId?: str
     void api("/api/posts/unread", { method: "POST", body: { category: filter } }).then(() => queryClient.invalidateQueries({ queryKey: ["posts-unread"] })).catch(() => {});
   }, [filter]);
 
-  // New post from the menu (⌘⇧N) or the button.
+  // New post from the menu (⌘⇧N), the button, or Share to Wins (which brings a draft).
+  const [draft, setDraft] = useState<{ category: CategoryKey; text: string } | null>(null);
   useEffect(() => {
-    const open = () => { setWriting(true); scroller.current?.scrollTo({ top: 0, behavior: "smooth" }); };
+    const open = (event: Event) => {
+      const detail = (event as CustomEvent<{ category: CategoryKey; text: string } | undefined>).detail;
+      if (detail) { setDraft(detail); setFilter("all"); }
+      setWriting(true);
+      scroller.current?.scrollTo({ top: 0, behavior: "smooth" });
+    };
     window.addEventListener("ch:new-post", open);
     return () => window.removeEventListener("ch:new-post", open);
   }, []);
@@ -466,7 +472,7 @@ export function Home({ user, openPostId }: { user: SessionUser; openPostId?: str
         }}>
           <div className="feed-col">
             <PaidCard />
-            <NewPost user={user} open={writing} onOpen={() => setWriting(true)} onClose={() => setWriting(false)} />
+            <NewPost key={draft?.text ?? "blank"} user={user} open={writing} draft={draft} onOpen={() => setWriting(true)} onClose={() => { setWriting(false); setDraft(null); }} />
             {filter === "all" ? (pinned.data ?? []).map((post) => <PostCard key={post.id} post={post} user={user} onOpen={(p) => setOpenPost(p.id)} />) : null}
             {feed.isLoading ? <div className="msgs-skel"><div /><div /><div /></div> : null}
             {feed.isError ? <div className="err-state">Couldn't load the feed.<button className="btn" onClick={() => void feed.refetch()}>Try again</button></div> : null}

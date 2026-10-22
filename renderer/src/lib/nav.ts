@@ -19,7 +19,7 @@ export type View =
   | { kind: "channel"; id: string }
   | { kind: "dm"; id: string }
   | { kind: "dms-home" }
-  | { kind: "hub"; page: "deals" | "dashboard" | "clients" | "invoices"; dealId?: string }
+  | { kind: "hub"; page: "deals" | "dashboard" | "clients" | "invoices"; dealId?: string; board?: "outreach" | "campaigns" | "payment"; smart?: "due" | "awaiting" | "retainers" }
   | { kind: "learn"; page: "courses" | "improve" | "resources" }
   | { kind: "activity" }
   | { kind: "threads" }
@@ -66,7 +66,12 @@ interface State {
 function initial(): State {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
-    if (saved?.current?.ws && saved?.current?.view) return { ...saved, back: [], forward: [] };
+    if (saved?.current?.ws && saved?.current?.view) {
+      // An open deal doesn't come back on the next launch; its page does.
+      const clean = (v: View): View => (v.kind === "hub" ? { ...v, dealId: undefined } : v);
+      const remembered = Object.fromEntries(Object.entries(saved.remembered ?? {}).map(([k, v]) => [k, clean(v as View)]));
+      return { ...saved, current: { ...saved.current, view: clean(saved.current.view) }, remembered, back: [], forward: [] };
+    }
   } catch {
     // Nothing saved, or unreadable: start at Home.
   }

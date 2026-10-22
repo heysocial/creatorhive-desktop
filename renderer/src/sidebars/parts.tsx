@@ -4,7 +4,9 @@ import { ch, type NativeMenuItem } from "../lib/bridge";
 import { nav, useNav, type View } from "../lib/nav";
 import { sitePathFor } from "../lib/sitePaths";
 
-const sameView = (a: View, b: View) => JSON.stringify(a) === JSON.stringify(b);
+/* An open deal sits over its page; the page's row stays selected. */
+const strip = (v: View) => (v.kind === "hub" ? { ...v, dealId: undefined } : v);
+const sameView = (a: View, b: View) => JSON.stringify(strip(a)) === JSON.stringify(strip(b));
 
 export function SidebarHead({ title, action, actionLabel = "New message" }: { title: string; action?: () => void; actionLabel?: string }) {
   return (

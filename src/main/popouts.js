@@ -11,7 +11,7 @@ const { BrowserWindow, shell } = require("electron");
 const { RENDERER_URL } = require("./config");
 
 const windows = new Map(); // "dm:<id>" -> BrowserWindow
-const KINDS = new Set(["dm", "channel", "thread"]);
+const KINDS = new Set(["dm", "channel", "thread", "deal"]);
 const ID = /^[A-Za-z0-9:_-]{1,120}$/;
 
 function open(target, chrome) {
