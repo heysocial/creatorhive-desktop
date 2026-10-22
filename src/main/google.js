@@ -18,7 +18,7 @@
 const crypto = require("node:crypto");
 const http = require("node:http");
 const { shell } = require("electron");
-const { ORIGIN, debug } = require("./config");
+const { ORIGIN, PREVIEW_BYPASS, debug } = require("./config");
 const site = require("./site");
 
 /** Long enough to pick an account and type a password; then it gives up. */
@@ -123,6 +123,12 @@ function signInWithGoogle({ onReturn } = {}) {
         code_challenge: challenge,
         code_challenge_method: "S256",
       }).toString();
+      // The Mac's browser can't send headers: on a preview, the bypass rides in
+      // the query and Vercel sets a cookie for Google's way back.
+      if (PREVIEW_BYPASS) {
+        start.searchParams.set("x-vercel-protection-bypass", PREVIEW_BYPASS);
+        start.searchParams.set("x-vercel-set-bypass-cookie", "true");
+      }
       timer = setTimeout(() => attempt.finish({ ok: false, error: "timeout" }), TIMEOUT_MS);
       shell.openExternal(start.toString());
     });

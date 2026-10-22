@@ -8,7 +8,7 @@
 */
 
 const { app, session } = require("electron");
-const { ORIGIN, PARTITION, debug } = require("./config");
+const { ORIGIN, PREVIEW_BYPASS, PARTITION, debug } = require("./config");
 
 const appSession = () => session.fromPartition(PARTITION);
 
@@ -16,6 +16,12 @@ function configureUserAgent() {
   const ses = appSession();
   // The site recognises the app by this (lib/browser-attention.ts isMacApp).
   ses.setUserAgent(`${ses.getUserAgent()} CreatorHiveDesktop/${app.getVersion()}`);
+  // A test run against a Vercel preview: every request to it carries the bypass.
+  if (PREVIEW_BYPASS) {
+    ses.webRequest.onBeforeSendHeaders({ urls: [`${ORIGIN}/*`] }, (details, callback) => {
+      callback({ requestHeaders: { ...details.requestHeaders, "x-vercel-protection-bypass": PREVIEW_BYPASS } });
+    });
+  }
 }
 
 /**
