@@ -4,6 +4,9 @@
 extends: ./electron-builder.yml
 appId: com.creatorhive.desktop.preview
 productName: CreatorHive Preview
+# The app reads its own name to know it is the preview (src/main/config.js).
+extraMetadata:
+  productName: CreatorHive Preview
 mac:
   icon: build/icon-preview.icns
   artifactName: CreatorHive-Preview-${version}-mac.${ext}
@@ -15,3 +18,5 @@ publish:
   owner: heysocial
   repo: creatorhive-desktop
   releaseType: prerelease
+  # Update file preview-mac.yml (electron-builder only infers alpha/beta channels).
+  channel: preview

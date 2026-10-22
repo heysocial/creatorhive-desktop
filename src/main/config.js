@@ -14,7 +14,9 @@ const PARTITION = "persist:creatorhive";
   team. It has its own bundle id, data folder and update channel, and starts
   with notifications off so nobody gets every notification twice.
 */
-const IS_PREVIEW = app.getName().includes("Preview") || process.env.CREATORHIVE_PREVIEW === "1";
+const IS_PREVIEW = app.getName().includes("Preview")
+  || process.execPath.includes("CreatorHive Preview.app")
+  || process.env.CREATORHIVE_PREVIEW === "1";
 
 /* In development the interface comes from Vite's dev server instead of the bundle. */
 const RENDERER_URL = process.env.CREATORHIVE_RENDERER_URL || null;
