@@ -22,6 +22,8 @@ export function Avatar({ name, src, size = 32, radius = "50%", online = false, p
   seed?: string;
 }) {
   const state = presence === "online" || online ? "online" : presence === "away" || presence === "dnd" ? "away" : presence ? "offline" : null;
+  // Slack's size: about a third of the avatar, never bigger than 10px.
+  const dot = Math.round(Math.min(10, Math.max(6, size * 0.3)));
   const style: CSSProperties = {
     width: size,
     height: size,
@@ -32,7 +34,7 @@ export function Avatar({ name, src, size = 32, radius = "50%", online = false, p
   return (
     <span className="av" style={style} aria-hidden>
       {src ? <img src={src} alt="" loading="lazy" /> : initials(name)}
-      {state ? <span className={`presence ${state}`} /> : null}
+      {state ? <span className={`presence ${state}`} style={{ width: dot, height: dot, right: -dot / 4, bottom: -dot / 4 }} /> : null}
     </span>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Play, VideoOff } from "lucide-react";
 import { ch } from "../../lib/bridge";
-import type { VideoAttachment } from "../../lib/community";
+import { localPosters, type VideoAttachment } from "../../lib/community";
 
 const duration = (s: number | null) => (s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "");
 
@@ -43,7 +43,8 @@ export function VideoPlayer({ video }: { video: VideoAttachment }) {
       <div className="video unavailable processing">
         {video.thumbnailUrl ? <img src={video.thumbnailUrl} alt="" style={{ opacity: .5 }} /> : null}
         <Loader2 className="spin" style={{ position: "relative" }} />
-        <span style={{ position: "relative" }}>Processing{video.processingPct ? ` ${Math.round(video.processingPct)}%` : ""}…</span>
+        <span style={{ position: "relative" }}>{video.uploadProgress != null ? `Uploading ${video.uploadProgress}%` : `Processing${video.processingPct ? ` ${Math.round(video.processingPct)}%` : ""}…`}</span>
+        {video.uploadProgress != null ? <i className="vbar"><i style={{ width: `${video.uploadProgress}%` }} /></i> : null}
       </div>
     );
   }
@@ -52,7 +53,8 @@ export function VideoPlayer({ video }: { video: VideoAttachment }) {
   }
   return (
     <button className="video" onClick={() => (video.hlsUrl ? setPlaying(true) : ch.app.openExternal(video.embedUrl))} title={video.fileName}>
-      {video.thumbnailUrl ? <img src={video.thumbnailUrl} alt="" /> : null}
+      {localPosters.get(video.uid) ? <img src={localPosters.get(video.uid)} alt="" /> : null}
+      {video.thumbnailUrl ? <img src={video.thumbnailUrl} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} /> : null}
       <span className="play"><Play /></span>
       {video.durationSeconds ? <span className="dur">{duration(video.durationSeconds)}</span> : null}
     </button>

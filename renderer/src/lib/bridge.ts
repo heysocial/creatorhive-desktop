@@ -43,6 +43,7 @@ export interface DesktopSettings {
   zoom: number;
   openAtLogin: boolean;
   touchId: boolean;
+  bounceDock: boolean;
   touchIdAvailable: boolean;
 }
 

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, keys, queryClient, useChannels, useConversations, type Workspace } from "../../lib/api";
 import {
-  addMessage, sendVideos, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
+  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
 } from "../../lib/community";
 import { dayLabel } from "../../lib/format";
@@ -156,7 +156,7 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
         onTyping={typingSignal(realtimeChannel)}
         onSend={async (input) => {
           if (input.videos.length) {
-            try { await sendVideos(where, { videos: input.videos, body: input.body, mentions: input.mentions, parentMessageId: parentId }); } catch { window.alert("The video couldn't be sent."); return false; }
+            void sendVideoJobs(where, { jobs: input.videos, body: input.body, mentions: input.mentions, parentMessageId: parentId }, toAuthor(user));
             return input.files.length ? sendMessage(where, { ...input, body: "", parentMessageId: parentId }, toAuthor(user)) : true;
           }
           return sendMessage(where, { ...input, parentMessageId: parentId }, toAuthor(user));
@@ -381,14 +381,10 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
           searchPeople={where.kind === "channel" ? people : undefined} onTyping={sendTyping}
           onSend={async (input: ComposerSend) => {
             if (input.videos.length) {
-              try {
-                await sendVideos(where, { videos: input.videos, body: input.body, mentions: input.mentions });
-                if (!input.files.length) return true;
-                input = { ...input, body: "" };
-              } catch {
-                window.alert("The video couldn't be sent. Videos up to 5 minutes work best.");
-                return false;
-              }
+              // Goes out now; the message shows the upload and becomes real when it's done.
+              void sendVideoJobs(where, { jobs: input.videos, body: input.body, mentions: input.mentions }, toAuthor(user));
+              if (!input.files.length) return true;
+              input = { ...input, body: "" };
             }
             const ok = await sendMessage(where, { ...input, replyToMessageId: replyTo?.id ?? null }, toAuthor(user));
             if (ok) setReplyTo(null);

@@ -7,7 +7,7 @@ import { Avatar } from "../../lib/ui";
 import { EmojiPicker } from "./EmojiPicker";
 import { VoiceRecorder } from "./VoiceRecorder";
 import { pastedFiles } from "../../lib/paste";
-import type { UploadedVideo } from "../../lib/community";
+import { startVideoJob, type UploadedVideo, type VideoJob } from "../../lib/community";
 
 export interface MentionCandidate {
   id: string;
@@ -28,8 +28,8 @@ export interface ComposerSend {
   body: string;
   mentions: { id: string; start: number; end: number }[];
   files: SentFile[];
-  /** Videos already uploaded to Mux, made into the message on send (not Hey Social Inc., where videos are files). */
-  videos: UploadedVideo[];
+  /** Videos on their way to Mux; the message can go before they finish (not Hey Social Inc., where videos are files). */
+  videos: VideoJob[];
 }
 
 export interface ComposerHandle {
@@ -44,7 +44,7 @@ interface Staged {
   preview: string | null;
   state: "uploading" | "done" | "failed";
   sent?: SentFile;
-  video?: { progress: number; uploaded?: UploadedVideo; duration?: number };
+  video?: { progress: number; job: VideoJob; duration?: number };
 }
 
 /** A frame from the video and its length, made on the Mac for the chip before anything uploads. */
@@ -164,17 +164,20 @@ export const Composer = forwardRef<ComposerHandle, {
       file,
       preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
       state: "uploading",
-      video: uploadVideo && file.type.startsWith("video/") ? { progress: 0 } : undefined,
+      video: uploadVideo && file.type.startsWith("video/") ? { progress: 0, job: startVideoJob(file, uploadVideo) } : undefined,
     }));
     if (next.length === 0) return;
     setStaged((current) => [...current, ...next]);
     // Videos: a thumbnail right away, then straight to Mux with progress, as Slack does.
     for (const item of next.filter((n) => n.video)) {
       const update = (change: (s: Staged) => Staged) => setStaged((current) => current.map((s) => (s.key === item.key ? change(s) : s)));
-      void videoThumbnail(item.file).then(({ url, duration }) => update((s) => ({ ...s, preview: url, video: { ...s.video!, duration } })));
-      void uploadVideo!(item.file, (pct) => update((s) => ({ ...s, video: { ...s.video!, progress: pct } })))
-        .then((uploaded) => update((s) => ({ ...s, state: "done", video: { ...s.video!, progress: 100, uploaded } })))
-        .catch(() => update((s) => ({ ...s, state: "failed" })));
+      const job = item.video!.job;
+      void videoThumbnail(item.file).then(({ url, duration }) => {
+        job.preview = url;
+        job.duration = duration;
+        update((s) => ({ ...s, preview: url, video: { ...s.video!, duration } }));
+      });
+      job.subscribe(() => update((s) => ({ ...s, state: job.failed ? "failed" : job.uploaded ? "done" : "uploading", video: { ...s.video!, progress: job.progress } })));
     }
     for (const item of next.filter((n) => !n.video)) {
       void uploadFile(item.file, uploadFolder).then((sent) => {
@@ -269,9 +272,10 @@ export const Composer = forwardRef<ComposerHandle, {
     return ranges.sort((a, b) => a.start - b.start);
   }
 
-  const uploading = staged.some((s) => s.state === "uploading");
+  // Videos don't hold up Send (the message waits for them); other files do.
+  const uploading = staged.some((s) => s.state === "uploading" && !s.video);
   const ready = staged.filter((s) => s.state === "done" && s.sent).map((s) => s.sent!);
-  const videos = staged.filter((s) => s.state === "done" && s.video?.uploaded).map((s) => s.video!.uploaded!);
+  const videos = staged.filter((s) => s.video && s.state !== "failed").map((s) => s.video!.job);
   const canSend = !sending && !uploading && (value.trim().length > 0 || ready.length > 0 || videos.length > 0);
 
   async function send() {
@@ -334,7 +338,7 @@ export const Composer = forwardRef<ComposerHandle, {
               {s.video ? (
                 <span className="vthumb">{s.preview ? <img src={s.preview} alt="" /> : null}<Play /></span>
               ) : s.preview ? <img src={s.preview} alt="" /> : <span className={`ficon ${/pdf/i.test(s.file.type) ? "" : "generic"}`}><FileIcon /></span>}
-              <span className="fmeta"><b>{s.file.name}</b><span>{s.state === "failed" ? "Couldn't upload" : s.video ? (s.state === "done" ? `Ready to send${s.video.duration ? ` · ${Math.floor(s.video.duration / 60)}:${String(Math.round(s.video.duration % 60)).padStart(2, "0")}` : ""}` : `Uploading ${s.video.progress}%`) : s.state === "uploading" ? "Uploading…" : bytes(s.file.size)}</span>
+              <span className="fmeta"><b>{s.file.name}</b><span>{s.state === "failed" ? "Couldn't upload" : s.video ? (s.state === "done" ? `Ready to send${s.video.duration ? ` · ${Math.floor(s.video.duration / 60)}:${String(Math.round(s.video.duration % 60)).padStart(2, "0")}` : ""}` : `Uploading ${s.video.progress}% · you can send now`) : s.state === "uploading" ? "Uploading…" : bytes(s.file.size)}</span>
                 {s.video && s.state === "uploading" ? <i className="vprog"><i style={{ width: `${s.video.progress}%` }} /></i> : null}
               </span>
               {s.state === "uploading" && !s.video ? <Loader2 className="spin" /> : null}

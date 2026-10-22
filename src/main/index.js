@@ -67,7 +67,7 @@ app.setAppUserModelId(IS_PREVIEW ? "com.creatorhive.desktop.preview" : "com.crea
 const settingsPath = () => path.join(app.getPath("userData"), "settings.json");
 const DEFAULT_SETTINGS = {
   notifications: !IS_PREVIEW, pausedUntil: 0, bounds: null,
-  sound: "honey", badge: "mentions", keepRunning: true, theme: "system", zoom: 1, touchId: false,
+  sound: "honey", badge: "mentions", keepRunning: true, theme: "system", zoom: 1, touchId: false, bounceDock: true,
 };
 
 /* Touch ID: when it's on, the window stays locked after launch, sleep or the Mac locking, until you unlock. */
@@ -117,6 +117,7 @@ function publicSettings() {
     zoom: settings.zoom,
     openAtLogin: app.getLoginItemSettings().openAtLogin,
     touchId: settings.touchId,
+    bounceDock: settings.bounceDock,
     touchIdAvailable: touchIdAvailable(),
   };
 }
@@ -130,6 +131,7 @@ function changeSettings(patch = {}) {
   if (["system", "light", "dark"].includes(patch.theme)) settings.theme = patch.theme;
   if (Number.isFinite(patch.zoom)) settings.zoom = patch.zoom;
   if (typeof patch.openAtLogin === "boolean") app.setLoginItemSettings({ openAtLogin: patch.openAtLogin });
+  if (typeof patch.bounceDock === "boolean") settings.bounceDock = patch.bounceDock;
   if (typeof patch.touchId === "boolean") settings.touchId = patch.touchId && touchIdAvailable();
   saveSettings();
   applyLook();
@@ -490,6 +492,8 @@ function showNotification(payload) {
     shownByTag.set(payload.tag, notification);
   }
   notification.show();
+  // Like Slack: one bounce of the Dock icon, when CreatorHive isn't the app in front.
+  if (IS_MAC && settings.bounceDock && !BrowserWindow.getFocusedWindow()) app.dock?.bounce("informational");
 }
 
 function configureRealtime() {

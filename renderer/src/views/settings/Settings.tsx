@@ -67,6 +67,9 @@ function Notifications() {
             <option value="honey">🐝 Honey chime</option><option value="system">Mac default</option><option value="none">None</option>
           </select>
         </Row>
+        <Row title="Bounce the Dock icon" sub="Once, when a notification arrives and CreatorHive isn't in front">
+          <Toggle on={settings?.bounceDock ?? true} onChange={(v) => void update({ bounceDock: v })} />
+        </Row>
         <Row title="Dock badge counts">
           <div className="seg">{(["mentions", "off"] as const).map((m) => <button key={m} className={settings?.badge === m ? "on" : ""} onClick={() => void update({ badge: m })}>{m === "mentions" ? "DMs & mentions" : "Off"}</button>)}</div>
         </Row>

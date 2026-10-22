@@ -37,6 +37,8 @@ export interface VideoAttachment {
   embedUrl: string;
   status: "processing" | "ready" | "error";
   processingPct?: number | null;
+  /** Client-only: still uploading from this Mac, 0–100. */
+  uploadProgress?: number | null;
   hlsUrl?: string | null;
   unavailable?: boolean;
 }
@@ -246,7 +248,37 @@ export async function sendMessage(where: Thread, input: {
    3. finalize turns the uploaded videos into a message;
    4. Mux processes it; the message shows "Processing" until it can play. */
 
+/** Posters made on this Mac for videos sent from it, by Mux uid. */
+export const localPosters = new Map<string, string>();
+
 export interface UploadedVideo { uploadToken: string; uid: string; name: string }
+
+/** A video on its way to Mux. Sending doesn't wait for it: the message waits instead, showing its progress. */
+export interface VideoJob {
+  name: string;
+  preview: string | null;
+  duration: number;
+  progress: number;
+  done: Promise<UploadedVideo>;
+  uploaded: UploadedVideo | null;
+  failed: boolean;
+  subscribe(listener: () => void): () => void;
+}
+
+export function startVideoJob(file: File, upload: (file: File, onProgress: (pct: number) => void) => Promise<UploadedVideo>): VideoJob {
+  const listeners = new Set<() => void>();
+  const emit = () => listeners.forEach((l) => l());
+  const job: VideoJob = {
+    name: file.name, preview: null, duration: 0, progress: 0, uploaded: null, failed: false,
+    done: Promise.resolve() as unknown as Promise<UploadedVideo>,
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+  };
+  job.done = upload(file, (pct) => { job.progress = pct; emit(); })
+    .then((uploaded) => { job.uploaded = uploaded; job.progress = 100; emit(); return uploaded; })
+    .catch((error) => { job.failed = true; emit(); throw error; });
+  job.done.catch(() => {});
+  return job;
+}
 
 export async function uploadVideo(where: Thread, file: File, onProgress: (pct: number) => void): Promise<UploadedVideo> {
   const start = await api<{ uploadUrl: string; uploadToken: string; uid: string }>(`${base(where)}/videos/upload-url`, {
@@ -268,15 +300,47 @@ export async function uploadVideo(where: Thread, file: File, onProgress: (pct: n
 
 /** Mux takes a moment to see the bytes: finalize answers 409 until then. */
 async function finalize(where: Thread, body: Record<string, unknown>) {
-  for (let attempt = 0; attempt < 40; attempt++) {
+  for (let attempt = 0; attempt < 120; attempt++) {
     try {
       return await api<{ message: Message }>(`${base(where)}/videos/finalize`, { method: "POST", body });
     } catch (error) {
       if (!(error instanceof ApiError && error.status === 409 && !String(error.code).includes("ALREADY"))) throw error;
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 500));
     }
   }
   throw new Error("video never finished uploading");
+}
+
+/**
+ * Send a message with videos right away: it appears at once with each video's
+ * picture and upload progress, and becomes the real message when the uploads finish.
+ */
+export async function sendVideoJobs(where: Thread, input: { jobs: VideoJob[]; body: string; mentions?: { id: string; start: number; end: number }[]; parentMessageId?: string | null }, me: Author) {
+  const clientMutationId = crypto.randomUUID();
+  const localId = `local-${clientMutationId}`;
+  const placeholder = (): VideoAttachment[] => input.jobs.map((job, i) => ({
+    uid: `local-${clientMutationId}-${i}`, fileName: job.name, durationSeconds: job.duration || null, thumbnailUrl: job.preview, embedUrl: "",
+    status: "processing", uploadProgress: job.uploaded ? null : job.progress,
+  }));
+  addMessage(where, {
+    id: localId, clientMutationId, body: input.body.trim(), bodyHtml: null, mediaUrls: [], parentMessageId: input.parentMessageId ?? null,
+    createdAt: new Date().toISOString(), editedAt: null, author: me, reactions: {}, sending: true,
+    videoAttachment: placeholder()[0], videoAttachments: placeholder(),
+  });
+  const offs = input.jobs.map((job) => job.subscribe(() => patchMessage(where, localId, (m) => ({ ...m, videoAttachment: placeholder()[0], videoAttachments: placeholder() }))));
+  try {
+    const videos = await Promise.all(input.jobs.map((j) => j.done));
+    // Mux makes its own poster a little later; until then the frame taken on this Mac stands in.
+    videos.forEach((v, i) => { if (input.jobs[i].preview) localPosters.set(v.uid, input.jobs[i].preview!); });
+    removeMessage(where, localId);
+    await sendVideos(where, { ...input, videos });
+    return true;
+  } catch {
+    patchMessage(where, localId, (m) => ({ ...m, sending: false, failed: true }));
+    return false;
+  } finally {
+    offs.forEach((off) => off());
+  }
 }
 
 export async function sendVideos(where: Thread, input: { videos: UploadedVideo[]; body: string; mentions?: { id: string; start: number; end: number }[]; parentMessageId?: string | null }) {
@@ -302,7 +366,7 @@ const watching = new Set<string>();
 export function watchVideos(where: Thread, message: Message) {
   const videos = message.videoAttachments?.length ? message.videoAttachments : message.videoAttachment ? [message.videoAttachment] : [];
   for (const video of videos) {
-    if (video.status !== "processing" || watching.has(video.uid)) continue;
+    if (video.status !== "processing" || video.uid.startsWith("local-") || watching.has(video.uid)) continue;
     watching.add(video.uid);
     let tries = 0;
     const tick = async () => {
@@ -316,9 +380,9 @@ export function watchVideos(where: Thread, message: Message) {
         }));
         if (videoAttachment.status !== "processing") { watching.delete(video.uid); return; }
       } catch { /* try again */ }
-      if (tries < 120) setTimeout(() => void tick(), 4000);
+      if (tries < 200) setTimeout(() => void tick(), tries < 10 ? 1500 : 4000);
     };
-    setTimeout(() => void tick(), 3000);
+    setTimeout(() => void tick(), 1200);
   }
 }
 
