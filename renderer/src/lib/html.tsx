@@ -1,4 +1,5 @@
 import { memo, type MouseEvent } from "react";
+import { marked } from "marked";
 import { ch } from "./bridge";
 
 /*
@@ -10,12 +11,13 @@ import { ch } from "./bridge";
 
 const TAGS = new Set([
   "P", "BR", "STRONG", "B", "EM", "I", "U", "S", "DEL", "STRIKE", "CODE", "PRE", "BLOCKQUOTE", "UL", "OL", "LI", "A", "SPAN",
-  "H1", "H2", "H3", "H4", "HR", "DIV", "MARK", "SUB", "SUP",
+  "H1", "H2", "H3", "H4", "HR", "DIV", "MARK", "SUB", "SUP", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD", "INPUT",
 ]);
 const ATTRS: Record<string, Set<string>> = {
   A: new Set(["href", "title"]),
   SPAN: new Set(["class", "data-mention", "data-user-id", "data-id", "data-type"]),
   OL: new Set(["start"]),
+  INPUT: new Set(["type", "checked", "disabled"]),
 };
 
 function clean(html: string) {
@@ -73,3 +75,9 @@ export const RichText = memo(function RichText({ html, text, className = "rich" 
   if (!source) return null;
   return <div className={className} onClick={onBodyClick} dangerouslySetInnerHTML={{ __html: cleaned(source) }} />;
 });
+
+/** Markdown (the Script Writer's replies) as safe HTML. */
+export function Markdown({ text, className = "rich md" }: { text: string; className?: string }) {
+  const html = marked.parse(text, { async: false, gfm: true, breaks: true }) as string;
+  return <RichText html={html} className={className} />;
+}

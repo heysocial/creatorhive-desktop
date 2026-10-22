@@ -11,7 +11,7 @@ const { BrowserWindow, shell } = require("electron");
 const { RENDERER_URL } = require("./config");
 
 const windows = new Map(); // "dm:<id>" -> BrowserWindow
-const KINDS = new Set(["dm", "channel", "thread", "deal"]);
+const KINDS = new Set(["dm", "channel", "thread", "deal", "lesson", "settings"]);
 const ID = /^[A-Za-z0-9:_-]{1,120}$/;
 
 function open(target, chrome) {
@@ -26,11 +26,12 @@ function open(target, chrome) {
     return;
   }
 
+  const shape = kind === "settings" ? { width: 760, height: 720, minWidth: 640, minHeight: 520, resizable: true, maximizable: false, fullscreenable: false }
+    : kind === "lesson" ? { width: 640, height: 380, minWidth: 320, minHeight: 200, alwaysOnTop: true }
+    : kind === "deal" ? { width: 1000, height: 760, minWidth: 720, minHeight: 520 }
+    : { width: 560, height: 680, minWidth: 380, minHeight: 420 };
   const win = new BrowserWindow({
-    width: 560,
-    height: 680,
-    minWidth: 380,
-    minHeight: 420,
+    ...shape,
     title: typeof target.title === "string" ? target.title.slice(0, 120) : "CreatorHive",
     show: false,
     ...chrome(),

@@ -94,7 +94,7 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       case "workspace:hs": return heySocial ? nav.workspace("hs") : undefined;
       case "quick-open": return setOverlay((open) => (open === "quick-open" ? null : "quick-open"));
       case "shortcuts": return setOverlay("shortcuts");
-      case "settings": return setOverlay("settings");
+      case "settings": return ch.window.popout({ kind: "settings", id: "main" });
       case "toggle-sidebar": return setSidebar((open) => !open);
       case "new-message":
         return setOverlay("new-message");
@@ -104,6 +104,8 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       case "export":
         return openExport();
       case "new-post":
+        // In a lesson, ⇧⌘N notes the moment instead.
+        if (nav.get().view.kind === "course") return void window.dispatchEvent(new Event("ch:lesson-note"));
         nav.open({ kind: "feed" }, "home", "ch");
         return void setTimeout(() => window.dispatchEvent(new Event("ch:new-post")), 50);
       case "popout": {

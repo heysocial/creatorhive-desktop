@@ -28,6 +28,16 @@ contextBridge.exposeInMainWorld("ch", {
     onChanged: listen("auth:changed"),
   },
   api: (request) => ipcRenderer.invoke("api:request", request),
+  apiStream: (request, onLine) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    const handler = (_event, payload) => { if (payload?.id === id) onLine(payload.line); };
+    ipcRenderer.on("api:stream:line", handler);
+    return ipcRenderer.invoke("api:stream", { ...request, id }).finally(() => ipcRenderer.removeListener("api:stream:line", handler));
+  },
+  settings: {
+    get: () => ipcRenderer.invoke("settings:get"),
+    set: (patch) => ipcRenderer.invoke("settings:set", patch),
+  },
   realtime: {
     watch: (name) => ipcRenderer.send("realtime:watch", name),
     unwatch: (name) => ipcRenderer.send("realtime:unwatch", name),
@@ -44,6 +54,7 @@ contextBridge.exposeInMainWorld("ch", {
     openSite: (path) => ipcRenderer.send("app:openSite", path),
     refreshBadge: () => ipcRenderer.send("badge:refresh"),
     installUpdate: () => ipcRenderer.send("update:install"),
+    checkUpdates: () => ipcRenderer.send("app:checkUpdates"),
     onCommand: listen("command"),
     onNavigate: listen("navigate"),
     onUpdateReady: listen("update:ready"),
@@ -56,6 +67,7 @@ contextBridge.exposeInMainWorld("ch", {
     quickLook: (url, name) => ipcRenderer.invoke("files:quickLook", { url, name }),
     save: (url, name) => ipcRenderer.invoke("files:save", { url, name }),
     addToCalendar: (ics, name) => ipcRenderer.invoke("files:addToCalendar", { ics, name }),
+    uploadForm: (request) => ipcRenderer.invoke("files:uploadForm", request),
   },
   window: {
     popout: (target) => ipcRenderer.send("window:popout", target),

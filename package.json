@@ -1,7 +1,7 @@
 {
   "name": "creatorhive-desktop",
   "productName": "CreatorHive",
-  "version": "2.0.0-preview.4",
+  "version": "2.0.0-preview.5",
   "description": "CreatorHive for Mac",
   "author": "Hey Social Inc.",
   "license": "UNLICENSED",
@@ -31,6 +31,7 @@
     "electron-builder": "26.17.0",
     "hls.js": "1.7.3",
     "lucide-react": "1.52.0",
+    "marked": "18.0.11",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "typescript": "7.0.2",

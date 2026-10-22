@@ -16,7 +16,10 @@ import { smartDeals } from "../views/hub/Deals";
 import { openDealForm } from "../views/hub/DealForm";
 import { openExport } from "../views/hub/Export";
 import { money } from "../lib/format";
-import { Clock3, Hourglass, Repeat } from "lucide-react";
+import { Clock3, Hourglass, Repeat, Heart, Megaphone, MessageCircle as Bubble, PlayCircle, Sparkles as Spark, FileText } from "lucide-react";
+import { percent, useCourses, useImprove } from "../lib/learn";
+import { useResourcePages, useResourcesAccess, useWikiPages } from "../views/learn/Resources";
+import { useActivityRows } from "../views/activity/Activity";
 
 const byRecent = (a: Conversation, b: Conversation) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? "");
 
@@ -189,24 +192,53 @@ function Hub() {
 }
 
 function Learn() {
+  const courses = useCourses().data ?? [];
+  const grade = useImprove().data?.grade.overallPercentage;
+  const access = useResourcesAccess().data;
+  const mine = useResourcePages(access === true).data ?? [];
+  const wiki = useWikiPages(access === false).data ?? [];
+  const inProgress = courses.filter((c) => c.completedCount > 0 && c.completedCount < c.lessonCount);
   return (
     <>
       <SidebarHead title="Learn" />
       <div className="sb-scroll">
-        <SidebarItem icon={<GraduationCap />} label="Courses" view={{ kind: "learn", page: "courses" }} />
-        <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} />
+        <SidebarItem icon={<GraduationCap />} label="Courses" view={{ kind: "learn", page: "courses" }} meta={courses.length ? String(courses.length) : undefined} />
+        <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} meta={grade !== undefined ? `${grade}%` : undefined} />
         <SidebarItem icon={<BookOpen />} label="Resources" view={{ kind: "learn", page: "resources" }} />
+        <SidebarItem icon={<Spark />} label="AI Script Writer" view={{ kind: "script-writer" }} meta="Flagship" />
+        {inProgress.length ? (
+          <SidebarSection id="learn-progress" title="In progress">
+            {inProgress.map((c) => <SidebarItem key={c.id} icon={<PlayCircle />} label={c.title} view={{ kind: "course", id: c.id }} meta={`${percent(c)}%`} />)}
+          </SidebarSection>
+        ) : null}
+        {access && mine.length ? (
+          <SidebarSection id="learn-pages" title="Your pages">
+            {mine.filter((p) => !p.parentId).slice(0, 12).map((p) => <SidebarItem key={p.id} icon={<span className="emoji-ico">{p.icon ?? "📄"}</span>} label={p.title || "Untitled"} view={{ kind: "resource", id: p.id }} />)}
+          </SidebarSection>
+        ) : null}
+        {access === false && wiki.length ? (
+          <SidebarSection id="learn-guides" title="CreatorHive guides">
+            {wiki.filter((p) => !p.parentId).slice(0, 12).map((p) => <SidebarItem key={p.id} icon={<FileText />} label={p.title} view={{ kind: "resource", id: p.id }} />)}
+          </SidebarSection>
+        ) : null}
       </div>
     </>
   );
 }
 
 function Activity({ title }: { title: string }) {
+  const rows = useActivityRows();
+  const count = (kind?: string) => rows.filter((r) => r.unread && (!kind || r.kind === kind)).length || undefined;
   return (
     <>
       <SidebarHead title={title} />
       <div className="sb-scroll">
-        <SidebarItem icon={<Bell />} label="All activity" view={{ kind: "activity" }} />
+        <SidebarItem icon={<Bell />} label="All" view={{ kind: "activity" }} count={count()} />
+        <SidebarItem icon={<AtSign />} label="Mentions" view={{ kind: "activity", filter: "mentions" }} count={count("mentions")} />
+        <SidebarItem icon={<Bubble />} label="Comments and replies" view={{ kind: "activity", filter: "comments" }} quietCount={count("comments")} />
+        <SidebarItem icon={<Heart />} label="Reactions" view={{ kind: "activity", filter: "reactions" }} quietCount={count("reactions")} />
+        <SidebarItem icon={<Spark />} label="Hub reminders" view={{ kind: "activity", filter: "hub" }} quietCount={count("hub")} />
+        <SidebarItem icon={<Megaphone />} label="Announcements" view={{ kind: "activity", filter: "announcements" }} quietCount={count("announcements")} />
       </div>
     </>
   );

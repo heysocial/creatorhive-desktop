@@ -127,4 +127,59 @@ async function signOut() {
   await appSession().clearCache();
 }
 
-module.exports = { appSession, configureUserAgent, siteFetch, signedOut, apiRequest, getSession, signIn, signOut };
+/**
+ * A streamed POST (the Script Writer's newline-delimited JSON). Each line goes
+ * to onLine as it arrives; the promise settles when the stream ends.
+ */
+async function apiStream({ path, body } = {}, onLine) {
+  if (typeof path !== "string" || !path.startsWith("/api/") || path.includes("..")) return { ok: false, status: 400, error: "bad_path" };
+  try {
+    const response = await siteFetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/x-ndjson, application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+    if (response.status === 401) return { ok: false, status: 401, signedOut: true };
+    const type = response.headers.get("content-type") ?? "";
+    if (!response.ok || !type.includes("ndjson")) {
+      const data = await response.json().catch(() => null);
+      return { ok: false, status: response.status, data };
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let newline;
+      while ((newline = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (line) onLine(line);
+      }
+    }
+    if (buffer.trim()) onLine(buffer.trim());
+    return { ok: true, status: response.status };
+  } catch (error) {
+    debug("stream failed", path, error?.message);
+    return { ok: false, status: 0, error: "offline" };
+  }
+}
+
+/** A one-file multipart upload to a site route (the profile photo). */
+async function uploadForm({ path, field, name, type, bytes } = {}) {
+  if (path !== "/api/profile/avatar" || typeof field !== "string") return { ok: false, error: "bad_path" };
+  try {
+    const form = new FormData();
+    form.append(field, new Blob([Buffer.from(bytes)], { type: String(type || "application/octet-stream") }), String(name || "file"));
+    const response = await appSession().fetch(`${ORIGIN}${path}`, { method: "POST", body: form, headers: { Origin: ORIGIN, Accept: "application/json" } });
+    const data = await response.json().catch(() => null);
+    return response.ok ? { ok: true, data } : { ok: false, error: data?.error ?? `HTTP ${response.status}` };
+  } catch (error) {
+    debug("upload form failed", error?.message);
+    return { ok: false, error: "offline" };
+  }
+}
+
+module.exports = { apiStream, uploadForm, appSession, configureUserAgent, siteFetch, signedOut, apiRequest, getSession, signIn, signOut };

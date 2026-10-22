@@ -20,6 +20,11 @@ import { Dashboard } from "./hub/Dashboard";
 import { Clients } from "./hub/Clients";
 import { Invoices } from "./hub/Invoices";
 import { DealOverlay } from "./hub/DealPanel";
+import { Courses, CoursePage } from "./learn/Courses";
+import { ImprovePage } from "./learn/Improve";
+import { Resources } from "./learn/Resources";
+import { ScriptWriter } from "./learn/ScriptWriter";
+import { Activity } from "./activity/Activity";
 
 interface Screen {
   icon: LucideIcon;
@@ -83,6 +88,9 @@ function useScreen(location: Location): Screen {
     }
     case "dms-home":
     case "profile":
+    case "course":
+    case "resource":
+    case "script-writer":
       return { icon: MessageCircle, title: "Direct messages", phase: PHASES.community, what: "" };
     case "hub": {
       const pages = {
@@ -136,6 +144,16 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
       const page = view.page === "dashboard" ? <Dashboard /> : view.page === "clients" ? <Clients /> : view.page === "invoices" ? <Invoices /> : <Deals board={view.board} smart={view.smart} />;
       return <>{page}{view.dealId ? <DealOverlay key={view.dealId} id={view.dealId} /> : null}</>;
     }
+    case "learn":
+      return view.page === "improve" ? <ImprovePage /> : view.page === "resources" ? <Resources /> : <Courses />;
+    case "course":
+      return <CoursePage key={view.id} id={view.id} lessonId={view.lessonId} />;
+    case "resource":
+      return <Resources pageId={view.id} />;
+    case "script-writer":
+      return <ScriptWriter chatId={view.chatId} />;
+    case "activity":
+      return location.ws === "ch" ? <Activity filter={view.filter} /> : null;
     case "dms-home":
       return <div className="empty-state"><div><MessageCircle style={{ width: 34, height: 34, color: "var(--ink-4)" }} /><p style={{ marginTop: 8 }}>Pick a conversation, or start a new one with ⌘N.</p></div></div>;
     default:

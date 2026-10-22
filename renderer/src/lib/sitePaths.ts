@@ -18,6 +18,12 @@ export function sitePathFor({ ws, view }: Location): string {
       return ws === "hs" ? "/hey-social/dm" : "/messages";
     case "events":
       return "/events";
+    case "course":
+      return `/courses/${view.id}${view.lessonId ? `?lesson=${view.lessonId}` : ""}`;
+    case "resource":
+      return `/resources?page=${view.id}`;
+    case "script-writer":
+      return "/library/resources/ai-script-writer";
     case "profile":
       return `/members?member=${encodeURIComponent(view.id)}`;
     case "feed":

@@ -33,6 +33,17 @@ export interface NativeMenuItem {
   submenu?: NativeMenuItem[];
 }
 
+export interface DesktopSettings {
+  notifications: boolean;
+  pausedUntil: number;
+  sound: "honey" | "system" | "none";
+  badge: "mentions" | "off";
+  keepRunning: boolean;
+  theme: "system" | "light" | "dark";
+  zoom: number;
+  openAtLogin: boolean;
+}
+
 export type UploadResult =
   | { ok: true; url: string; pathname: string; contentType: string; size: number }
   | { ok: false; error: string };
@@ -54,6 +65,8 @@ export interface Bridge {
     onChanged: Listen<null>;
   };
   api<T>(request: { method?: string; path: string; body?: unknown }): Promise<ApiResult<T>>;
+  /** A streamed POST (newline-delimited JSON); each line arrives in onLine. Resolves with the status when done. */
+  apiStream(request: { path: string; body: unknown }, onLine: (line: string) => void): Promise<{ ok: boolean; status: number; error?: string; data?: unknown }>;
   realtime: {
     watch(name: string): void;
     unwatch(name: string): void;
@@ -61,6 +74,7 @@ export interface Bridge {
     onState: Listen<string>;
   };
   menu: { popup(items: NativeMenuItem[]): Promise<string | null> };
+  settings: { get(): Promise<DesktopSettings>; set(patch: Partial<DesktopSettings>): Promise<DesktopSettings> };
   app: {
     setViewing(id: string | null): void;
     setHeySocialAccess(value: boolean): void;
@@ -68,6 +82,7 @@ export interface Bridge {
     openSite(path: string): void;
     refreshBadge(): void;
     installUpdate(): void;
+    checkUpdates(): void;
     onCommand: Listen<string>;
     onNavigate: Listen<string>;
     onUpdateReady: Listen<string>;
@@ -79,9 +94,10 @@ export interface Bridge {
     quickLook(url: string, name: string): Promise<{ ok: boolean }>;
     save(url: string, name: string): Promise<{ ok: boolean }>;
     addToCalendar(ics: string, name: string): Promise<{ ok: boolean }>;
+    uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer }): Promise<{ ok: boolean; error?: string; data?: unknown }>;
   };
   window: {
-    popout(target: { kind: "dm" | "channel" | "thread" | "deal"; id: string; title?: string }): void;
+    popout(target: { kind: "dm" | "channel" | "thread" | "deal" | "lesson" | "settings"; id: string; title?: string }): void;
     onFullscreen: Listen<boolean>;
     onFocus: Listen<boolean>;
   };

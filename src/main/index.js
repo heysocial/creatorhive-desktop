@@ -20,6 +20,7 @@ const {
   Notification,
   Tray,
   dialog,
+  session,
   ipcMain,
   nativeImage,
   nativeTheme,
@@ -59,7 +60,10 @@ app.setAppUserModelId(IS_PREVIEW ? "com.creatorhive.desktop.preview" : "com.crea
 /* ---------- Settings ---------- */
 
 const settingsPath = () => path.join(app.getPath("userData"), "settings.json");
-const DEFAULT_SETTINGS = { notifications: !IS_PREVIEW, pausedUntil: 0, bounds: null };
+const DEFAULT_SETTINGS = {
+  notifications: !IS_PREVIEW, pausedUntil: 0, bounds: null,
+  sound: "honey", badge: "mentions", keepRunning: true, theme: "system", zoom: 1,
+};
 let settings = { ...DEFAULT_SETTINGS };
 
 function loadSettings() {
@@ -79,6 +83,43 @@ function saveSettings() {
 }
 
 const notificationsPaused = () => Date.now() < settings.pausedUntil;
+
+/* Theme and text size apply to every window at once. */
+function applyLook() {
+  nativeTheme.themeSource = ["light", "dark"].includes(settings.theme) ? settings.theme : "system";
+  const zoom = Math.min(1.4, Math.max(0.8, Number(settings.zoom) || 1));
+  for (const win of BrowserWindow.getAllWindows()) win.webContents.setZoomFactor(zoom);
+}
+
+/** What the Settings window shows and changes. */
+function publicSettings() {
+  return {
+    notifications: settings.notifications,
+    pausedUntil: settings.pausedUntil,
+    sound: settings.sound,
+    badge: settings.badge,
+    keepRunning: settings.keepRunning,
+    theme: settings.theme,
+    zoom: settings.zoom,
+    openAtLogin: app.getLoginItemSettings().openAtLogin,
+  };
+}
+
+function changeSettings(patch = {}) {
+  if (typeof patch.notifications === "boolean") settings.notifications = patch.notifications;
+  if (Number.isFinite(patch.pausedUntil)) settings.pausedUntil = patch.pausedUntil;
+  if (["honey", "system", "none"].includes(patch.sound)) settings.sound = patch.sound;
+  if (["mentions", "off"].includes(patch.badge)) settings.badge = patch.badge;
+  if (typeof patch.keepRunning === "boolean") settings.keepRunning = patch.keepRunning;
+  if (["system", "light", "dark"].includes(patch.theme)) settings.theme = patch.theme;
+  if (Number.isFinite(patch.zoom)) settings.zoom = patch.zoom;
+  if (typeof patch.openAtLogin === "boolean") app.setLoginItemSettings({ openAtLogin: patch.openAtLogin });
+  saveSettings();
+  applyLook();
+  setUnread(unread);
+  updateTray();
+  return publicSettings();
+}
 
 /* ---------- Window ---------- */
 
@@ -174,6 +215,11 @@ function createWindow({ show }) {
   // Closing hides: the app keeps running in the menu bar and keeps notifying.
   mainWindow.on("close", (event) => {
     if (quitting) return;
+    if (!settings.keepRunning) {
+      quitting = true;
+      app.quit();
+      return;
+    }
     event.preventDefault();
     if (mainWindow.isFullScreen()) {
       mainWindow.once("leave-full-screen", () => mainWindow.hide());
@@ -191,6 +237,7 @@ function createWindow({ show }) {
   mainWindow.on("resized", rememberBounds);
   mainWindow.on("moved", rememberBounds);
 
+  contents.on("did-finish-load", applyLook);
   if (RENDERER_URL) void mainWindow.loadURL(RENDERER_URL);
   else void mainWindow.loadFile(path.join(__dirname, "..", "..", "renderer", "dist", "index.html"));
 }
@@ -209,6 +256,7 @@ function openPath(target) {
 }
 
 function command(id) {
+  if (id === "settings") return void popouts.open({ kind: "settings", id: "main" }, windowChrome);
   showWindow();
   send("command", id);
 }
@@ -284,6 +332,13 @@ function configureIpc() {
     viewing = typeof id === "string" && id ? id : null;
   });
   ipcMain.on("window:popout", (_event, target) => popouts.open(target, windowChrome));
+  ipcMain.handle("settings:get", () => publicSettings());
+  ipcMain.handle("settings:set", (_event, patch) => changeSettings(patch));
+  ipcMain.on("app:checkUpdates", () => void checkForUpdates(true));
+  ipcMain.handle("api:stream", (event, request) => site.apiStream(request, (line) => {
+    if (!event.sender.isDestroyed()) event.sender.send("api:stream:line", { id: request?.id, line });
+  }));
+  ipcMain.handle("files:uploadForm", (_event, request) => site.uploadForm(request));
   ipcMain.on("app:openMain", (_event, target) => {
     showWindow();
     if (typeof target === "string") send("navigate:view", target);
@@ -351,6 +406,9 @@ function showNotification(payload) {
   const notification = new Notification({
     title: payload.title,
     body: typeof payload.body === "string" ? payload.body : "",
+    silent: settings.sound === "none",
+    // The honey chime is macOS's Glass until the app ships its own sound.
+    sound: settings.sound === "honey" ? "Glass" : undefined,
   });
   notification.on("click", () => openPath(payload.url));
   notification.on("close", () => {
@@ -396,7 +454,7 @@ async function refreshBadge() {
 
 function setUnread(count) {
   unread = Math.max(0, Math.floor(count));
-  app.setBadgeCount(unread);
+  app.setBadgeCount(settings.badge === "off" ? 0 : unread);
   updateTray();
 }
 
@@ -628,7 +686,12 @@ app.on("window-all-closed", () => {});
 
 app.whenReady().then(async () => {
   loadSettings();
+  applyLook();
   media.handle();
+  // YouTube refuses to play embeds without a Referer; the lesson player sends the site's.
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ["https://www.youtube.com/*", "https://www.youtube-nocookie.com/*"] }, (details, callback) => {
+    callback({ requestHeaders: { ...details.requestHeaders, Referer: `${ORIGIN}/` } });
+  });
   site.configureUserAgent();
   configureIpc();
   configureRealtime();

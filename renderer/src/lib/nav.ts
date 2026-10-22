@@ -21,7 +21,10 @@ export type View =
   | { kind: "dms-home" }
   | { kind: "hub"; page: "deals" | "dashboard" | "clients" | "invoices"; dealId?: string; board?: "outreach" | "campaigns" | "payment"; smart?: "due" | "awaiting" | "retainers" }
   | { kind: "learn"; page: "courses" | "improve" | "resources" }
-  | { kind: "activity" }
+  | { kind: "activity"; filter?: "all" | "mentions" | "comments" | "reactions" | "hub" | "announcements" }
+  | { kind: "course"; id: string; lessonId?: string }
+  | { kind: "resource"; id: string }
+  | { kind: "script-writer"; chatId?: string }
   | { kind: "threads" }
   | { kind: "mentions" }
   | { kind: "saved" };

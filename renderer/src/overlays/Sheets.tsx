@@ -20,7 +20,7 @@ function Sheet({ title, onClose, children, width }: { title: string; onClose: ()
 }
 
 /* Only shortcuts that work today. Each phase adds its own. */
-const SHORTCUTS: [string, [string, string][]][] = [
+export const SHORTCUTS: [string, [string, string][]][] = [
   ["Getting around", [
     ["Search and jump anywhere", "⌘K"],
     ["Back", "⌘["],
@@ -43,6 +43,12 @@ const SHORTCUTS: [string, [string, string][]][] = [
     ["Link", "⇧⌘U"],
     ["Edit (in the message's menu)", "Right-click"],
     ["Close a thread or panel", "Esc"],
+  ]],
+  ["Learn", [
+    ["Play or pause the lesson video", "Space"],
+    ["Back or forward 10 seconds", "J / L"],
+    ["Mark the lesson complete", "⌘↩"],
+    ["Note this moment in the lesson", "⇧⌘N"],
   ]],
   ["Creator Hub", [
     ["New deal", "⌥⌘N"],
