@@ -221,5 +221,8 @@ img { -webkit-user-drag: none; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line-strong); }
 .google { background: var(--card); }
 .google[disabled] { opacity: .6; }
-.soon { font-size: 11px; font-weight: 700; color: var(--ink-3); background: var(--card-3); border-radius: 5px; padding: 1px 6px; }
+.google-waiting { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; padding: 0 4px 0 12px;
+  border-radius: 10px; background: var(--card-3); font-size: 13px; color: var(--ink-2); }
+.google-waiting button { font: inherit; font-weight: 600; color: var(--ink); background: none; border: 0; padding: 6px 10px; border-radius: 7px; cursor: default; }
+.google-waiting button:hover { background: var(--card); }
 .palette-input input:focus-visible, .search-trigger input:focus-visible { box-shadow: none; }

@@ -41,6 +41,11 @@ export interface Bridge {
   auth: {
     session(): Promise<{ user: SessionUser | null; offline?: boolean }>;
     signIn(email: string, password: string): Promise<{ ok: boolean; user?: SessionUser; error?: string }>;
+    /** Whether the server offers Continue with Google. */
+    googleAvailable(): Promise<boolean>;
+    /** Signs in through the Mac's browser; resolves when it comes back (or is cancelled). */
+    google(): Promise<{ ok: boolean; user?: SessionUser; error?: string }>;
+    cancelGoogle(): void;
     signOut(): Promise<{ ok: boolean }>;
     onChanged: Listen<null>;
   };

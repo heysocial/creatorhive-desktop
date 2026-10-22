@@ -1,10 +1,13 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ch, type SessionUser } from "../lib/bridge";
 
 const MESSAGES: Record<string, string> = {
   credentials: "That email and password don't match. Check them and try again.",
   offline: "Can't reach CreatorHive. Check your internet connection and try again.",
   missing: "Enter your email and password.",
+  "no-account": "No CreatorHive account uses that Google email. Sign in with your email and password.",
+  failed: "Google sign-in didn't finish. Try again.",
+  timeout: "Google sign-in took too long. Try again.",
 };
 
 function GoogleMark() {
@@ -23,6 +26,24 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: SessionUser) => void
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Hidden until the server offers it, so the app can ship before the website does.
+  const [googleOffered, setGoogleOffered] = useState(false);
+  const [googleWaiting, setGoogleWaiting] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void ch.auth.googleAvailable().then((offered) => live && setGoogleOffered(offered));
+    return () => { live = false; };
+  }, []);
+
+  async function continueWithGoogle() {
+    setGoogleWaiting(true);
+    setError(null);
+    const result = await ch.auth.google();
+    setGoogleWaiting(false);
+    if (result.ok && result.user) onSignedIn(result.user);
+    else if (result.error !== "cancelled") setError(MESSAGES[result.error ?? ""] ?? MESSAGES.failed);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -43,11 +64,21 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: SessionUser) => void
         <p>Sign in to your community, Hub and messages.</p>
 
         <form className="signin-form" onSubmit={submit}>
-          {/* Turned on once the server supports Google sign-in. */}
-          <button type="button" className="btn lg google" disabled title="Coming soon">
-            <GoogleMark />Continue with Google<span className="soon">Soon</span>
-          </button>
-          <div className="divider">or sign in with email</div>
+          {googleOffered ? (
+            <>
+              {googleWaiting ? (
+                <div className="google-waiting" role="status">
+                  <span>Finish signing in with Google in your browser…</span>
+                  <button type="button" onClick={() => ch.auth.cancelGoogle()}>Cancel</button>
+                </div>
+              ) : (
+                <button type="button" className="btn lg google" onClick={continueWithGoogle} disabled={busy}>
+                  <GoogleMark />Continue with Google
+                </button>
+              )}
+              <div className="divider">or sign in with email</div>
+            </>
+          ) : null}
 
           <label htmlFor="email">Email</label>
           <input id="email" className="field" type="email" autoComplete="username" autoFocus value={email}
@@ -59,7 +90,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: SessionUser) => void
           <input id="password" className="field" type="password" autoComplete="current-password" value={password}
             onChange={(event) => setPassword(event.target.value)} />
           {error ? <div className="signin-error" role="alert">{error}</div> : null}
-          <button type="submit" className="btn honey lg" style={{ marginTop: 10 }} disabled={busy}>
+          <button type="submit" className="btn honey lg" style={{ marginTop: 10 }} disabled={busy || googleWaiting}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>

@@ -29,6 +29,7 @@ const {
 const { autoUpdater } = require("electron-updater");
 const { ORIGIN, IS_PREVIEW, RENDERER_URL, debug } = require("./config");
 const site = require("./site");
+const google = require("./google");
 const realtime = require("./realtime");
 
 /* Must match DESKTOP_NOTIFICATION_EVENT in the web app's lib/realtime/channels.ts. */
@@ -242,6 +243,14 @@ function configureIpc() {
     if (result.ok) setSignedIn(true);
     return result;
   });
+  ipcMain.handle("auth:googleAvailable", () => google.googleAvailable());
+  ipcMain.handle("auth:google", async () => {
+    // Back to the app the moment the browser returns, before the exchange finishes.
+    const result = await google.signInWithGoogle({ onReturn: showWindow });
+    if (result.ok) setSignedIn(true);
+    return result;
+  });
+  ipcMain.on("auth:googleCancel", () => google.cancelGoogle());
   ipcMain.handle("auth:signOut", async () => {
     await site.signOut();
     setSignedIn(false);
