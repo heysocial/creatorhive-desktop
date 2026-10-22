@@ -26,11 +26,11 @@ const MAX_BYTES = 200 * 1024 * 1024;
 
 const safeName = (name) => String(name || "file").replace(/[/\\:\0]/g, "-").slice(0, 120) || "file";
 
-async function clientToken(route, pathname) {
+async function clientToken(route, pathname, clientPayload = null) {
   const response = await siteFetch(route, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "blob.generate-client-token", payload: { pathname, clientPayload: null, multipart: false } }),
+    body: JSON.stringify({ type: "blob.generate-client-token", payload: { pathname, clientPayload, multipart: false } }),
   });
   if (signedOut(response)) throw Object.assign(new Error("signed out"), { code: "signed_out" });
   const body = await response.json().catch(() => null);
@@ -38,7 +38,7 @@ async function clientToken(route, pathname) {
   return body.clientToken;
 }
 
-async function upload({ route, name, type, bytes } = {}) {
+async function upload({ route, name, type, bytes, access, clientPayload } = {}) {
   if (typeof route !== "string" || !UPLOAD_ROUTES.some((r) => r.test(route))) return { ok: false, error: "bad_route" };
   if (!(bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes))) return { ok: false, error: "no_file" };
   const buffer = Buffer.from(bytes instanceof ArrayBuffer ? bytes : bytes.buffer);
@@ -47,9 +47,10 @@ async function upload({ route, name, type, bytes } = {}) {
     const { put } = await import("@vercel/blob/client");
     // Some routes want a folder in the name (briefs/<dealId>/…); never anything that climbs out.
     const pathname = String(name || "file").split("/").filter((part) => part && part !== "." && part !== "..").map(safeName).join("/") || "file";
-    const token = await clientToken(route, pathname);
+    const token = await clientToken(route, pathname, typeof clientPayload === "string" ? clientPayload : null);
     const blob = await put(pathname, buffer, {
-      access: "public",
+      // Resources files live in a private store; everything else is public, as on the website.
+      access: access === "private" ? "private" : "public",
       token,
       contentType: typeof type === "string" && type ? type : undefined,
     });

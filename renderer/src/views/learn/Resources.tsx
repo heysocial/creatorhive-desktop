@@ -1,5 +1,6 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, ExternalLink, File as FileIcon, FileText, Link2, Plus, Search, Trash2 } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { PageEditor, knowVersion, savePage } from "./PageEditor";
+import { ChevronDown, ChevronRight, File as FileIcon, FileText, Link2, Plus, Search, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
@@ -16,7 +17,7 @@ import { nav } from "../../lib/nav";
 
 interface PageNode { id: string; parentId: string | null; title: string; icon: string | null; sortKey: string; updatedAt: string }
 interface ResFile { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; url: string }
-interface PageDetail extends PageNode { doc: TipNode; version: number; breadcrumbs: { id: string; title: string; icon: string | null }[]; files: Record<string, ResFile>; coverFileId: string | null }
+interface PageDetail extends PageNode { doc: TipNode; version: number; archivedAt: string | null; breadcrumbs: { id: string; title: string; icon: string | null }[]; files: Record<string, ResFile>; coverFileId: string | null }
 interface TipNode { type: string; text?: string; attrs?: Record<string, unknown>; marks?: { type: string; attrs?: Record<string, unknown> }[]; content?: TipNode[] }
 interface WikiPage { id: string; parentId: string | null; title: string; icon: string | null; isPublished: boolean; starred: boolean }
 
@@ -98,13 +99,17 @@ function Doc({ node, files }: { node: TipNode; files: Record<string, ResFile> })
 /* ---------- Your pages ---------- */
 
 function MyPage({ id }: { id: string }) {
+  const [userId, setUserId] = useState<string | null>(null);
+  const [reloads, setReloads] = useState(0);
+  useEffect(() => { void ch.auth.session().then(({ user }) => setUserId(user?.id ?? null)); }, []);
   const page = useQuery({ queryKey: ["resources", "page", id], queryFn: async () => (await api<{ page: PageDetail }>(`/api/resources/pages/${id}`)).page });
   const [title, setTitle] = useState<string | null>(null);
   const p = page.data;
   async function saveTitle() {
     if (!p || title === null || title === p.title) return setTitle(null);
     try {
-      await api(`/api/resources/pages/${id}`, { method: "PATCH", body: { baseVersion: p.version, title } });
+      knowVersion(id, p.version);
+      await savePage(id, { title });
     } catch (e) {
       if (e instanceof ApiError && e.code === "VERSION_CONFLICT") window.alert("This page changed somewhere else. It's been reloaded.");
     }
@@ -123,9 +128,12 @@ function MyPage({ id }: { id: string }) {
           <span className="doc-icon">{p.icon ?? "📄"}</span>
           <input value={title ?? (p.title || "")} placeholder="Untitled" onChange={(e) => setTitle(e.target.value)} onBlur={() => void saveTitle()} onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()} />
         </div>
-        <div className="row faint" style={{ fontSize: 12.5 }}>Edited {shortTime(p.updatedAt)} · Only you
-          <button className="link" style={{ marginLeft: "auto" }} onClick={() => ch.app.openSite(`/resources?page=${id}`)}><ExternalLink />Edit on the website</button></div>
-        <div className="rich doc-body selectable"><Doc node={p.doc} files={p.files} /></div>
+        <div className="row faint" style={{ fontSize: 12.5 }}>Edited {shortTime(p.updatedAt)} · Only you</div>
+        {userId && !p.archivedAt ? (
+          <PageEditor key={`${id}:${reloads}`} pageId={id} userId={userId} initialDoc={p.doc as never} version={p.version} files={p.files}
+            onSaved={() => void queryClient.invalidateQueries({ queryKey: ["resources", "pages"] })}
+            onConflict={() => { window.alert("This page changed somewhere else. It's been reloaded."); void page.refetch().then(() => setReloads((n) => n + 1)); }} />
+        ) : <div className="rich doc-body selectable"><Doc node={p.doc} files={p.files} /></div>}
       </div>
     </div>
   );

@@ -1437,3 +1437,47 @@ html.is-popout body { background: var(--card); }
 .av .presence { box-shadow: 0 0 0 1.5px var(--card); }
 .sidebar .av .presence { box-shadow: 0 0 0 1.5px var(--card-2); }
 .av .presence.offline, .sidebar .av .presence.offline { background: var(--card); box-shadow: inset 0 0 0 1.5px var(--ink-4), 0 0 0 1.5px var(--card-2); }
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.timeline li { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: baseline; padding: 6px 0; position: relative; font-size: 13px; }
+.timeline li > i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-4); margin-top: 4px; position: relative; z-index: 1; }
+.timeline li:not(:last-child)::before { content: ""; position: absolute; left: 4px; top: 18px; bottom: -8px; width: 1px; background: var(--line-strong); }
+.timeline li.tl-paid > i { background: var(--green); }
+.timeline li.tl-moved > i { background: var(--blue); }
+.timeline li > span:nth-child(2) { display: flex; flex-direction: column; }
+.timeline li > span:last-child { font-size: 12px; white-space: nowrap; }
+.invoice-editor { width: 760px; }
+.save-state { margin-left: 12px; font-size: 12.5px; font-weight: 500; color: var(--ink-3); display: inline-flex; align-items: center; gap: 4px; }
+.save-state svg { width: 13px; height: 13px; }
+.save-state.saved { color: #1F8A45; } .save-state.error { color: #D93636; }
+.ie-body { gap: 8px; }
+.ie-body .section-label { margin-top: 10px; }
+.ie-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.ie-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.ie-lines { display: flex; flex-direction: column; gap: 6px; }
+.ie-line { display: grid; grid-template-columns: 1fr 70px 110px 100px 28px; gap: 8px; align-items: center; }
+.ie-line.head { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.ie-line .r { text-align: right; font-weight: 600; }
+.ie-line .field { height: 32px; }
+.ie-totals { display: grid; grid-template-columns: 1fr 140px; gap: 6px 12px; align-items: center; max-width: 320px; margin-left: auto; font-size: 13.5px; }
+.ie-totals b { text-align: right; } .ie-totals .field { height: 30px; text-align: right; }
+.ie-totals .t { font-size: 16px; font-weight: 800; }
+.page-editor { display: flex; flex-direction: column; gap: 10px; }
+.pe-toolbar { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 2px; padding: 6px; border-radius: 10px; background: var(--card); box-shadow: 0 0 0 .5px var(--line-strong), 0 2px 8px rgba(0,0,0,.05); flex-wrap: wrap; }
+.pe-toolbar button { width: 30px; height: 28px; border-radius: 6px; display: grid; place-items: center; color: var(--ink-3); }
+.pe-toolbar button svg { width: 16px; height: 16px; }
+.pe-toolbar button:hover { background: var(--sel); color: var(--ink); }
+.pe-toolbar button.on { background: var(--honey-soft); color: var(--honey-ink); }
+.pe-toolbar > i { width: 1px; height: 18px; background: var(--line-strong); margin: 0 4px; }
+.pe-toolbar .save-state { margin-left: auto; padding-right: 6px; }
+.doc-body.editable { outline: none; min-height: 300px; user-select: text; cursor: text; }
+.doc-body.editable p.is-empty::before, .doc-body.editable .is-empty::before { content: attr(data-placeholder); color: var(--ink-4); float: left; height: 0; pointer-events: none; }
+.doc-body ul[data-type="taskList"] { list-style: none; padding-left: 4px; }
+.doc-body ul[data-type="taskList"] li { display: flex; gap: 8px; align-items: flex-start; }
+.doc-body ul[data-type="taskList"] li > label { margin-top: 3px; }
+.doc-body ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--ink-4); text-decoration: line-through; }
+.doc-body [data-type="details"] { background: var(--card-2); border-radius: 10px; padding: 8px 12px; margin: 6px 0; display: flex; gap: 6px; }
+.doc-body [data-type="details"] > button { width: 20px; height: 20px; flex: none; }
+.doc-body [data-type="details"] > button::before { content: "▸"; }
+.doc-body [data-type="details"].is-open > button::before { content: "▾"; }
+.doc-body hr { border: 0; border-top: 1px solid var(--line-strong); margin: 14px 0; }
+.doc-body .ProseMirror-selectednode { outline: 2px solid var(--blue); border-radius: 8px; }

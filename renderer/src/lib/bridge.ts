@@ -100,7 +100,7 @@ export interface Bridge {
     onNavigateView: Listen<string>;
   };
   files: {
-    upload(request: { route: string; name: string; type: string; bytes: ArrayBuffer }): Promise<UploadResult>;
+    upload(request: { route: string; name: string; type: string; bytes: ArrayBuffer; access?: "public" | "private"; clientPayload?: string }): Promise<UploadResult>;
     quickLook(url: string, name: string): Promise<{ ok: boolean }>;
     save(url: string, name: string): Promise<{ ok: boolean }>;
     addToCalendar(ics: string, name: string): Promise<{ ok: boolean }>;

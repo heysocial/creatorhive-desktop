@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, ExternalLink, FileText, Loader2, Send } from "lucide-react";
+import { Download, FileText, Loader2, Pencil, Send } from "lucide-react";
+import { InvoiceEditor } from "./InvoiceEditor";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
@@ -144,10 +145,12 @@ function SendDialog({ invoice, deal, onClose }: { invoice: Invoice; deal: Deal |
 
 function InvoiceActions({ invoice, deal }: { invoice: Invoice; deal: Deal | undefined }) {
   const [sending, setSending] = useState(false);
+  const [editing, setEditing] = useState(false);
   return (
     <>
       <button className="btn" onClick={() => void ch.files.save(`/api/hub/deals/${invoice.dealId}/invoice/pdf?download=1`, `Invoice-${invoice.number}.pdf`)}><Download />Download PDF</button>
-      <button className="btn" onClick={() => ch.app.openSite(`/hub/deals/${invoice.dealId}?invoice=1`)}><ExternalLink />Edit on the website</button>
+      <button className="btn" onClick={() => setEditing(true)}><Pencil />Edit</button>
+      {editing ? <InvoiceEditor invoice={invoice} onClose={() => setEditing(false)} /> : null}
       <button className="btn honey" onClick={() => setSending(true)}><Send />{invoice.sendCount ? "Resend" : "Send invoice"}</button>
       {sending ? <SendDialog invoice={invoice} deal={deal} onClose={() => setSending(false)} /> : null}
     </>

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ChevronDown, Clock, ExternalLink, FileText, Link2, Loader2, Mail, MoreHorizontal, Paperclip, Phone, Trash2, X } from "lucide-react";
+import { ArrowRight, ChevronDown, Clock, FileText, Link2, Loader2, Mail, MoreHorizontal, Paperclip, Phone, Trash2, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, queryClient } from "../../lib/api";
 import {
   BOARD_LABELS, DEAL_STATUSES, STATUS_LABELS, boardOf, daysBetween, dealTypeLabel, deleteDeal, isDraftPending, localToday, monDay,
-  monDayYear, nextStatus, useDeal, useDeals, type Deal, type DealStatus,
+  monDayYear, nextStatus, useDeal, useDeals, withTz, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { bytes, money } from "../../lib/format";
 import { nav } from "../../lib/nav";
@@ -128,6 +128,35 @@ export function PromptHost() {
         <div className="modal-foot"><button className="btn" onClick={() => done(null)}>Cancel</button><button className="btn honey" onClick={() => done(state.value.trim() || null)}>Add</button></div>
       </div>
     </div>
+  );
+}
+
+interface TimelineEntry { id: string; kind: "added" | "moved" | "paid"; label: string; note: string | null; dateLabel: string }
+
+/** The deal's stage history, as the website's deal page shows it. */
+function History({ deal }: { deal: Deal }) {
+  const { data, isError } = useQuery({
+    queryKey: ["hub", "history", deal.id, deal.status, deal.paid_at],
+    retry: false,
+    queryFn: () => api<{ timeline: { entries: TimelineEntry[]; complete: boolean } }>(withTz(`/api/hub/deals/${deal.id}/history`)),
+  });
+  if (isError) return null;
+  return (
+    <section className="dp-sec">
+      <span className="section-label">History</span>
+      {!data ? <p className="faint dp-empty">Loading…</p> : (
+        <ol className="timeline">
+          {[...data.timeline.entries].reverse().map((e) => (
+            <li key={e.id} className={`tl-${e.kind}`}>
+              <i />
+              <span><b>{e.label}</b>{e.note ? <small className="faint">{e.note}</small> : null}</span>
+              <span className="faint">{e.dateLabel}</span>
+            </li>
+          ))}
+          {!data.timeline.complete ? <li className="tl-start"><i /><span className="faint">Stage history starts here — earlier changes weren't recorded.</span></li> : null}
+        </ol>
+      )}
+    </section>
   );
 }
 
@@ -267,8 +296,8 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
             {deal.industry_ref ? <Row label="Industry">{deal.industry_ref.label}</Row> : null}
             {!deal.industry_ref || !deal.deal_sources.length || !deal.draft_due_at ? <button className="link add" onClick={() => openDealForm({ deal })}>+ Add details</button> : null}
           </section>
+          <History deal={deal} />
           <section className="dp-sec">
-            <button className="link" onClick={() => ch.app.openSite(`/hub/deals/${deal.id}`)}><ExternalLink />Stage history on the website</button>
             <button className="link danger" onClick={() => void more()}><Trash2 />More actions…</button>
           </section>
         </div>
