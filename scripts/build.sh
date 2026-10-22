@@ -24,6 +24,7 @@ npm run build:renderer
 if [[ "${1:-}" == "release" ]]; then
   export GH_TOKEN="${GH_TOKEN:-$(gh auth token)}"
   npx electron-builder --config "$CONFIG" --mac --universal --publish always
+  scripts/merge-release.sh "v$(node -p "require('./package.json').version")"
 else
   npx electron-builder --config "$CONFIG" --mac --universal --publish never
 fi
