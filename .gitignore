@@ -3,3 +3,4 @@ dist/
 .env
 *.p8
 *.p12
+renderer/dist/

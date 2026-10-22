@@ -1,0 +1,17 @@
+# "CreatorHive Preview": the team's build of 2.0 while it's being made. It installs
+# beside the real app (its own bundle id and data) and updates from prereleases
+# only, which the real app and the download page never see.
+extends: ./electron-builder.yml
+appId: com.creatorhive.desktop.preview
+productName: CreatorHive Preview
+mac:
+  icon: build/icon-preview.icns
+  artifactName: CreatorHive-Preview-${version}-mac.${ext}
+dmg:
+  title: CreatorHive Preview
+  artifactName: CreatorHive-Preview-${version}-mac.${ext}
+publish:
+  provider: github
+  owner: heysocial
+  repo: creatorhive-desktop
+  releaseType: prerelease

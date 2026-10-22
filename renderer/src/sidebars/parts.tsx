@@ -1,0 +1,102 @@
+import { useState, type ReactNode } from "react";
+import { ChevronDown, SquarePen } from "lucide-react";
+import { ch, type NativeMenuItem } from "../lib/bridge";
+import { nav, useNav, type View } from "../lib/nav";
+import { sitePathFor } from "../lib/sitePaths";
+
+const sameView = (a: View, b: View) => JSON.stringify(a) === JSON.stringify(b);
+
+export function SidebarHead({ title, action, actionLabel = "New message" }: { title: string; action?: () => void; actionLabel?: string }) {
+  return (
+    <div className="sb-head">
+      {title}
+      {action ? (
+        <button className="compose" aria-label={actionLabel} title={actionLabel} onClick={action}><SquarePen /></button>
+      ) : null}
+    </div>
+  );
+}
+
+/** One row. Knows whether it's the open view, and offers a native right-click menu. */
+export function SidebarItem({ icon, label, view, count, quietCount, meta, unread = false, extraMenu = [], onMenu }: {
+  icon: ReactNode;
+  label: string;
+  view: View;
+  count?: number;
+  quietCount?: number;
+  meta?: string;
+  unread?: boolean;
+  extraMenu?: NativeMenuItem[];
+  onMenu?: (id: string) => void;
+}) {
+  const { current } = useNav();
+  const on = sameView(current.view, view);
+
+  async function contextMenu() {
+    const location = { ...current, view };
+    const choice = await ch.menu.popup([
+      { id: "open", label: "Open" },
+      ...extraMenu,
+      { type: "separator" },
+      { id: "copy-link", label: "Copy link" },
+      { id: "website", label: "Open on the website" },
+    ]);
+    const path = sitePathFor(location);
+    if (choice === "open") nav.open(view);
+    else if (choice === "copy-link") void navigator.clipboard.writeText(`${(await ch.info()).origin}${path}`);
+    else if (choice === "website") ch.app.openSite(path);
+    else if (choice) onMenu?.(choice);
+  }
+
+  return (
+    <button
+      className={`sb-item ${on ? "on" : unread || count ? "unread" : ""}`}
+      data-nav={JSON.stringify(view)}
+      data-unread={unread || count ? "1" : undefined}
+      aria-current={on ? "page" : undefined}
+      onClick={() => nav.open(view)}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        void contextMenu();
+      }}
+    >
+      {icon}
+      <span className="label">{label}</span>
+      {count ? <span className="cnt">{count > 99 ? "99+" : count}</span> : null}
+      {!count && quietCount ? <span className="cnt quiet">{quietCount}</span> : null}
+      {!count && !quietCount && meta ? <span className="meta">{meta}</span> : null}
+    </button>
+  );
+}
+
+/** A collapsible group ("Channels", "Direct messages"), remembered across launches. */
+export function SidebarSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  const key = `ch.sb.closed.${id}`;
+  const [closed, setClosed] = useState(() => {
+    try {
+      return localStorage.getItem(key) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    setClosed(!closed);
+    try {
+      localStorage.setItem(key, closed ? "0" : "1");
+    } catch {
+      // Not remembered; fine.
+    }
+  };
+  return (
+    <>
+      <button className={`sb-sec ${closed ? "closed" : ""}`} onClick={toggle} aria-expanded={!closed}>
+        <ChevronDown />{title}
+      </button>
+      {closed ? null : children}
+    </>
+  );
+}
+
+export function Skeleton({ rows = 4 }: { rows?: number }) {
+  return <>{Array.from({ length: rows }, (_, i) => <div key={i} className="sb-skel" style={{ width: `${70 - i * 9}%` }} />)}</>;
+}

@@ -1,23 +1,37 @@
 {
   "name": "creatorhive-desktop",
   "productName": "CreatorHive",
-  "version": "1.0.1",
+  "version": "2.0.0-preview.1",
   "description": "CreatorHive for Mac",
   "author": "Hey Social Inc.",
   "license": "UNLICENSED",
   "private": true,
-  "main": "src/main.js",
+  "main": "src/main/index.js",
   "scripts": {
-    "start": "electron .",
+    "start": "npm run build:renderer && electron .",
+    "dev": "scripts/dev.sh",
+    "build:renderer": "vite build --config renderer/vite.config.mts",
+    "typecheck": "tsc -p renderer/tsconfig.json --noEmit",
     "dist": "scripts/build.sh",
-    "release": "scripts/build.sh release"
+    "release": "scripts/build.sh release",
+    "preview:dist": "scripts/build.sh preview",
+    "preview:release": "scripts/build.sh preview release"
   },
   "dependencies": {
     "ably": "2.29.0",
     "electron-updater": "6.8.10"
   },
   "devDependencies": {
+    "@tanstack/react-query": "5.104.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
     "electron": "44.6.0",
-    "electron-builder": "26.17.0"
+    "electron-builder": "26.17.0",
+    "lucide-react": "1.52.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.3"
   }
 }
