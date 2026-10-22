@@ -3,7 +3,9 @@ import {
   Bell, Calendar, ChartNoAxesCombined, Contact, FileText, GraduationCap, Hash, House, Kanban, Keyboard, Lock,
   LogOut, MessageCircle, Receipt, Search, Trophy, User, Users, ArrowLeftRight,
 } from "lucide-react";
-import { useChannels, useConversations, useHeySocialAccess, useSearch } from "../lib/api";
+import { api, useChannels, useConversations, useHeySocialAccess, useSearch } from "../lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { placeView, type Place } from "../lib/heysocial";
 import { commands } from "../lib/commands";
 import { openPath } from "../lib/links";
 import { nav, type Location } from "../lib/nav";
@@ -64,7 +66,15 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
   const hsChannels = useChannels("heysocial", heySocial).data ?? [];
   const chDms = useConversations("creatorhive").data ?? [];
   const hsDms = useConversations("heysocial", heySocial).data ?? [];
-  const remote = useSearch(useDebounced(query, 200));
+  const debounced = useDebounced(query, 200);
+  const remote = useSearch(debounced);
+  // In Hey Social Inc., its own message search (the website's /api/hey-social/search).
+  const inHs = heySocial && nav.get().ws === "hs";
+  const hsSearch = useQuery({
+    queryKey: ["hey-social", "search", debounced.trim()],
+    enabled: inHs && debounced.trim().length >= 2,
+    queryFn: () => api<{ messages: { id: string; preview: string; author: { name: string; avatarUrl: string | null }; place: Place & { thread: boolean } }[] }>(`/api/hey-social/search?tab=messages&q=${encodeURIComponent(debounced.trim())}`),
+  });
 
   const rows = useMemo<Row[]>(() => {
     const ranked = <T,>(items: T[], text: (item: T) => string, limit: number) =>
@@ -118,8 +128,14 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
         .filter((row) => !(row.id.startsWith("search:person:") && dms.some((dm) => dm.title === row.title)))
       : [];
 
-    return [...dms, ...channels, ...screens, ...server, ...actions];
-  }, [q, chChannels, hsChannels, chDms, hsDms, remote.data, heySocial]);
+    const hsMessages: Row[] = q.length >= 2 && inHs ? (hsSearch.data?.messages ?? []).slice(0, 8).map((m) => ({
+      id: `hs:${m.id}`, group: "Messages in Hey Social Inc.", title: m.preview, sub: `${m.author.name} · ${m.place.label}`,
+      glyph: <Avatar name={m.author.name} src={m.author.avatarUrl} size={28} radius="8px" />,
+      run: () => nav.open(placeView(m.place), "home", "hs"),
+    })) : [];
+
+    return [...dms, ...channels, ...screens, ...hsMessages, ...server, ...actions];
+  }, [q, chChannels, hsChannels, chDms, hsDms, remote.data, heySocial, hsSearch.data, inHs]);
 
   useEffect(() => setSelected(0), [q]);
   useEffect(() => {
