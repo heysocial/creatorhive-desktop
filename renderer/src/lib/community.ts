@@ -1,6 +1,5 @@
 import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
 import { api, ApiError, queryClient } from "./api";
-import { ch } from "./bridge";
 
 /* Phase 2 data: messages, the feed, events, the leaderboard and members. Shapes as the website's routes send them. */
 
@@ -37,6 +36,7 @@ export interface VideoAttachment {
   thumbnailUrl: string | null;
   embedUrl: string;
   status: "processing" | "ready" | "error";
+  processingPct?: number | null;
   hlsUrl?: string | null;
   unavailable?: boolean;
 }
@@ -240,38 +240,85 @@ export async function sendMessage(where: Thread, input: {
   }
 }
 
-/** Videos go to Mux, then the message is made from them (the website's /videos/upload-url and /videos/finalize). */
-export async function sendVideos(where: Thread, input: { files: File[]; body: string; mentions?: { id: string; start: number; end: number }[]; parentMessageId?: string | null }) {
-  const tokens: string[] = [];
-  for (const file of input.files) {
-    const start = await api<{ uploadUrl: string; uploadToken: string }>(`${base(where)}/videos/upload-url`, {
-      method: "POST",
-      body: { fileName: file.name, mimeType: file.type || "video/mp4", sizeBytes: file.size, providers: ["mux"] },
-    });
-    const put = await ch.files.putVideo(start.uploadUrl, file.type || "video/mp4", await file.arrayBuffer());
-    if (!put.ok) throw new Error("upload failed");
-    tokens.push(start.uploadToken);
+/* ---------- Videos (Mux), the way the website sends them ----------
+   1. upload-url hands out a Mux upload URL for this one file;
+   2. the bytes go straight to Mux (it allows any origin), with progress;
+   3. finalize turns the uploaded videos into a message;
+   4. Mux processes it; the message shows "Processing" until it can play. */
+
+export interface UploadedVideo { uploadToken: string; uid: string; name: string }
+
+export async function uploadVideo(where: Thread, file: File, onProgress: (pct: number) => void): Promise<UploadedVideo> {
+  const start = await api<{ uploadUrl: string; uploadToken: string; uid: string }>(`${base(where)}/videos/upload-url`, {
+    method: "POST",
+    body: { fileName: file.name, mimeType: file.type || "video/mp4", sizeBytes: file.size, providers: ["mux"] },
+  });
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", start.uploadUrl);
+    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload ${xhr.status}`)));
+    xhr.onerror = () => reject(new Error("upload failed"));
+    xhr.send(file);
+  });
+  onProgress(100);
+  return { uploadToken: start.uploadToken, uid: start.uid, name: file.name };
+}
+
+/** Mux takes a moment to see the bytes: finalize answers 409 until then. */
+async function finalize(where: Thread, body: Record<string, unknown>) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    try {
+      return await api<{ message: Message }>(`${base(where)}/videos/finalize`, { method: "POST", body });
+    } catch (error) {
+      if (!(error instanceof ApiError && error.status === 409 && !String(error.code).includes("ALREADY"))) throw error;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
   }
-  // Mux takes a moment to see the bytes: finalize answers 409 until then.
-  const finalize = async (body: Record<string, unknown>) => {
-    for (let attempt = 0; attempt < 30; attempt++) {
-      try {
-        return await api<{ message: Message }>(`${base(where)}/videos/finalize`, { method: "POST", body });
-      } catch (error) {
-        if (!(error instanceof ApiError && error.status === 409 && !String(error.code).includes("ALREADY"))) throw error;
-        await new Promise((r) => setTimeout(r, 1500));
-      }
-    }
-    throw new Error("video never finished uploading");
-  };
+  throw new Error("video never finished uploading");
+}
+
+export async function sendVideos(where: Thread, input: { videos: UploadedVideo[]; body: string; mentions?: { id: string; start: number; end: number }[]; parentMessageId?: string | null }) {
+  const sent: Message[] = [];
   if (where.kind === "channel") {
-    const { message } = await finalize({ uploadTokens: tokens, body: input.body, mentions: input.mentions ?? [], clientMutationId: crypto.randomUUID(), parentMessageId: input.parentMessageId ?? null });
-    addMessage(where, message);
+    const { message } = await finalize(where, { uploadTokens: input.videos.map((v) => v.uploadToken), body: input.body, mentions: input.mentions ?? [], clientMutationId: crypto.randomUUID(), parentMessageId: input.parentMessageId ?? null });
+    sent.push(message);
   } else {
-    for (const [i, token] of tokens.entries()) {
-      const { message } = await finalize({ uploadToken: token, body: i === 0 ? input.body : "", clientMutationId: crypto.randomUUID() });
-      addMessage(where, message);
+    for (const [i, video] of input.videos.entries()) {
+      const { message } = await finalize(where, { uploadToken: video.uploadToken, body: i === 0 ? input.body : "", clientMutationId: crypto.randomUUID() });
+      sent.push(message);
     }
+  }
+  for (const message of sent) {
+    addMessage(where, message);
+    watchVideos(where, message);
+  }
+}
+
+const watching = new Set<string>();
+
+/** Until Mux has made a video playable, ask its status every few seconds and update the message. */
+export function watchVideos(where: Thread, message: Message) {
+  const videos = message.videoAttachments?.length ? message.videoAttachments : message.videoAttachment ? [message.videoAttachment] : [];
+  for (const video of videos) {
+    if (video.status !== "processing" || watching.has(video.uid)) continue;
+    watching.add(video.uid);
+    let tries = 0;
+    const tick = async () => {
+      tries += 1;
+      try {
+        const { videoAttachment } = await api<{ videoAttachment: VideoAttachment }>(`${base(where)}/videos/${video.uid}`);
+        patchMessage(where, message.id, (m) => ({
+          ...m,
+          videoAttachment: m.videoAttachment?.uid === video.uid ? videoAttachment : m.videoAttachment,
+          videoAttachments: m.videoAttachments?.map((v) => (v.uid === video.uid ? videoAttachment : v)),
+        }));
+        if (videoAttachment.status !== "processing") { watching.delete(video.uid); return; }
+      } catch { /* try again */ }
+      if (tries < 120) setTimeout(() => void tick(), 4000);
+    };
+    setTimeout(() => void tick(), 3000);
   }
 }
 

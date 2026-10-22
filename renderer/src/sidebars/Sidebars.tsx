@@ -29,7 +29,7 @@ function dmAvatar(conversation: Conversation, size = 20) {
   return (
     <Avatar name={conversation.displayName} src={conversation.isGroup ? null : other?.avatarUrl}
       seed={conversation.isGroup ? conversation.id : other?.id} size={size} radius="6px"
-      online={!conversation.isGroup && other?.presence === "online"} />
+      presence={conversation.isGroup ? undefined : other?.presence} />
   );
 }
 

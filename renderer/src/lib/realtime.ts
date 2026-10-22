@@ -3,6 +3,7 @@ import { ch } from "./bridge";
 import { api, queryClient } from "./api";
 
 const FEED_CHANNEL = "feed:community";
+const PRESENCE_CHANNEL = "presence:global";
 
 /*
   The server signals on the member's own channel whenever something they'd see
@@ -19,6 +20,9 @@ export function useRealtimeRefresh(userId: string) {
       timers.set(id, setTimeout(() => void queryClient.invalidateQueries({ queryKey: key }), delay));
     };
     ch.realtime.watch(FEED_CHANNEL);
+    ch.realtime.watch(PRESENCE_CHANNEL);
+    // Presence also changes with time (online → away → offline) without a signal.
+    const decay = setInterval(() => soon(["conversations"]), 120_000);
     const off = ch.realtime.onMessage((message) => {
       if (message.channel === `user:${userId}`) {
         switch (message.name) {
@@ -38,6 +42,11 @@ export function useRealtimeRefresh(userId: string) {
         }
         return;
       }
+      if (message.channel === PRESENCE_CHANNEL) {
+        soon(["conversations"], 1500);
+        soon(["members"], 5000);
+        return;
+      }
       if (message.channel === FEED_CHANNEL) {
         const postId = (message.data as { postId?: string } | null)?.postId;
         if (message.name === "post:comments" && postId) soon(["comments", postId], 200);
@@ -48,8 +57,10 @@ export function useRealtimeRefresh(userId: string) {
     });
     return () => {
       timers.forEach(clearTimeout);
+      clearInterval(decay);
       off();
       ch.realtime.unwatch(FEED_CHANNEL);
+      ch.realtime.unwatch(PRESENCE_CHANNEL);
     };
   }, [userId]);
 }

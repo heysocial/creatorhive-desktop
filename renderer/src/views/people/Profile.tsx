@@ -54,7 +54,7 @@ export function ProfilePage({ id, user }: { id: string; user: SessionUser }) {
         </div>
         <div className="profile-cols">
           <div className="profile-main">
-            {p ? <Avatar name={p.name} src={p.avatarUrl} seed={p.id} size={128} online={p.presence === "online"} /> : <div className="av-skel" />}
+            {p ? <Avatar name={p.name} src={p.avatarUrl} seed={p.id} size={128} presence={p.presence} /> : <div className="av-skel" />}
             <h1>{p?.name ?? " "} <Badge badge={p?.badge} /></h1>
             {p?.headline ? <p className="headline">{p.headline}</p> : null}
             <div className="facts">

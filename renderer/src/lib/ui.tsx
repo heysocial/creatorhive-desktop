@@ -11,14 +11,17 @@ function colorFor(seed: string) {
 export const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).map((word) => word[0]).join("").slice(0, 2).toUpperCase() || "?";
 
-export function Avatar({ name, src, size = 32, radius = "50%", online = false, seed }: {
+/** Slack's presence dot: green online, yellow away (or do not disturb), grey offline. */
+export function Avatar({ name, src, size = 32, radius = "50%", online = false, presence, seed }: {
   name: string;
   src?: string | null;
   size?: number;
   radius?: string;
   online?: boolean;
+  presence?: string | null;
   seed?: string;
 }) {
+  const state = presence === "online" || online ? "online" : presence === "away" || presence === "dnd" ? "away" : presence ? "offline" : null;
   const style: CSSProperties = {
     width: size,
     height: size,
@@ -29,7 +32,7 @@ export function Avatar({ name, src, size = 32, radius = "50%", online = false, s
   return (
     <span className="av" style={style} aria-hidden>
       {src ? <img src={src} alt="" loading="lazy" /> : initials(name)}
-      {online ? <span className="presence" /> : null}
+      {state ? <span className={`presence ${state}`} /> : null}
     </span>
   );
 }

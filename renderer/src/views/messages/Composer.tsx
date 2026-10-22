@@ -1,11 +1,13 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Mic, AtSign, Bold, Code, File as FileIcon, Italic, Link2, List, ListOrdered, Loader2, Plus, SendHorizontal, Smile, Strikethrough, X } from "lucide-react";
+import { Play, Mic, AtSign, Bold, Code, File as FileIcon, Italic, Link2, List, ListOrdered, Loader2, Plus, SendHorizontal, Smile, Strikethrough, X } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import { convertEmoticon } from "../../lib/emoji";
 import { bytes } from "../../lib/format";
 import { Avatar } from "../../lib/ui";
 import { EmojiPicker } from "./EmojiPicker";
 import { VoiceRecorder } from "./VoiceRecorder";
+import { pastedFiles } from "../../lib/paste";
+import type { UploadedVideo } from "../../lib/community";
 
 export interface MentionCandidate {
   id: string;
@@ -26,8 +28,8 @@ export interface ComposerSend {
   body: string;
   mentions: { id: string; start: number; end: number }[];
   files: SentFile[];
-  /** Videos that go to Mux when the message is sent (not Hey Social Inc., where videos are files). */
-  videos: File[];
+  /** Videos already uploaded to Mux, made into the message on send (not Hey Social Inc., where videos are files). */
+  videos: UploadedVideo[];
 }
 
 export interface ComposerHandle {
@@ -40,8 +42,34 @@ interface Staged {
   key: string;
   file: File;
   preview: string | null;
-  state: "uploading" | "done" | "failed" | "video";
+  state: "uploading" | "done" | "failed";
   sent?: SentFile;
+  video?: { progress: number; uploaded?: UploadedVideo; duration?: number };
+}
+
+/** A frame from the video and its length, made on the Mac for the chip before anything uploads. */
+function videoThumbnail(file: File): Promise<{ url: string | null; duration: number }> {
+  return new Promise((resolve) => {
+    const src = URL.createObjectURL(file);
+    const el = document.createElement("video");
+    el.muted = true;
+    el.preload = "metadata";
+    el.src = src;
+    const done = (url: string | null) => { URL.revokeObjectURL(src); resolve({ url, duration: Number.isFinite(el.duration) ? el.duration : 0 }); };
+    el.onloadeddata = () => { el.currentTime = Math.min(1, (el.duration || 2) / 2); };
+    el.onseeked = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const scale = 160 / Math.max(el.videoWidth, el.videoHeight, 1);
+        canvas.width = Math.round(el.videoWidth * scale);
+        canvas.height = Math.round(el.videoHeight * scale);
+        canvas.getContext("2d")!.drawImage(el, 0, 0, canvas.width, canvas.height);
+        done(canvas.toDataURL("image/jpeg", 0.8));
+      } catch { done(null); }
+    };
+    el.onerror = () => done(null);
+    setTimeout(() => done(null), 8000);
+  });
 }
 
 const DRAFTS = new Map<string, string>();
@@ -83,9 +111,11 @@ export const Composer = forwardRef<ComposerHandle, {
   autoFocus?: boolean;
   /** Hey Social Inc.: where files go (a channel id, or dm-<conversation id>). */
   uploadFolder?: string;
+  /** Videos (CreatorHive channels and DMs): uploads one to Mux, reporting progress. */
+  uploadVideo?: (file: File, onProgress: (pct: number) => void) => Promise<UploadedVideo>;
   /** Voice memos: the route, the thread (if any), and what to do with the sent message. */
   voice?: { path: string; parentMessageId?: string | null; onSent: (message: unknown) => void };
-}>(function Composer({ draftKey, placeholder, onSend, searchPeople, onTyping, compact = false, allowFiles = true, autoFocus = true, uploadFolder, voice }, ref) {
+}>(function Composer({ draftKey, placeholder, onSend, searchPeople, onTyping, compact = false, allowFiles = true, autoFocus = true, uploadFolder, voice, uploadVideo }, ref) {
   const [recording, setRecording] = useState(false);
   const [value, setValue] = useState(() => DRAFTS.get(draftKey) ?? "");
   const [picked, setPicked] = useState<MentionCandidate[]>([]);
@@ -133,17 +163,26 @@ export const Composer = forwardRef<ComposerHandle, {
       key: `${file.name}-${file.size}-${Math.random()}`,
       file,
       preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
-      state: !uploadFolder && file.type.startsWith("video/") ? "video" : "uploading",
+      state: "uploading",
+      video: uploadVideo && file.type.startsWith("video/") ? { progress: 0 } : undefined,
     }));
     if (next.length === 0) return;
     setStaged((current) => [...current, ...next]);
-    for (const item of next.filter((n) => n.state === "uploading")) {
+    // Videos: a thumbnail right away, then straight to Mux with progress, as Slack does.
+    for (const item of next.filter((n) => n.video)) {
+      const update = (change: (s: Staged) => Staged) => setStaged((current) => current.map((s) => (s.key === item.key ? change(s) : s)));
+      void videoThumbnail(item.file).then(({ url, duration }) => update((s) => ({ ...s, preview: url, video: { ...s.video!, duration } })));
+      void uploadVideo!(item.file, (pct) => update((s) => ({ ...s, video: { ...s.video!, progress: pct } })))
+        .then((uploaded) => update((s) => ({ ...s, state: "done", video: { ...s.video!, progress: 100, uploaded } })))
+        .catch(() => update((s) => ({ ...s, state: "failed" })));
+    }
+    for (const item of next.filter((n) => !n.video)) {
       void uploadFile(item.file, uploadFolder).then((sent) => {
         setStaged((current) => current.map((s) => (s.key === item.key ? { ...s, state: sent ? "done" : "failed", sent: sent ?? undefined } : s)));
       });
     }
     input.current?.focus();
-  }, [allowFiles, staged.length, uploadFolder]);
+  }, [allowFiles, staged.length, uploadFolder, uploadVideo]);
 
   const insert = useCallback((text: string) => {
     const el = input.current;
@@ -232,7 +271,7 @@ export const Composer = forwardRef<ComposerHandle, {
 
   const uploading = staged.some((s) => s.state === "uploading");
   const ready = staged.filter((s) => s.state === "done" && s.sent).map((s) => s.sent!);
-  const videos = staged.filter((s) => s.state === "video").map((s) => s.file);
+  const videos = staged.filter((s) => s.state === "done" && s.video?.uploaded).map((s) => s.video!.uploaded!);
   const canSend = !sending && !uploading && (value.trim().length > 0 || ready.length > 0 || videos.length > 0);
 
   async function send() {
@@ -291,10 +330,14 @@ export const Composer = forwardRef<ComposerHandle, {
       {staged.length > 0 ? (
         <div className="staged">
           {staged.map((s) => (
-            <div key={s.key} className={`chip-file ${s.state}`}>
-              {s.preview ? <img src={s.preview} alt="" /> : <span className="ficon"><FileIcon /></span>}
-              <span className="fmeta"><b>{s.file.name}</b><span>{s.state === "failed" ? "Couldn't upload" : s.state === "uploading" ? "Uploading…" : s.state === "video" ? `Video · ${bytes(s.file.size)}` : bytes(s.file.size)}</span></span>
-              {s.state === "uploading" ? <Loader2 className="spin" /> : null}
+            <div key={s.key} className={`chip-file ${s.state} ${s.video ? "is-video" : ""}`}>
+              {s.video ? (
+                <span className="vthumb">{s.preview ? <img src={s.preview} alt="" /> : null}<Play /></span>
+              ) : s.preview ? <img src={s.preview} alt="" /> : <span className={`ficon ${/pdf/i.test(s.file.type) ? "" : "generic"}`}><FileIcon /></span>}
+              <span className="fmeta"><b>{s.file.name}</b><span>{s.state === "failed" ? "Couldn't upload" : s.video ? (s.state === "done" ? `Ready to send${s.video.duration ? ` · ${Math.floor(s.video.duration / 60)}:${String(Math.round(s.video.duration % 60)).padStart(2, "0")}` : ""}` : `Uploading ${s.video.progress}%`) : s.state === "uploading" ? "Uploading…" : bytes(s.file.size)}</span>
+                {s.video && s.state === "uploading" ? <i className="vprog"><i style={{ width: `${s.video.progress}%` }} /></i> : null}
+              </span>
+              {s.state === "uploading" && !s.video ? <Loader2 className="spin" /> : null}
               <button aria-label="Remove" onClick={() => setStaged((c) => c.filter((x) => x.key !== s.key))}><X /></button>
             </div>
           ))}
@@ -327,11 +370,8 @@ export const Composer = forwardRef<ComposerHandle, {
         }}
         onKeyDown={onKeyDown}
         onPaste={(event) => {
-          const files = [...event.clipboardData.files];
-          if (files.length > 0 && allowFiles) {
-            event.preventDefault();
-            addFiles(files);
-          }
+          if (!allowFiles) return;
+          void pastedFiles(event).then((files) => files && addFiles(files));
         }}
       />
       {mention && candidates.length > 0 ? (

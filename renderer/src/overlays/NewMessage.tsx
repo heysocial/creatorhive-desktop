@@ -72,7 +72,7 @@ export function NewMessage({ onClose, workspace }: { onClose: () => void; worksp
           {results.map((m, i) => (
             <button key={m.id} className={`palette-row ${i === index ? "sel" : ""}`} onMouseEnter={() => setIndex(i)}
               onClick={() => { setPicked([...picked, m]); setQ(""); input.current?.focus(); }}>
-              <Avatar name={m.name} src={m.avatarUrl} seed={m.id} size={28} radius="8px" online={m.presence === "online"} />
+              <Avatar name={m.name} src={m.avatarUrl} seed={m.id} size={28} radius="8px" presence={m.presence} />
               <span className="t">{m.name}</span><Badge badge={m.badge} role={m.role} />
               <span className="hint">{m.headline ?? ""}</span>
             </button>

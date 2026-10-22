@@ -24,6 +24,7 @@ const {
   desktopCapturer,
   globalShortcut,
   ShareMenu,
+  clipboard,
   systemPreferences,
   ipcMain,
   nativeImage,
@@ -361,6 +362,11 @@ function configureIpc() {
   });
   files.configure(ipcMain);
   ipcMain.handle("app:isLocked", () => locked);
+  // A picture on the clipboard (a screenshot, an image copied from Preview or a browser), as PNG bytes.
+  ipcMain.handle("clipboard:image", () => {
+    const image = clipboard.readImage();
+    return image.isEmpty() ? null : image.toPNG();
+  });
   ipcMain.handle("app:unlock", async () => {
     if (!locked) return true;
     try {

@@ -13,6 +13,8 @@ import { nav } from "../../lib/nav";
 import { Avatar } from "../../lib/ui";
 import { Badge } from "../messages/MessageRow";
 import { TodayPanel } from "./Today";
+import { Modal, Monogram } from "../hub/parts";
+import { pastedFiles } from "../../lib/paste";
 
 /* ---------- Paid this month ---------- */
 
@@ -81,51 +83,47 @@ function PaidCard() {
 }
 
 function Breakdown({ glance, pct, onClose }: { glance: Glance; pct: number; onClose: () => void }) {
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [onClose]);
   const row = (deal: GlanceDeal, detail: string, late = false) => (
     <li key={deal.id}>
-      <span><b>{deal.brandName}</b><small className={late ? "late-text" : ""}>{detail}</small></span>
-      <span className="amt">{money(deal.amountUsd)}</span>
-      {late ? <button className="btn" onClick={() => { onClose(); nav.open({ kind: "hub", page: "deals", dealId: deal.id }, "hub", "ch"); }}>Follow up</button> : null}
+      <button className="glance-row" onClick={() => { onClose(); nav.open({ kind: "hub", page: "deals", dealId: deal.id }, "hub", "ch"); }}>
+        <Monogram name={deal.brandName} size={28} />
+        <span className="gr-text"><b>{deal.brandName}</b><small className={late ? "late-text" : ""}>{detail}</small></span>
+        <span className="amt">{money(deal.amountUsd)}</span>
+        {late ? <span className="btn">Follow up</span> : null}
+      </button>
     </li>
   );
   return (
-    <div className="scrim side" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <aside className="side-sheet" role="dialog" aria-label={`${glance.month.label} payments`}>
-        <div className="sheet-head">{glance.month.label}<button className="iconbtn" onClick={onClose} aria-label="Close"><X /></button></div>
-        <div className="side-body scroll">
+    <Modal title={`${glance.month.label} payments`} onClose={onClose} width={520}>
+      <div className="glance">
+        <section>
+          <div className="section-label">Paid so far</div>
+          <div className="big">{money(glance.paid.amountUsd)}</div>
+          <div className="muted">{pct}% of {money(glance.expectedThisMonthUsd)} expected this month</div>
+          <div className="paid-bar" style={{ marginTop: 8 }}><i className="paid" style={{ width: `${pct}%` }} /></div>
+        </section>
+        <section>
+          <div className="section-label">Pending this month · {money(glance.pendingThisMonth.amountUsd)}</div>
+          {glance.pendingThisMonth.deals.length ? <ul className="glance-list">{glance.pendingThisMonth.deals.map((d) => row(d, `${d.statusLabel} · due ${shortDate(d.paymentExpectedAt!)}`))}</ul> : <p className="muted">Nothing else expected this month.</p>}
+        </section>
+        <section>
+          <div className="section-label">Future months · {money(glance.futureMonths.amountUsd)}</div>
+          {glance.futureMonths.months.length ? <ul className="glance-list">{glance.futureMonths.months.flatMap((m) => m.deals.map((d) => row(d, `${m.label} · due ${shortDate(d.paymentExpectedAt!)}${d.paymentTermsDays ? ` · net-${d.paymentTermsDays}` : ""}`)))}</ul> : <p className="muted">Nothing expected after this month yet.</p>}
+        </section>
+        {glance.pastDue.deals.length ? (
           <section>
-            <div className="section-label">Paid so far</div>
-            <div className="big">{money(glance.paid.amountUsd)}</div>
-            <div className="muted">{pct}% of {money(glance.expectedThisMonthUsd)} expected this month</div>
+            <div className="section-label late-text">Past due · {money(glance.pastDue.amountUsd)}</div>
+            <ul className="glance-list">{glance.pastDue.deals.map((d) => row(d, `${d.daysOverdue} ${d.daysOverdue === 1 ? "day" : "days"} overdue · was due ${shortDate(d.paymentExpectedAt!)}`, true))}</ul>
           </section>
+        ) : null}
+        {glance.noDate.deals.length ? (
           <section>
-            <div className="section-label">Pending this month · {money(glance.pendingThisMonth.amountUsd)}</div>
-            {glance.pendingThisMonth.deals.length ? <ul className="glance-list">{glance.pendingThisMonth.deals.map((d) => row(d, `${d.statusLabel} · due ${shortDate(d.paymentExpectedAt!)}`))}</ul> : <p className="muted">Nothing else expected this month.</p>}
+            <div className="section-label">No payment date yet · {money(glance.noDate.amountUsd)}</div>
+            <ul className="glance-list">{glance.noDate.deals.map((d) => row(d, d.statusLabel))}</ul>
           </section>
-          <section>
-            <div className="section-label">Future months · {money(glance.futureMonths.amountUsd)}</div>
-            {glance.futureMonths.months.length ? <ul className="glance-list">{glance.futureMonths.months.flatMap((m) => m.deals.map((d) => row(d, `${m.label} · due ${shortDate(d.paymentExpectedAt!)}${d.paymentTermsDays ? ` · net-${d.paymentTermsDays}` : ""}`)))}</ul> : <p className="muted">Nothing expected after this month yet.</p>}
-          </section>
-          {glance.pastDue.deals.length ? (
-            <section>
-              <div className="section-label late-text">Past due · {money(glance.pastDue.amountUsd)}</div>
-              <ul className="glance-list">{glance.pastDue.deals.map((d) => row(d, `${d.daysOverdue} ${d.daysOverdue === 1 ? "day" : "days"} overdue · was due ${shortDate(d.paymentExpectedAt!)}`, true))}</ul>
-            </section>
-          ) : null}
-          {glance.noDate.deals.length ? (
-            <section>
-              <div className="section-label">No payment date yet · {money(glance.noDate.amountUsd)}</div>
-              <ul className="glance-list">{glance.noDate.deals.map((d) => row(d, d.statusLabel))}</ul>
-            </section>
-          ) : null}
-        </div>
-      </aside>
-    </div>
+        ) : null}
+      </div>
+    </Modal>
   );
 }
 
@@ -207,7 +205,7 @@ function NewPost({ user, open, draft, onOpen, onClose }: { user: SessionUser; op
       </div>
       <textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} placeholder="Share a win, ask a question, or say hi…" rows={4}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void post(); } if (e.key === "Escape") onClose(); }}
-        onPaste={(e) => { const files = [...e.clipboardData.files]; if (files.length) { e.preventDefault(); void addImages(files); } }} />
+        onPaste={(e) => { void pastedFiles(e).then((files) => files && addImages(files)); }} />
       {media.length || uploading ? (
         <div className="np-media">
           {media.map((m) => <span key={m.url}><img src={m.preview} alt="" /><button onClick={() => setMedia((all) => all.filter((x) => x.url !== m.url))} aria-label="Remove"><X /></button></span>)}

@@ -103,6 +103,7 @@ export interface Bridge {
     quickLook(url: string, name: string): Promise<{ ok: boolean }>;
     save(url: string, name: string): Promise<{ ok: boolean }>;
     addToCalendar(ics: string, name: string): Promise<{ ok: boolean }>;
+    clipboardImage(): Promise<Uint8Array | null>;
     putVideo(url: string, type: string, bytes: ArrayBuffer): Promise<{ ok: boolean; status?: number; error?: string }>;
     uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer; fields?: Record<string, string> }): Promise<{ ok: boolean; error?: string; data?: unknown }>;
   };

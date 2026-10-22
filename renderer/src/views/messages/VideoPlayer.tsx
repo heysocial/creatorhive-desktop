@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, VideoOff } from "lucide-react";
+import { Loader2, Play, VideoOff } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import type { VideoAttachment } from "../../lib/community";
 
@@ -39,7 +39,13 @@ export function VideoPlayer({ video }: { video: VideoAttachment }) {
     return <div className="video unavailable"><VideoOff />Video unavailable</div>;
   }
   if (video.status === "processing") {
-    return <div className="video unavailable">Processing video…</div>;
+    return (
+      <div className="video unavailable processing">
+        {video.thumbnailUrl ? <img src={video.thumbnailUrl} alt="" style={{ opacity: .5 }} /> : null}
+        <Loader2 className="spin" style={{ position: "relative" }} />
+        <span style={{ position: "relative" }}>Processing{video.processingPct ? ` ${Math.round(video.processingPct)}%` : ""}…</span>
+      </div>
+    );
   }
   if (playing && video.hlsUrl) {
     return <div className="video"><video ref={element} controls playsInline poster={video.thumbnailUrl ?? undefined} /></div>;

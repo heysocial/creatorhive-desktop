@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarClock, Check, ChevronDown, ChevronRight, Columns3, Download, Layers, Package, Plus, Scale, Sparkles, Table2, Wallet } from "lucide-react";
+import { ArrowUpRight, CalendarClock, ChartNoAxesColumn, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Columns3, Download, Layers, Plus, Sparkles, Table2, Users } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ch } from "../../lib/bridge";
+import { api } from "../../lib/api";
 import {
-  BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, active, allDeals, contracted, dealTypeLabel, isDraftPending, localToday,
-  monDay, monDayYear, potential, total, useCash, useDeals, type Board, type Deal, type DealStatus,
+  BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, active, allDeals, contracted, daysBetween, dealTypeLabel, isDraftPending, localToday,
+  monDay, monDayYear, potential, total, useCash, useDeals, type Board, type Cash, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { money, plural } from "../../lib/format";
 import { nav } from "../../lib/nav";
-import { Avatar } from "../../lib/ui";
 import { Modal, Monogram, StageButton, StagePill, moveDeal } from "./parts";
 import { openDealForm } from "./DealForm";
 import { openExport } from "./Export";
@@ -15,16 +17,28 @@ export type SmartView = "due" | "awaiting" | "retainers";
 
 /* ---------- The overview band ---------- */
 
-function TierBar() {
-  const cash = useCash().data;
-  if (!cash) return <div className="tier-bar skel" />;
+const TIER_LABELS: Record<string, string> = { newbie: "New Bee", hustle: "Hustle Bee", pro: "Pro Bee" };
+const tierName = (tier: Cash["tier"]) => (tier.currentTier === "queen" ? tier.topTierName : TIER_LABELS[tier.currentTier] ?? tier.currentTier);
+
+/* The website's DesktopTierProgress: three segments New → Hustle → Pro → top tier. */
+function TierProgress({ cash }: { cash: Cash }) {
   const { tier } = cash;
+  const config = { newbie: [0, 1000, 0], hustle: [1000, 3000, 1], pro: [3000, 10000, 2] }[tier.currentTier as "newbie"];
+  const interval = config ? Math.max(0, Math.min(100, ((tier.collectedThisMonth - config[0]) / (config[1] - config[0])) * 100)) : 100;
+  const visual = config ? ((config[2] + interval / 100) / 3) * 100 : 100;
+  const reached = ["newbie", "hustle", "pro", "queen"].indexOf(tier.currentTier);
+  const markers = [["New Bee", "$0"], ["Hustle Bee", "$1K"], ["Pro Bee", "$3K"], [tier.topTierName, "$10K"]];
   return (
-    <div className="tier-bar">
-      <span className="tier-name">🐝 {cash.ladder.find((l) => l.current)?.name ?? tier.currentTier}</span>
-      <span className="tier-track"><i style={{ width: `${Math.min(100, tier.tierProgressPercent)}%` }} /></span>
-      <span className="muted">{tier.nextTier && tier.amountToNextTier ? `${money(tier.amountToNextTier)} to ${tier.nextTier} (${money(cash.ladder.find((l) => l.name === tier.nextTier)?.minimum ?? 0)} this month)` : "Top tier this month"}</span>
-    </div>
+    <section className="tier-progress">
+      <div className="tp-summary">
+        <div><span className="tp-tier"><Sparkles />{tierName(tier)}</span><p><b className="green">{money(tier.collectedThisMonth)}</b> collected this month</p></div>
+        {tier.nextTier
+          ? <div className="tp-next"><b>{money(tier.amountToNextTier ?? 0)}</b><span>to {tier.nextTier}</span><small>{Math.round(interval)}% through this tier</small></div>
+          : <div className="tp-next"><b>Top tier reached</b><small>Keep building the hive</small></div>}
+      </div>
+      <div className="tp-track"><span style={{ width: `${visual}%` }} /><i style={{ left: "33.333%" }} /><i style={{ left: "66.666%" }} /></div>
+      <div className="tp-markers">{markers.map(([label, amount], index) => <div key={label} className={index <= reached ? "reached" : ""}><span>{label}</span><small>{amount}</small></div>)}</div>
+    </section>
   );
 }
 
@@ -47,31 +61,30 @@ export function DealListDialog({ title, deals, onClose }: { title: string; deals
   );
 }
 
-function Tiles({ deals }: { deals: Deal[] }) {
+function Overview({ deals }: { deals: Deal[] }) {
   const cash = useCash().data;
   const [open, setOpen] = useState<null | "contracted" | "potential">(null);
   const inPlay = contracted(deals);
   const pot = potential(deals);
-  const open_ = active(deals);
+  const live = active(deals);
   const collected = cash?.tier.collectedThisMonth ?? 0;
   const delta = cash ? collected - cash.activity.previous_month_collected_usd : 0;
   return (
-    <div className="tiles">
-      <div className="tile split">
-        <button onClick={() => setOpen("contracted")}>
-          <span className="tl"><Wallet />Contracted</span><b>{money(total(inPlay))}</b><small>Money in Play · {plural(inPlay.length, "deal")}</small>
-        </button>
-        <button onClick={() => setOpen("potential")}>
-          <span className="tl"><Sparkles />Potential</span><b>{money(total(pot))}</b><small>{plural(pot.length, "deal")} in Outreach</small>
-        </button>
+    <div className="card hub-overview">
+      {cash ? <TierProgress cash={cash} /> : <div className="tier-progress skel" />}
+      <div className="hub-metrics">
+        <div className="metric money-in-play">
+          <span className="ml"><Clock3 />Money in Play</span>
+          <div className="mip">
+            <button onClick={() => setOpen("contracted")}><small>Contracted</small><b>{money(total(inPlay))}</b><span>{plural(inPlay.length, "deal")}<ChevronRight /></span></button>
+            <button onClick={() => setOpen("potential")}><small>Potential</small><b className="muted-num">{money(total(pot))}</b><span>{plural(pot.length, "deal")}<ChevronRight /></span></button>
+          </div>
+        </div>
+        <div className="metric"><span className="ml"><Check />Collected</span><b>{money(collected)}</b><small>{cash ? `${delta >= 0 ? "+" : "−"}${money(Math.abs(delta))} vs last month` : " "}</small>
+          {cash && cash.by_person.length > 1 ? <small>{cash.by_person.map((p) => `${p.initials} ${money(p.collected_usd)}`).join(" · ")}</small> : null}</div>
+        <div className="metric"><span className="ml"><Layers />Active deals</span><b>{live.length}</b><small>across 3 sections</small></div>
+        <div className="metric"><span className="ml"><ChartNoAxesColumn />Avg Deal Size</span><b>{money(live.length ? Math.round(total(live) / live.length) : 0)}</b><small>across active deals</small></div>
       </div>
-      <div className="tile">
-        <span className="tl"><CalendarClock />Collected</span><b>{money(collected)}</b>
-        <small>{cash ? `${delta >= 0 ? "+" : "−"}${money(Math.abs(delta))} vs last month` : " "}</small>
-        {cash && cash.by_person.length > 1 ? <small>{cash.by_person.map((p) => `${p.initials} ${money(p.collected_usd)}`).join(" · ")}</small> : null}
-      </div>
-      <div className="tile"><span className="tl"><Layers />Active deals</span><b>{open_.length}</b><small>across 3 sections</small></div>
-      <div className="tile"><span className="tl"><Scale />Avg Deal Size</span><b>{money(open_.length ? Math.round(total(open_) / open_.length) : 0)}</b><small>across active deals</small></div>
       {open === "contracted" ? <DealListDialog title="Contracted" deals={inPlay} onClose={() => setOpen(null)} /> : null}
       {open === "potential" ? <DealListDialog title="Potential" deals={pot} onClose={() => setOpen(null)} /> : null}
     </div>
@@ -101,18 +114,17 @@ function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared:
     <div className={`deal-card ${dragging ? "ghost" : ""}`} onPointerDown={(e) => onDragStart(e, deal)} onClick={() => openDeal(deal.id)}
       role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") openDeal(deal.id); }}>
       <div className="dc-top">
-        <Monogram name={deal.brand_name} size={26} />
         <b className="dc-brand">{deal.brand_name}</b>
-        <span className="dc-amt">{deal.status === "completed" ? <Check /> : null}{money(deal.amount_usd)}</span>
+        <span className="dc-amt">{money(deal.amount_usd)}{deal.status === "completed" ? <CheckCircle2 /> : null}</span>
       </div>
       <div className="dc-tags">
         <span className="tag-s">{dealTypeLabel(deal.deal_type)}</span>
         {payment ? <span className="tag-s">{payment}</span> : null}
         <PeopleChip deal={deal} shared={shared} />
       </div>
-      {deal.deliverables ? <div className="dc-line"><Package />{deal.deliverables}</div> : null}
-      {deal.status === "pending_payment" && deal.payment_expected_at ? <div className={`dc-line ${deal.payment_expected_at < localToday() ? "late-text" : ""}`}><CalendarClock />Payment expected {monDay(deal.payment_expected_at)}</div> : null}
-      {isDraftPending(deal.status) && deal.draft_due_at ? <div className={`dc-line ${deal.draft_due_at <= localToday() ? "late-text" : ""}`}><CalendarClock />{deal.draft_due_at === localToday() ? "Draft due today" : `Draft due ${monDay(deal.draft_due_at)}`}</div> : null}
+      {deal.deliverables ? <div className="dc-line">{deal.deliverables}</div> : null}
+      {deal.status === "pending_payment" && deal.payment_expected_at ? <div className={`dc-due ${deal.payment_expected_at < localToday() ? "late-text" : ""}`}>Payment expected {monDay(deal.payment_expected_at)}</div> : null}
+      {isDraftPending(deal.status) && deal.draft_due_at ? <div className="dc-due">Draft due {monDay(deal.draft_due_at)}</div> : null}
       <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}><StageButton deal={deal} onPick={(s) => void moveDeal(deal, s)} /></div>
     </div>
   );
@@ -159,11 +171,9 @@ function CompletedLane({ deals, shared, onDragStart, draggingId }: { deals: Deal
             <button className="month" onClick={() => setOpen({ ...open, [key]: !isOpen(key) })}>
               {isOpen(key) ? <ChevronDown /> : <ChevronRight />}<b>{label}</b><span className="muted">{plural(list.length, "deal")}</span><span className="m-amt">{money(total(list))}</span>
             </button>
-            {isOpen(key) ? list.map((d) => (
-              <button key={d.id} className={`paid-row ${draggingId === d.id ? "ghost" : ""}`} onPointerDown={(e) => onDragStart(e, d)} onClick={() => openDeal(d.id)}>
-                <Monogram name={d.brand_name} size={20} /><span>{d.brand_name}</span><span className="muted">{monDay(d.paid_at!)}</span><b>{money(d.amount_usd)}</b>
-              </button>
-            )) : null}
+            {isOpen(key) ? (
+              <div className="month-cards">{list.map((d) => <DealCard key={d.id} deal={d} shared={shared} onDragStart={onDragStart} dragging={draggingId === d.id} />)}</div>
+            ) : null}
           </div>
         );
       })}
@@ -241,23 +251,21 @@ function useDragDeals() {
 }
 
 const LANE_LIMIT = 10;
+const BOARD_DOT: Record<Board, string> = { outreach: "#A3A3A3", campaigns: "var(--ink)", payment: "#8FD8A8" };
 
-function Lane({ status, deals, shared, drag, start }: { status: DealStatus; deals: Deal[]; shared: boolean; drag: Drag | null; start: (e: React.PointerEvent, d: Deal) => void }) {
+/** One stage inside a section: its pill, its cards, and where a dragged deal can land. */
+function StageGroup({ status, deals, shared, drag, start }: { status: DealStatus; deals: Deal[]; shared: boolean; drag: Drag | null; start: (e: React.PointerEvent, d: Deal) => void }) {
   const [all, setAll] = useState(false);
   const shown = all ? deals : deals.slice(0, LANE_LIMIT);
   const over = drag?.over === status && drag.deal.status !== status;
   return (
-    <div className={`lane ${over ? "over" : ""}`} data-drop-status={status}>
-      <div className="lane-head">
-        <span className={`dot s-${status}`} /><b>{STATUS_LABELS[status]}</b><span className="muted">{deals.length}</span>
-        <span className="lane-amt">{money(total(status === "completed" ? deals : active(deals)))}</span>
-      </div>
-      {over ? <div className="drop-hint">Drop to move to {STATUS_LABELS[status]}</div> : null}
+    <div className={`stage-group ${over ? "over" : ""}`} data-drop-status={status}>
+      <span className={`stage-pill s-${status}`}>{STATUS_LABELS[status]} <b>{deals.length}</b></span>
+      {over ? <div className="drop-hint">Drop in {STATUS_LABELS[status]}</div> : null}
       {status === "completed" ? <CompletedLane deals={deals} shared={shared} onDragStart={start} draggingId={drag?.deal.id ?? null} /> : (
-        <div className="lane-body">
+        <div className="sg-cards">
           {shown.map((d) => <DealCard key={d.id} deal={d} shared={shared} onDragStart={start} dragging={drag?.deal.id === d.id} />)}
           {deals.length > LANE_LIMIT ? <button className="show-more" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show ${deals.length - LANE_LIMIT} more`}</button> : null}
-          {deals.length === 0 && !over ? <div className="lane-empty">{drag ? `Drop in ${STATUS_LABELS[status]}` : "Nothing here yet"}</div> : null}
           {deals.length === 0 && status === "pitching" && !drag ? <button className="show-more" onClick={() => openDealForm({ status: "pitching" })}>+ Add a pitch</button> : null}
         </div>
       )}
@@ -265,18 +273,31 @@ function Lane({ status, deals, shared, drag, start }: { status: DealStatus; deal
   );
 }
 
-function Kanban({ board, deals, shared }: { board: Board; deals: Deal[]; shared: boolean }) {
+function SectionHead({ board, deals }: { board: Board; deals: Deal[] }) {
+  const live = active(deals);
+  return (
+    <div className="ks-head">
+      <h3><i style={{ background: BOARD_DOT[board] }} />{BOARD_LABELS[board]}</h3>
+      <span className="muted">{BOARD_STATUSES[board].length} stages · {plural(live.length, "active deal")} · {money(total(live))}</span>
+    </div>
+  );
+}
+
+function Kanban({ boards, data, shared }: { boards: Board[]; data: Record<Board, Deal[]>; shared: boolean }) {
   const { drag, start } = useDragDeals();
   return (
     <>
-      <div className="kanban scroll-x">
-        {BOARD_STATUSES[board].map((status) => (
-          <Lane key={status} status={status} deals={deals.filter((d) => d.status === status)} shared={shared} drag={drag} start={start} />
+      <div className={`kanban-sections n${boards.length}`}>
+        {boards.map((board) => (
+          <section key={board} className="k-section">
+            <SectionHead board={board} deals={data[board]} />
+            {BOARD_STATUSES[board].map((status) => <StageGroup key={status} status={status} deals={data[board].filter((d) => d.status === status)} shared={shared} drag={drag} start={start} />)}
+          </section>
         ))}
       </div>
       {drag ? (
         <div className="drag-card" style={{ left: drag.x - 40, top: drag.y - 20, width: drag.width }}>
-          <div className="deal-card lifted"><div className="dc-top"><Monogram name={drag.deal.brand_name} size={26} /><b className="dc-brand">{drag.deal.brand_name}</b><span className="dc-amt">{money(drag.deal.amount_usd)}</span></div>
+          <div className="deal-card lifted"><div className="dc-top"><b className="dc-brand">{drag.deal.brand_name}</b><span className="dc-amt">{money(drag.deal.amount_usd)}</span></div>
             <div className="dc-tags"><span className="tag-s">{dealTypeLabel(drag.deal.deal_type)}</span></div></div>
         </div>
       ) : null}
@@ -286,19 +307,66 @@ function Kanban({ board, deals, shared }: { board: Board; deals: Deal[]; shared:
 
 function DealTable({ deals, shared }: { deals: Deal[]; shared: boolean }) {
   return (
-    <div className="deal-table scroll">
-      <div className="dt-row head"><span>Brand / details</span><span className="r">Amount</span><span>Status</span><span>Payment</span><span>Updated / paid</span></div>
+    <div className="deal-table">
+      <div className="dt-row head"><span>Brand / details</span><span>Amount</span><span>Status</span><span>Payment</span><span>Updated / paid</span></div>
       {deals.map((d) => (
-        <div key={d.id} className="dt-row" onClick={() => openDeal(d.id)} role="button">
-          <span className="dt-brand"><Monogram name={d.brand_name} size={26} /><span><b>{d.brand_name}</b><small>{[dealTypeLabel(d.deal_type), d.deliverables].filter(Boolean).join(" · ")}{shared && d.added_by ? ` · ${d.added_by.initials}` : ""}</small></span></span>
-          <span className="r"><b>{money(d.amount_usd)}</b></span>
+        <div key={d.id} className={`dt-row ${d.status === "completed" ? "done" : ""}`} onClick={() => openDeal(d.id)} role="button">
+          <span className="dt-brand"><b>{d.brand_name}</b><small>{[dealTypeLabel(d.deal_type), d.deliverables].filter(Boolean).join(" · ")}{shared && d.added_by ? ` · ${d.added_by.initials}` : ""}</small></span>
+          <span className="dt-amt"><b>{money(d.amount_usd)}</b>{d.status === "completed" ? <CheckCircle2 /> : null}</span>
           <span onClick={(e) => e.stopPropagation()}><StageButton deal={d} onPick={(s) => void moveDeal(d, s)} /></span>
           <span className="muted">{d.payment_method_ref?.label ?? "—"}</span>
-          <span className="muted">{d.status === "completed" && d.paid_at ? `Paid ${monDayYear(d.paid_at)}` : monDayYear(d.updated_at)}</span>
+          <span className="muted">{d.status === "completed" && d.paid_at ? monDayYear(d.paid_at) : monDayYear(d.updated_at)}</span>
         </div>
       ))}
       {deals.length === 0 ? <div className="empty-state">No deals here yet.</div> : null}
     </div>
+  );
+}
+
+function TableSections({ boards, data, shared }: { boards: Board[]; data: Record<Board, Deal[]>; shared: boolean }) {
+  return (
+    <div className="table-sections">
+      {boards.map((board) => {
+        const live = active(data[board]);
+        return (
+          <section key={board} className="card t-section">
+            <div className="ts-head"><h3><i style={{ background: BOARD_DOT[board] }} />{BOARD_LABELS[board]}</h3><span className="muted">{live.length} active · {money(total(live))}</span></div>
+            <DealTable deals={data[board]} shared={shared} />
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/* The website's "Needs attention": drafts due within a week (or late), and pending payments. */
+function NeedsAttention({ deals }: { deals: Deal[] }) {
+  const today = localToday();
+  const due = (days: number) => (days < 0 ? `${-days} day${days === -1 ? "" : "s"} overdue` : days === 0 ? "due today" : `due in ${days} day${days === 1 ? "" : "s"}`);
+  const items = deals.flatMap((d) => {
+    if (d.status === "completed") return [];
+    const out: { key: string; id: string; title: string; detail: string; priority: number; payment: boolean }[] = [];
+    if (d.draft_due_at && isDraftPending(d.status)) {
+      const days = daysBetween(today, d.draft_due_at);
+      if (days <= 7) out.push({ key: `${d.id}-draft`, id: d.id, title: `${d.brand_name} draft`, detail: due(days), priority: days, payment: false });
+    }
+    if (d.status === "pending_payment") {
+      const days = d.payment_expected_at ? daysBetween(today, d.payment_expected_at) : null;
+      out.push({ key: `${d.id}-pay`, id: d.id, title: `${d.brand_name} · ${money(d.amount_usd)}`, detail: days === null ? "Pending payment" : `Payment ${due(days)}`, priority: days ?? 8, payment: true });
+    }
+    return out;
+  }).sort((a, b) => a.priority - b.priority).slice(0, 4);
+  return (
+    <aside className="card needs-attention">
+      <header><span className="eyebrow-caps">Keep things moving</span><h2>Needs attention</h2></header>
+      {items.length ? items.map((it) => (
+        <button key={it.key} className="na-row" onClick={() => openDeal(it.id)}>
+          <span className="na-ico">{it.payment ? <CircleDollarSign /> : <CalendarClock />}</span>
+          <span><b>{it.title}</b><small>{it.detail}</small></span><ArrowUpRight />
+        </button>
+      )) : <p className="na-clear"><Sparkles />Nothing needs your attention right now.</p>}
+      <p className="na-foot">Based on the dates you entered for your deals.</p>
+    </aside>
   );
 }
 
@@ -324,57 +392,65 @@ export const SMART_LABELS: Record<SmartView, { title: string; sub: string }> = {
 export function Deals({ board: boardParam, smart }: { board?: Board; smart?: SmartView }) {
   const { data, isLoading, isError, refetch } = useDeals();
   const deals = allDeals(data);
+  const clients = useQuery({ queryKey: ["hub", "contacts"], staleTime: 60_000, queryFn: () => api<{ contacts: unknown[] }>("/api/hub/contacts") }).data;
   const [layout, setLayout] = useState<"kanban" | "table">(() => (localStorage.getItem("hub_desktop_deal_view") as "table") || "kanban");
-  const [board, setBoard] = useState<Board>(boardParam ?? ((localStorage.getItem("ch.hub.board") as Board) || "outreach"));
-  useEffect(() => { if (boardParam) setBoard(boardParam); }, [boardParam]);
-  useEffect(() => { try { localStorage.setItem("hub_desktop_deal_view", layout); localStorage.setItem("ch.hub.board", board); } catch { /* fine */ } }, [layout, board]);
+  useEffect(() => { try { localStorage.setItem("hub_desktop_deal_view", layout); } catch { /* fine */ } }, [layout]);
   const shared = data?.shared ?? false;
+  const boards: Board[] = boardParam ? [boardParam] : BOARDS;
 
-  const head = (
-    <div className="mhead">
-      <h1>{smart ? SMART_LABELS[smart].title : "Deals"}</h1>
-      <span className="sub">{smart ? SMART_LABELS[smart].sub : "Move deals toward payday"}</span>
+  const header = (
+    <div className="hub-header">
+      <div>
+        <span className="eyebrow-caps">Personal CRM</span>
+        <h1>Creator Hub</h1>
+        <p className="muted">Your deals, one hive</p>
+      </div>
       <div className="acts">
         <button className="btn" onClick={() => openExport()}><Download />Export</button>
-        {shared && data?.members.length ? <span className="shared-chip"><Avatar name={data.members.find((m) => m)?.name ?? ""} size={20} />Shared Hub</span> : null}
+        <button className="btn" onClick={() => ch.app.openSite("/hub?share=1")}><Users />Share my Hub</button>
+        <button className="btn" onClick={() => nav.open({ kind: "hub", page: "dashboard" }, "hub", "ch")}><ChartNoAxesCombined />View full dashboard</button>
         <button className="btn honey" onClick={() => openDealForm({})}><Plus />New deal</button>
       </div>
     </div>
   );
+  const tabs = (
+    <div className="hub-tabs">
+      <button className="on">Deals <span className="count honey">{deals.length}</span></button>
+      <button onClick={() => nav.open({ kind: "hub", page: "clients" }, "hub", "ch")}>Past clients <span className="count">{clients?.contacts.length ?? ""}</span></button>
+    </div>
+  );
 
-  if (isError) return <div className="page">{head}<div className="empty-state"><div className="err-state">Couldn't load your deals.<button className="btn" onClick={() => void refetch()}>Try again</button></div></div></div>;
+  if (isError) return <div className="page"><div className="empty-state"><div className="err-state">Couldn't load your deals.<button className="btn" onClick={() => void refetch()}>Try again</button></div></div></div>;
 
   if (smart) {
-    const list = smartDeals(smart, deals);
     return (
-      <div className="page">{head}
-        <div className="hub-body scroll"><DealTable deals={list} shared={shared} /></div>
+      <div className="page">
+        <div className="mhead"><h1>{SMART_LABELS[smart].title}</h1><span className="sub">{SMART_LABELS[smart].sub}</span></div>
+        <div className="hub-page scroll"><section className="card t-section"><DealTable deals={smartDeals(smart, deals)} shared={shared} /></section></div>
       </div>
     );
   }
 
-  const boardDeals = data?.[board] ?? [];
-  const activeOnBoard = active(boardDeals);
   return (
-    <div className="page hub-deals">
-      {head}
-      <div className="hub-body">
-        <div className="overview">
-          <TierBar />
-          <Tiles deals={deals} />
-        </div>
-        <div className="board-bar">
-          <h2>{BOARD_LABELS[board]}</h2>
-          <span className="muted">{BOARD_STATUSES[board].length} stages · {plural(activeOnBoard.length, "active deal")} · {money(total(activeOnBoard))}</span>
-          <div className="acts">
-            <div className="seg">{BOARDS.map((b) => <button key={b} className={board === b ? "on" : ""} onClick={() => setBoard(b)}>{BOARD_LABELS[b]}</button>)}</div>
-            <div className="seg">
-              <button className={layout === "kanban" ? "on" : ""} onClick={() => setLayout("kanban")}><Columns3 />Kanban</button>
-              <button className={layout === "table" ? "on" : ""} onClick={() => setLayout("table")}><Table2 />Table</button>
+    <div className="page">
+      <div className="hub-page scroll">
+        {header}
+        {tabs}
+        <Overview deals={deals} />
+        <div className="pipeline">
+          <div className="pipeline-main">
+            <div className="pipeline-head">
+              <div><span className="eyebrow-caps">Your pipeline</span><h2>{boardParam ? BOARD_LABELS[boardParam] : "Move deals toward payday"}</h2></div>
+              <div className="seg dark">
+                <button className={layout === "kanban" ? "on" : ""} onClick={() => setLayout("kanban")}><Columns3 />Kanban</button>
+                <button className={layout === "table" ? "on" : ""} onClick={() => setLayout("table")}><Table2 />Table</button>
+              </div>
             </div>
+            {isLoading || !data ? <div className="empty-state">Loading your deals…</div>
+              : layout === "kanban" ? <Kanban boards={boards} data={data} shared={shared} /> : <TableSections boards={boards} data={data} shared={shared} />}
           </div>
+          <NeedsAttention deals={deals} />
         </div>
-        {isLoading ? <div className="empty-state">Loading your deals…</div> : layout === "kanban" ? <Kanban board={board} deals={boardDeals} shared={shared} /> : <DealTable deals={boardDeals} shared={shared} />}
       </div>
     </div>
   );

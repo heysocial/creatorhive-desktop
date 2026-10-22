@@ -78,7 +78,7 @@ function useScreen(location: Location): Screen {
           <>
             <Avatar name={conversation.displayName} src={conversation.isGroup ? null : other?.avatarUrl}
               seed={conversation.isGroup ? conversation.id : other?.id} size={28} radius="8px"
-              online={!conversation.isGroup && other?.presence === "online"} />
+              presence={conversation.isGroup ? undefined : other?.presence} />
             {conversation.displayName}
           </>
         ) : "Conversation",

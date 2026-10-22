@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld("ch", {
     save: (url, name) => ipcRenderer.invoke("files:save", { url, name }),
     addToCalendar: (ics, name) => ipcRenderer.invoke("files:addToCalendar", { ics, name }),
     uploadForm: (request) => ipcRenderer.invoke("files:uploadForm", request),
+    clipboardImage: () => ipcRenderer.invoke("clipboard:image"),
     putVideo: (url, type, bytes) => ipcRenderer.invoke("files:putVideo", { url, type, bytes }),
   },
   window: {

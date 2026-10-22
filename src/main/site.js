@@ -18,11 +18,14 @@ function configureUserAgent() {
   ses.setUserAgent(`${ses.getUserAgent()} CreatorHiveDesktop/${app.getVersion()}`);
 }
 
-/** Signed out answers 401, or is sent to the sign-in page as HTML. */
+/**
+ * Signed out answers 401, or is sent to the sign-in page. Anything else that
+ * isn't JSON (a 404 page for a route this server doesn't have yet, a 502 from
+ * the host) is an error for that one request, never a reason to sign out.
+ */
 function signedOut(response) {
   if (response.status === 401) return true;
-  if (response.redirected && new URL(response.url).pathname.startsWith("/sign-in")) return true;
-  return !(response.headers.get("content-type") ?? "").includes("application/json");
+  return response.redirected && new URL(response.url).pathname.startsWith("/sign-in");
 }
 
 function siteFetch(pathname, { method = "GET", headers = {}, body } = {}) {

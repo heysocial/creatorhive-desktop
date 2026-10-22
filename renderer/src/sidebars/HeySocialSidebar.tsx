@@ -86,7 +86,7 @@ function Row({ item, sections, live, isMember }: { item: Item; sections: Section
 
   const icon = item.kind === "channel"
     ? (item.row.isPrivate && !item.row.workspaceOpen ? <Lock /> : <Hash />)
-    : <Avatar name={item.row.displayName} src={item.row.isGroup ? null : item.row.other?.avatarUrl} seed={item.row.isGroup ? item.row.id : item.row.other?.id} size={20} radius="5px" online={!item.row.isGroup && item.row.other?.presence === "online"} />;
+    : <Avatar name={item.row.displayName} src={item.row.isGroup ? null : item.row.other?.avatarUrl} seed={item.row.isGroup ? item.row.id : item.row.other?.id} size={20} radius="5px" presence={item.row.isGroup ? undefined : item.row.other?.presence} />;
   const label = item.kind === "channel" ? channelName(item.row.name) : item.row.displayName;
   return (
     <div className={`hs-row ${muted ? "muted" : ""}`} onContextMenu={(e) => { e.preventDefault(); void menu(); }}>

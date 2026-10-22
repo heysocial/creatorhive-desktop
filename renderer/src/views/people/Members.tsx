@@ -40,7 +40,7 @@ export function Members() {
         <div className="member-grid">
           {members.map((m) => (
             <button key={m.id} className="card member" onClick={() => nav.open({ kind: "profile", id: m.id })}>
-              <Avatar name={m.name} src={m.avatarUrl} seed={m.id} size={48} online={m.presence === "online"} />
+              <Avatar name={m.name} src={m.avatarUrl} seed={m.id} size={48} presence={m.presence} />
               <span className="mi">
                 <span className="mn"><b>{m.name}</b><Badge badge={m.badge} role={m.role} /></span>
                 {m.headline ? <span className="muted">{m.headline}</span> : null}

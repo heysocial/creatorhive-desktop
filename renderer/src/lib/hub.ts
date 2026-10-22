@@ -126,6 +126,7 @@ export interface Tier {
   collectedThisMonth: number;
   amountToNextTier: number | null;
   nextTier: string | null;
+  topTierName: string;
   tierProgressPercent: number;
 }
 

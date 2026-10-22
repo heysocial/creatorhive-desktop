@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, keys, queryClient, useChannels, useConversations, type Workspace } from "../../lib/api";
 import {
-  addMessage, sendVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
+  addMessage, sendVideos, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
 } from "../../lib/community";
 import { dayLabel } from "../../lib/format";
@@ -39,6 +39,8 @@ function MessageList({ where, actions, header, empty }: { where: Thread; actions
   const atBottom = useRef(true);
   const restore = useRef<number | null>(null);
   const lastId = messages.at(-1)?.id;
+  // Videos still processing (just sent, or arriving from someone else) update themselves when ready.
+  useEffect(() => { for (const m of messages) if (m.videoAttachment || m.videoAttachments?.length) watchVideos(where, m); }, [messages, where]);
 
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -149,11 +151,12 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
         </div>
       </div>
       <Composer compact draftKey={`thread:${parentId}`}
+        uploadVideo={workspace === "heysocial" || where.kind === "dm" ? undefined : (file, onProgress) => uploadVideo(where, file, onProgress)}
         voice={where.kind === "dm" || workspace === "heysocial" ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, parentMessageId: parentId, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={workspace === "heysocial" ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder="Reply in thread…" searchPeople={where.kind === "channel" ? people : undefined}
         onTyping={typingSignal(realtimeChannel)}
         onSend={async (input) => {
           if (input.videos.length) {
-            try { await sendVideos(where, { files: input.videos, body: input.body, mentions: input.mentions, parentMessageId: parentId }); } catch { window.alert("The video couldn't be sent."); return false; }
+            try { await sendVideos(where, { videos: input.videos, body: input.body, mentions: input.mentions, parentMessageId: parentId }); } catch { window.alert("The video couldn't be sent."); return false; }
             return input.files.length ? sendMessage(where, { ...input, body: "", parentMessageId: parentId }, toAuthor(user)) : true;
           }
           return sendMessage(where, { ...input, parentMessageId: parentId }, toAuthor(user));
@@ -327,7 +330,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
       ) : (
         <h1>
           {conversation ? <Avatar name={conversation.displayName} src={conversation.isGroup ? null : other?.avatarUrl} seed={conversation.isGroup ? conversation.id : other?.id}
-            size={28} radius="8px" online={!conversation.isGroup && other?.presence === "online"} /> : null}
+            size={28} radius="8px" presence={conversation.isGroup ? undefined : other?.presence} /> : null}
           {title}
         </h1>
       )}
@@ -373,12 +376,13 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
           <div className="replying"><span>Replying to <b>{replyTo.author.name}</b>: {replyTo.body.slice(0, 120)}</span><button className="iconbtn" onClick={() => setReplyTo(null)}><X /></button></div>
         ) : null}
         <Composer ref={composer} draftKey={`${where.kind}:${where.id}`}
+          uploadVideo={heySocial ? undefined : (file, onProgress) => uploadVideo(where, file, onProgress)}
           voice={where.kind === "dm" || heySocial ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder={where.kind === "channel" ? `Message #${title}` : `Message ${title}`}
           searchPeople={where.kind === "channel" ? people : undefined} onTyping={sendTyping}
           onSend={async (input: ComposerSend) => {
             if (input.videos.length) {
               try {
-                await sendVideos(where, { files: input.videos, body: input.body, mentions: input.mentions });
+                await sendVideos(where, { videos: input.videos, body: input.body, mentions: input.mentions });
                 if (!input.files.length) return true;
                 input = { ...input, body: "" };
               } catch {

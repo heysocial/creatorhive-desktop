@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import {
@@ -47,14 +48,16 @@ export function Modal({ title, onClose, children, width = 460, foot }: { title?:
     window.addEventListener("keydown", key, true);
     return () => window.removeEventListener("keydown", key, true);
   }, [onClose]);
-  return (
+  // Over the whole window, centred, whichever pane opened it.
+  return createPortal(
     <div className="scrim center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" role="dialog" style={{ width }}>
         {title ? <div className="modal-head">{title}<button className="iconbtn" onClick={onClose} aria-label="Close"><X /></button></div> : null}
         <div className="modal-body">{children}</div>
         {foot ? <div className="modal-foot">{foot}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
