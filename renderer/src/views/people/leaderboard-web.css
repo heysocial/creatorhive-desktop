@@ -1,0 +1,194 @@
+/*
+  The website's design tokens and the few shared classes its Leaderboard uses
+  (buttons, chips, segmented controls, member badges, the empty state), copied
+  from creatorhive-app app/globals.css and scoped to this page so the Leaderboard
+  looks exactly like the website's without touching the rest of the app. Light
+  and dark follow the Mac, as the website follows its theme setting.
+*/
+.lb-web {
+  --color-pearl-bg: #171717;
+  --color-pearl-wallpaper: #0D0D0D;
+  --color-pearl-surface-1: #212121;
+  --color-pearl-surface-2: #2A2A2A;
+  --color-pearl-surface-3: #333333;
+  --color-pearl-border: #303030;
+  --color-pearl-border-strong: #454545;
+  --color-pearl-text: #ECECEC;
+  --color-pearl-text-body: #D4D4D4;
+  --color-pearl-text-muted: #ABABAB;
+  --color-pearl-text-subtle: #9A9A9A;
+  --color-slate-bg: #F7F6F4;
+  --color-slate-wallpaper: #E4E2DE;
+  --color-slate-surface-1: #FFFFFF;
+  --color-slate-surface-2: #F1F0ED;
+  --color-slate-surface-3: #ECEBE7;
+  --color-slate-border: #E6E4DF;
+  --color-slate-border-strong: #D6D3CD;
+  --color-slate-text: #1F1E1C;
+  --color-slate-text-body: #3D3B37;
+  --color-slate-text-muted: #5E5B56;
+  --color-slate-text-subtle: #6E6B66;
+
+  --accent: #FFCC04;
+  --on-accent: #1F1E1C;
+  --color-accent: var(--ink-emphasis);
+  --color-aurora-purple-1: var(--color-accent);
+  --color-aurora-amber: var(--ink-emphasis);
+  --color-member-owner: #3B82F6;
+  --color-member-team: #2A9D8F;
+  --color-member-new: #8291A3;
+  --color-member-hustle: #5E9E2E;
+  --color-member-pro: #E2621B;
+  --color-member-top: #E6A700;
+  --color-aurora-gradient: var(--emphasis-fill);
+  --color-aurora-gradient-soft: color-mix(in oklab, var(--ink-emphasis) 5%, transparent);
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-sans: var(--font-system);
+  --font-body: var(--font-system);
+  --font-display: var(--font-system);
+  --font-mono: var(--font-system);
+  --space-3: 12px;
+  --text-xs: 11.5px;
+  --text-sm: 12.5px;
+  --text-md: 13.5px;
+  --text-lg: 15px;
+  --hub-money-attention: var(--accent-ink);
+  --hub-money-success: var(--color-success);
+
+  /* Light */
+  --bg: var(--color-slate-bg);
+  --wallpaper: var(--color-slate-wallpaper);
+  --surface: var(--color-slate-surface-1);
+  --surface-1: var(--color-slate-surface-1);
+  --surface-2: var(--color-slate-surface-2);
+  --surface-3: var(--color-slate-surface-3);
+  --border: var(--color-slate-border);
+  --border-strong: var(--color-slate-border-strong);
+  --text: var(--color-slate-text);
+  --text-muted: var(--color-slate-text-muted);
+  --text-subtle: var(--color-slate-text-subtle);
+  --text-body: var(--color-slate-text-body);
+  --ink-emphasis: var(--color-slate-text-muted);
+  --emphasis-fill: var(--color-slate-text);
+  --on-emphasis: #FFFFFF;
+  --accent-hover: #F2C200;
+  --accent-soft: #FFF4CC;
+  --accent-soft-border: #F3DF94;
+  --accent-ink: #7A5B00;
+  --color-success: #2F7D55;
+  --color-danger: #B3363C;
+  --on-danger: #FFFFFF;
+  --shadow-lg: 0 20px 40px -12px rgba(31, 30, 28, 0.14), 0 0 0 0.5px rgba(31, 30, 28, 0.03) inset;
+}
+@media (prefers-color-scheme: dark) {
+  .lb-web {
+    --bg: var(--color-pearl-bg);
+    --wallpaper: var(--color-pearl-wallpaper);
+    --surface: var(--color-pearl-surface-1);
+    --surface-1: var(--color-pearl-surface-1);
+    --surface-2: var(--color-pearl-surface-2);
+    --surface-3: var(--color-pearl-surface-3);
+    --border: var(--color-pearl-border);
+    --border-strong: var(--color-pearl-border-strong);
+    --text: var(--color-pearl-text);
+    --text-muted: var(--color-pearl-text-muted);
+    --text-subtle: var(--color-pearl-text-subtle);
+    --text-body: var(--color-pearl-text-body);
+    --ink-emphasis: var(--color-pearl-text-muted);
+    --emphasis-fill: #E5E5E5;
+    --on-emphasis: #171717;
+    --accent-hover: #FFD83D;
+    --accent-soft: #2E2E2E;
+    --accent-soft-border: #474747;
+    --accent-ink: #F5C518;
+    --color-success: #5FBF8C;
+    --color-danger: #F0797D;
+    --on-danger: #171717;
+    --shadow-lg: 0 20px 40px -12px rgba(0,0,0,0.5), 0 0 0 0.5px rgba(255,255,255,0.04) inset;
+  }
+}
+
+/* The page: the website's background, scrolling, and the width its phone layout reads. */
+.lb-web.lb-page {
+  flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin;
+  background: var(--bg); color: var(--text); font-family: var(--font-body);
+  padding: 28px 32px 0; container: lb / inline-size;
+  user-select: text; -webkit-font-smoothing: antialiased;
+}
+.lb-web h1, .lb-web h2, .lb-web h3 { font-weight: 700; }
+.lb-web .lb-clickable { cursor: pointer; }
+
+/* Buttons, chips, segmented controls */
+.lb-web .ui-button {
+  display: inline-flex; width: fit-content; min-width: 0; align-items: center; justify-content: center; gap: 7px;
+  border: 0.5px solid transparent; border-radius: var(--radius);
+  font-family: var(--font-body); font-size: 12.5px; font-weight: 600; line-height: 1; letter-spacing: -0.008em;
+  text-align: center; text-decoration: none; white-space: nowrap; cursor: pointer;
+}
+.lb-web .ui-button svg { flex: 0 0 auto; }
+.lb-web .ui-button--sm { height: 32px; min-height: 32px; padding: 0 12px; font-size: 12.5px; }
+.lb-web .ui-button--md { height: 40px; min-height: 40px; padding: 0 16px; font-size: 13.5px; }
+.lb-web .ui-button--full { width: 100%; }
+.lb-web .ui-button--primary { background: var(--accent); color: var(--on-accent); box-shadow: none; }
+.lb-web .ui-button--primary:hover:not(:disabled) { background: var(--accent-hover); }
+.lb-web .ui-button--secondary { border-color: var(--border-strong); background: var(--surface-2); color: var(--text); }
+.lb-web .ui-button--secondary:hover:not(:disabled) { background: var(--surface-3); }
+.lb-web .ui-button--ghost { background: transparent; color: var(--text-muted); }
+.lb-web .ui-button--ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.lb-web .ui-button:disabled { cursor: not-allowed; opacity: .5; }
+
+.lb-web .ui-chip {
+  display: inline-flex; height: 30px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 6px;
+  padding: 0 12px; border: 0.5px solid var(--border); border-radius: 999px; background: var(--surface-1);
+  color: var(--text-muted); font-family: var(--font-body); font-size: 12.5px; font-weight: 600; line-height: 1;
+  white-space: nowrap; cursor: pointer;
+}
+.lb-web .ui-chip:hover:not(:disabled) { color: var(--text); }
+.lb-web .ui-chip[aria-pressed="true"]:hover:not(:disabled) { color: var(--on-emphasis); }
+.lb-web .ui-chip[aria-pressed="true"] { border-color: var(--emphasis-fill); background: var(--emphasis-fill); color: var(--on-emphasis); }
+.lb-web .ui-segmented {
+  display: inline-flex; flex: 0 0 auto; align-items: center; gap: 2px; padding: 2px;
+  border: 0.5px solid var(--border); border-radius: 999px; background: var(--surface-2);
+}
+.lb-web .ui-segmented > .ui-chip { height: 28px; border-color: transparent; background: transparent; }
+.lb-web .ui-segmented > .ui-chip[aria-pressed="true"] { background: var(--emphasis-fill); color: var(--on-emphasis); }
+
+/* Member names and badges */
+.lb-web .member-name { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: 6px; vertical-align: middle; }
+.lb-web .member-name__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-web .member-badge {
+  --member-badge-color: var(--color-member-new);
+  display: inline-flex; flex: 0 0 auto; min-height: 17px; align-items: center; justify-content: center; box-sizing: border-box;
+  padding: 1px 6px; border: 0.5px solid color-mix(in oklab, var(--member-badge-color) 42%, var(--border));
+  border-radius: 999px; background: color-mix(in oklab, var(--member-badge-color) 13%, var(--surface-1));
+  color: color-mix(in oklab, var(--member-badge-color) 50%, var(--text));
+  font-family: var(--font-sans); font-size: 10px; font-weight: 600; line-height: 1; letter-spacing: .01em; white-space: nowrap;
+}
+@media (prefers-color-scheme: dark) {
+  .lb-web .member-badge { color: color-mix(in oklab, var(--member-badge-color) 84%, var(--text)); }
+  .lb-web .member-badge[data-title-color] { color: color-mix(in oklab, var(--member-badge-color) 74%, var(--text)); }
+}
+.lb-web .member-name--compact { gap: 4px; }
+.lb-web .member-name--compact .member-badge { min-height: 15px; padding-inline: 5px; font-size: 10px; }
+.lb-web .member-badge--owner { --member-badge-color: var(--color-member-owner); }
+.lb-web .member-badge--team { --member-badge-color: var(--color-member-team); }
+.lb-web .member-badge--hustle { --member-badge-color: var(--color-member-hustle); }
+.lb-web .member-badge--pro { --member-badge-color: var(--color-member-pro); }
+.lb-web .member-badge--top { --member-badge-color: var(--color-member-top); }
+.lb-web .member-badge__emoji { margin-right: 3px; font-size: 1em; line-height: 1; }
+
+/* Empty state */
+.lb-web .ui-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 56px 24px; border: 0.5px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-1); text-align: center; }
+.lb-web .ui-empty-state__icon { display: flex; width: 52px; height: 52px; align-items: center; justify-content: center; border-radius: var(--radius-lg); background: var(--color-aurora-gradient); color: var(--on-emphasis); box-shadow: 0 8px 24px -8px color-mix(in oklab, var(--color-accent) 55%, transparent), inset 0 0 0 0.5px color-mix(in oklab, #fff 20%, transparent); }
+.lb-web .ui-empty-state__title { color: var(--text); font-size: var(--text-lg); font-weight: 700; letter-spacing: -.01em; }
+.lb-web .ui-empty-state__description { max-width: 320px; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.5; }
