@@ -8,6 +8,7 @@ import { useRealtimeRefresh } from "./lib/realtime";
 import { SignIn } from "./signin/SignIn";
 import { TopBar } from "./shell/TopBar";
 import { Rail } from "./shell/Rail";
+import { SidebarResizer, useSidebarLayout } from "./shell/SidebarResizer";
 import { Sidebar } from "./sidebars/Sidebars";
 import { Main } from "./views/Main";
 import { QuickSwitcher } from "./overlays/QuickSwitcher";
@@ -63,7 +64,7 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
   useRealtimeRefresh(user.id);
   usePresence();
   const [overlay, setOverlay] = useState<Overlay>(null);
-  const [sidebar, setSidebar] = useState(true);
+  const sidebar = useSidebarLayout();
   const [fullscreen, setFullscreen] = useState(info.fullscreen);
   const [updateReady, setUpdateReady] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -127,7 +128,7 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       case "quick-open": return setOverlay((open) => (open === "quick-open" ? null : "quick-open"));
       case "shortcuts": return setOverlay("shortcuts");
       case "settings": return ch.window.popout({ kind: "settings", id: "main" });
-      case "toggle-sidebar": return setSidebar((open) => !open);
+      case "toggle-sidebar": return sidebar.toggle();
       case "new-message":
         return setOverlay("new-message");
       case "new-deal":
@@ -166,10 +167,12 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
 
   const close = useCallback(() => setOverlay(null), []);
   return (
-    <div className={`app ${sidebar ? "" : "no-sidebar"} ${fullscreen ? "fullscreen" : ""}`}>
-      <TopBar preview={info.preview} updateReady={updateReady} />
+    <div className={`app ${sidebar.open ? "" : "no-sidebar"} ${sidebar.dragging ? "resizing" : ""} ${fullscreen ? "fullscreen" : ""}`}
+      style={{ "--sidebar-w": `${sidebar.open ? sidebar.width : 0}px` } as React.CSSProperties}>
+      <TopBar preview={info.preview} updateReady={updateReady} sidebarOpen={sidebar.open} />
       <Rail user={user} />
       <Sidebar user={user} />
+      <SidebarResizer layout={sidebar} />
       <Main user={user} />
       {overlay === "quick-open" ? <QuickSwitcher onClose={close} /> : null}
       {overlay === "shortcuts" ? <ShortcutsSheet onClose={close} /> : null}

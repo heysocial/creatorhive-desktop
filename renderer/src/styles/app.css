@@ -72,7 +72,11 @@ img { -webkit-user-drag: none; }
   grid-template-columns: 76px var(--sidebar-w, 268px) 1fr; position: relative; background: var(--tint);
   transition: grid-template-columns .18s ease;
 }
-.app.no-sidebar { --sidebar-w: 0px; }
+.app.resizing { transition: none; cursor: col-resize; user-select: none; }
+.sidebar-resizer { position: absolute; top: 46px; bottom: 0; width: 8px; z-index: 5; cursor: col-resize; }
+.sidebar-resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background .12s; }
+.sidebar-resizer:hover::after, .app.resizing .sidebar-resizer::after { background: var(--line-strong); }
+.app:not(.resizing) .sidebar-resizer { transition: left .18s ease; }
 
 /* ---------- Top bar (window buttons live in its left edge) ---------- */
 .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 0 14px 0 92px; position: relative; -webkit-app-region: drag; }
@@ -854,7 +858,8 @@ html.is-popout body { background: var(--card); }
 @keyframes fall { to { top: 110%; transform: rotate(540deg) translateX(40px); opacity: .9; } }
 
 /* Deal panel */
-.deal-scrim { justify-content: center; align-items: center; }
+/* The deal opens in the middle of the whole window, not the content pane's corner. */
+.scrim.side.deal-scrim { position: fixed; justify-content: center; align-items: center; z-index: 40; -webkit-app-region: no-drag; }
 .deal-panel { width: min(1080px, 94%); height: min(820px, 94%); background: var(--card); border-radius: 14px; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.25); overflow: hidden; }
 .deal-window { height: 100%; }
 .deal-window .deal-panel { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }

@@ -181,7 +181,7 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
   }, [deal, onClose, popout]);
 
   if (!deal) {
-    return <div className={popout ? "deal-window" : "scrim side"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}><aside className="deal-panel"><div className="empty-state">Loading…</div></aside></div>;
+    return <div className={popout ? "deal-window" : "scrim side deal-scrim"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}><aside className="deal-panel"><div className="empty-state">Loading…</div></aside></div>;
   }
 
   const next = deal.status === "pending_payment" ? "completed" : nextStatus(deal.status);

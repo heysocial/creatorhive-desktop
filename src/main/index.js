@@ -663,7 +663,7 @@ function createAppMenu() {
     {
       label: "View",
       submenu: [
-        go("Toggle Sidebar", "Control+Command+S", "toggle-sidebar"),
+        go("Toggle Sidebar", "Shift+CommandOrControl+D", "toggle-sidebar"),
         { type: "separator" },
         ...(app.isPackaged ? [] : [{ role: "reload" }, { role: "toggleDevTools" }, { type: "separator" }]),
         { role: "resetZoom" },

@@ -64,7 +64,7 @@ export const SHORTCUTS: [string, [string, string][]][] = [
     ["Hey Social Inc.", "⌃⌘2"],
   ]],
   ["Window", [
-    ["Toggle sidebar", "⌃⌘S"],
+    ["Show or hide sidebar", "⇧⌘D"],
     ["Full screen", "⌃⌘F"],
     ["Close window (CreatorHive keeps running)", "⌘W"],
     ["Settings", "⌘,"],
