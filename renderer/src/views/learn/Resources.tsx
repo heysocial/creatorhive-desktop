@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
 import { bytes, shortTime } from "../../lib/format";
-import { RichText } from "../../lib/html";
+import { RichText, openLink } from "../../lib/html";
 import { nav } from "../../lib/nav";
 
 /*
@@ -48,7 +48,7 @@ function Marks({ node }: { node: TipNode }) {
     else if (mark.type === "code") out = <code>{out}</code>;
     else if (mark.type === "link") {
       const href = String(mark.attrs?.href ?? "");
-      out = <a href={href} onClick={(e) => { e.preventDefault(); if (/^https?:/.test(href)) ch.app.openExternal(href); }}>{out}</a>;
+      out = <a href={href} onClick={(e) => { e.preventDefault(); void openLink(href); }}>{out}</a>;
     }
   }
   return <>{out}</>;
@@ -88,7 +88,7 @@ function Doc({ node, files }: { node: TipNode; files: Record<string, ResFile> })
     }
     case "bookmark": {
       const url = String(node.attrs?.url ?? "");
-      return <button className="bookmark" onClick={() => ch.app.openExternal(url)}><Link2 /><span><b>{String(node.attrs?.title ?? url)}</b><small className="faint">{url}</small></span></button>;
+      return <button className="bookmark" onClick={() => void openLink(url)}><Link2 /><span><b>{String(node.attrs?.title ?? url)}</b><small className="faint">{url}</small></span></button>;
     }
     case "pageLink":
       return <button className="link" onClick={() => nav.open({ kind: "resource", id: String(node.attrs?.pageId) }, "learn", "ch")}><FileText />Open linked page</button>;

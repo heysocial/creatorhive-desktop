@@ -4,6 +4,7 @@ import { ch, type SessionUser } from "../../lib/bridge";
 import { api, keys, queryClient, type Conversation } from "../../lib/api";
 import { useMembers } from "../../lib/community";
 import { money } from "../../lib/format";
+import { openSettings } from "../../lib/links";
 import { nav } from "../../lib/nav";
 import { Avatar } from "../../lib/ui";
 import { Badge } from "../messages/MessageRow";
@@ -50,7 +51,6 @@ export function ProfilePage({ id, user }: { id: string; user: SessionUser }) {
     <div className="page profile">
       <div className="scroll page-body flush">
         <div className="cover">
-          {self ? <button className="btn glassy" onClick={() => ch.app.openSite("/profile")}>Change cover</button> : null}
         </div>
         <div className="profile-cols">
           <div className="profile-main">
@@ -65,7 +65,7 @@ export function ProfilePage({ id, user }: { id: string; user: SessionUser }) {
             {p?.bio ? <p className="bio selectable">{p.bio}</p> : null}
             <div className="profile-acts">
               {self ? (
-                <button className="btn honey" onClick={() => ch.app.openSite("/profile")}><Pencil />Edit profile</button>
+                <button className="btn honey" onClick={() => openSettings("account")}><Pencil />Edit profile</button>
               ) : (
                 <button className="btn honey" onClick={() => void messagePerson(id)}><MessageCircle />Message</button>
               )}

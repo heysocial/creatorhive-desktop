@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld("ch", {
     google: () => ipcRenderer.invoke("auth:google"),
     cancelGoogle: () => ipcRenderer.send("auth:googleCancel"),
     signOut: () => ipcRenderer.invoke("auth:signOut"),
+    forgotPassword: (email) => ipcRenderer.invoke("auth:forgotPassword", email),
     onChanged: listen("auth:changed"),
   },
   api: (request) => ipcRenderer.invoke("api:request", request),

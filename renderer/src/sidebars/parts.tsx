@@ -42,12 +42,10 @@ export function SidebarItem({ icon, label, view, count, quietCount, honeyCount =
       ...extraMenu,
       { type: "separator" },
       { id: "copy-link", label: "Copy link" },
-      { id: "website", label: "Open on the website" },
     ]);
     const path = sitePathFor(location);
     if (choice === "open") nav.open(view);
     else if (choice === "copy-link") void navigator.clipboard.writeText(`${(await ch.info()).origin}${path}`);
-    else if (choice === "website") ch.app.openSite(path);
     else if (choice) onMenu?.(choice);
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { EditorContent, mergeAttributes, Node, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type JSONContent, type NodeViewProps } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -7,6 +7,9 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Details, DetailsContent, DetailsSummary } from "@tiptap/extension-details";
 import { Bold, CheckSquare, ChevronRight, Code, File as FileIcon, Heading2, Heading3, Image as ImageIcon, Italic, Link2, List, ListOrdered, Loader2, Minus, Quote, Strikethrough } from "lucide-react";
 import { ch } from "../../lib/bridge";
+import { openLink } from "../../lib/html";
+import { pastedFiles } from "../../lib/paste";
+import { nav } from "../../lib/nav";
 import { api, ApiError } from "../../lib/api";
 import { bytes } from "../../lib/format";
 import { promptText } from "../hub/DealPanel";
@@ -42,19 +45,32 @@ export const knowVersion = (pageId: string, version: number) => {
   if ((versions.get(pageId) ?? -1) < version) versions.set(pageId, version);
 };
 
-/* Files on the page, for the blocks to look up (the document stores ids, never URLs). */
+/*
+  Files on the page, for the blocks to look up (the document stores ids, never
+  URLs). Only ever added to, and the blocks re-render when it grows: a picture
+  just uploaded is known here before the page's own copy is fetched again.
+*/
 let pageFiles: Record<string, ResFile> = {};
+const fileListeners = new Set<() => void>();
+function addFiles(files: Record<string, ResFile>, notify = true) {
+  if (Object.keys(files).every((id) => pageFiles[id]?.url === files[id].url)) return;
+  pageFiles = { ...pageFiles, ...files };
+  if (notify) fileListeners.forEach((listener) => listener());
+}
+function useFile(id: unknown): ResFile | undefined {
+  return useSyncExternalStore((listener) => { fileListeners.add(listener); return () => fileListeners.delete(listener); }, () => pageFiles[String(id)]);
+}
 
 function ImageView({ node }: NodeViewProps) {
-  const file = pageFiles[String(node.attrs.fileId)];
+  const file = useFile(node.attrs.fileId);
   return (
     <NodeViewWrapper className="doc-img" data-drag-handle>
-      {file ? <img src={file.url} alt={String(node.attrs.alt ?? "")} onDoubleClick={() => void ch.files.quickLook(`/api/resources/files/${file.id}`, file.filename)} /> : <div className="faint">Picture</div>}
+      {file ? <img src={file.url} alt={String(node.attrs.alt ?? "")} draggable={false} onDoubleClick={() => void ch.files.quickLook(`/api/resources/files/${file.id}`, file.filename)} /> : <div className="doc-img-loading"><Loader2 className="spin" /></div>}
     </NodeViewWrapper>
   );
 }
 function FileView({ node }: NodeViewProps) {
-  const file = pageFiles[String(node.attrs.fileId)];
+  const file = useFile(node.attrs.fileId);
   return (
     <NodeViewWrapper data-drag-handle>
       <button className="file-card" contentEditable={false} onClick={() => file && void ch.files.quickLook(`/api/resources/files/${file.id}`, file.filename)}>
@@ -66,10 +82,10 @@ function FileView({ node }: NodeViewProps) {
 }
 function BookmarkView({ node }: NodeViewProps) {
   const url = String(node.attrs.url ?? "");
-  return <NodeViewWrapper><button className="bookmark" contentEditable={false} onClick={() => ch.app.openExternal(url)}><Link2 /><span><b>{String(node.attrs.title || url)}</b><small className="faint">{url}</small></span></button></NodeViewWrapper>;
+  return <NodeViewWrapper><button className="bookmark" contentEditable={false} onClick={() => void openLink(url)}><Link2 /><span><b>{String(node.attrs.title || url)}</b><small className="faint">{url}</small></span></button></NodeViewWrapper>;
 }
 function PageLinkView({ node }: NodeViewProps) {
-  return <NodeViewWrapper><span className="link" contentEditable={false}>📄 Linked page</span><span hidden>{String(node.attrs.pageId)}</span></NodeViewWrapper>;
+  return <NodeViewWrapper><button className="link" contentEditable={false} onClick={() => nav.open({ kind: "resource", id: String(node.attrs.pageId) }, "learn", "ch")}>📄 Open linked page</button></NodeViewWrapper>;
 }
 
 const block = (name: string, attrs: Record<string, { default: unknown }>, tag: string, view: (p: NodeViewProps) => React.ReactNode) => Node.create({
@@ -95,7 +111,8 @@ export function PageEditor({ pageId, userId, initialDoc, version: initialVersion
   onSaved: () => void;
   onConflict: () => void;
 }) {
-  pageFiles = files;
+  addFiles(files, false); // quietly while rendering; the effect below tells the blocks
+  useEffect(() => fileListeners.forEach((listener) => listener()), [files]);
   knowVersion(pageId, initialVersion);
   const timer = useRef<number | null>(null);
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -132,7 +149,7 @@ export function PageEditor({ pageId, userId, initialDoc, version: initialVersion
       if (up.ok) {
         try {
           const { file: saved } = await api<{ file: ResFile }>(`/api/resources/pages/${pageId}/files`, { method: "POST", body: { pathname: up.pathname, filename: file.name, kind } });
-          pageFiles = { ...pageFiles, [saved.id]: saved };
+          addFiles({ [saved.id]: saved });
           const content = kind === "image" ? { type: "resourceImage", attrs: { fileId: saved.id, alt: file.name } } : { type: "resourceFile", attrs: { fileId: saved.id } };
           const chain = editor?.chain().focus();
           if (at !== undefined) chain?.insertContentAt(at, content).run(); else chain?.insertContent(content).run();
@@ -149,10 +166,13 @@ export function PageEditor({ pageId, userId, initialDoc, version: initialVersion
     content: initialDoc,
     editorProps: {
       attributes: { class: "rich doc-body editable", "aria-label": "Page content" },
+      // Copied files, screenshots, and a picture copied from another app (read from the Mac clipboard).
       handlePaste: (_view, event) => {
-        const pasted = [...(event.clipboardData?.files ?? [])];
-        if (!pasted.length) return false;
-        void insertFiles(pasted);
+        const data = event.clipboardData;
+        if (!data) return false;
+        const hasFiles = [...data.items].some((item) => item.kind === "file");
+        if (!hasFiles && (data.getData("text/plain") || data.getData("text/html"))) return false;
+        void pastedFiles(event as unknown as React.ClipboardEvent).then((files) => { if (files?.length) void insertFiles(files); });
         return true;
       },
       handleDrop: (view, event, _slice, moved) => {

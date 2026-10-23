@@ -65,6 +65,8 @@ export interface Bridge {
     google(): Promise<{ ok: boolean; user?: SessionUser; error?: string }>;
     cancelGoogle(): void;
     signOut(): Promise<{ ok: boolean }>;
+    /** Sends the password reset email (always "ok" for an address with no account, as the website does). */
+    forgotPassword(email: string): Promise<{ ok: boolean }>;
     onChanged: Listen<null>;
   };
   api<T>(request: { method?: string; path: string; body?: unknown }): Promise<ApiResult<T>>;

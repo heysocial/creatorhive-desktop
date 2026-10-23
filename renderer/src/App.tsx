@@ -11,7 +11,7 @@ import { Rail } from "./shell/Rail";
 import { Sidebar } from "./sidebars/Sidebars";
 import { Main } from "./views/Main";
 import { QuickSwitcher } from "./overlays/QuickSwitcher";
-import { SettingsSheet, ShortcutsSheet } from "./overlays/Sheets";
+import { ShortcutsSheet } from "./overlays/Sheets";
 import { NewMessage } from "./overlays/NewMessage";
 import { HubDialogs, hubToast } from "./views/hub/parts";
 import { DealFormHost, openDealForm } from "./views/hub/DealForm";
@@ -23,7 +23,7 @@ import { api } from "./lib/api";
 import { usePresence } from "./lib/realtime";
 
 type Auth = { state: "loading" } | { state: "signedOut" } | { state: "signedIn"; user: SessionUser };
-type Overlay = null | "quick-open" | "shortcuts" | "settings" | "new-message";
+type Overlay = null | "quick-open" | "shortcuts" | "new-message";
 
 /* ⌥↑/⌥↓ walk the sidebar; with ⇧ they skip to the next unread item. */
 function moveInSidebar(direction: 1 | -1, unreadOnly: boolean) {
@@ -173,7 +173,6 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       <Main user={user} />
       {overlay === "quick-open" ? <QuickSwitcher onClose={close} /> : null}
       {overlay === "shortcuts" ? <ShortcutsSheet onClose={close} /> : null}
-      {overlay === "settings" ? <SettingsSheet user={user} version={info.version} onClose={close} /> : null}
       {overlay === "new-message" ? <NewMessage onClose={close} workspace={nav.get().ws === "hs" ? "heysocial" : "creatorhive"} /> : null}
       {toast ? <div className="toast" role="status">{toast}</div> : null}
       {locked ? <LockScreen /> : null}

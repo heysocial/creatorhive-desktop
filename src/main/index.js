@@ -322,6 +322,16 @@ function configureIpc() {
     if (result.ok) setSignedIn(true);
     return result;
   });
+  // The reset email (the website's Forgot password); /api/auth/* is otherwise closed to the interface.
+  ipcMain.handle("auth:forgotPassword", async (_event, email) => {
+    if (typeof email !== "string" || !email.trim() || email.length > 254) return { ok: false };
+    try {
+      const response = await site.siteFetch("/api/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim() }) });
+      return { ok: response.ok };
+    } catch {
+      return { ok: false };
+    }
+  });
   ipcMain.handle("auth:googleAvailable", () => google.googleAvailable());
   ipcMain.handle("auth:google", async () => {
     // Back to the app the moment the browser returns, before the exchange finishes.

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ChevronDown, Clock, FileText, Link2, Loader2, Mail, MoreHorizontal, Paperclip, Phone, Trash2, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
+import { openLink } from "../../lib/html";
 import { api, queryClient } from "../../lib/api";
 import {
   BOARD_LABELS, DEAL_STATUSES, STATUS_LABELS, boardOf, daysBetween, dealTypeLabel, deleteDeal, isDraftPending, localToday, monDay,
@@ -76,7 +77,7 @@ function Briefs({ deal }: { deal: Deal }) {
 
   const openBrief = (brief: Brief) => {
     if (!brief.url) return;
-    if (brief.kind === "link") ch.app.openExternal(brief.url);
+    if (brief.kind === "link") void openLink(brief.url);
     else void ch.files.quickLook(brief.url, brief.filename);
   };
 
@@ -196,7 +197,6 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
       { type: "separator" },
       ...(!popout ? [{ id: "window", label: "Open in new window" }] : []),
       { id: "link", label: "Copy link to deal" },
-      { id: "site", label: "Open on the website" },
       { type: "separator" },
       { id: "delete", label: "Delete deal…" },
     ]);
@@ -204,7 +204,6 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
     if (choice === "duplicate") openDealForm({ duplicateOf: deal! });
     if (choice === "window") ch.window.popout({ kind: "deal", id: deal!.id, title: deal!.brand_name });
     if (choice === "link") void navigator.clipboard.writeText(`${(await ch.info()).origin}/hub/deals/${deal!.id}`);
-    if (choice === "site") ch.app.openSite(`/hub/deals/${deal!.id}`);
     if (choice === "delete" && window.confirm(`Delete this deal?\n\nThis can't be undone.`)) {
       try { await deleteDeal(deal!.id); onClose(); } catch { window.alert("Couldn't delete the deal."); }
     }

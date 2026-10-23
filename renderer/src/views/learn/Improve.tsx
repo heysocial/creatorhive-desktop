@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { ArrowUpRight, Check, ChevronDown, ChevronRight, Lock, Sparkles, Target } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { ch } from "../../lib/bridge";
 import { api, queryClient } from "../../lib/api";
 import { useImprove, useImproveResources, type Improve as ImproveData, type Milestone } from "../../lib/learn";
 import { nav } from "../../lib/nav";
@@ -100,7 +99,7 @@ export function ImprovePage() {
             <div className="sec-head"><h2>Resources</h2><span className="muted">Tools, scripts, and manuals to move faster.</span></div>
             <div className="res-grid">
               {(allResources ? resources : resources.slice(0, 3)).map((r) => (
-                <button key={r.id} className="card res-tile" onClick={() => (r.slug === "ai-script-writer" ? nav.open({ kind: "script-writer" }, "learn", "ch") : ch.app.openSite(`/library/resources/${r.slug}`))}>
+                <button key={r.id} className="card res-tile" onClick={() => (r.slug === "ai-script-writer" ? nav.open({ kind: "script-writer" }, "learn", "ch") : nav.open({ kind: "improve-resource", slug: r.slug }, "learn", "ch"))}>
                   <span className="res-top"><span className="t-ico honey"><Sparkles /></span>{r.flagship ? <span className="tag-s honey">Flagship</span> : null}<ArrowUpRight className="arrow" /></span>
                   <b>{r.title}</b><span className="muted">{r.description}</span><small className="faint">{r.type}</small>
                 </button>

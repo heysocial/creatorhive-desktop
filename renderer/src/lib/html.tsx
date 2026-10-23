@@ -1,6 +1,7 @@
 import { memo, type MouseEvent } from "react";
 import { marked } from "marked";
 import { ch } from "./bridge";
+import { openPath, ownSitePath } from "./links";
 
 /*
   Message and post bodies arrive as HTML the server has already sanitized
@@ -55,14 +56,19 @@ function cleaned(html: string) {
   return value;
 }
 
-/** Links in a body open in the browser (site links in the app later, via openPath). */
+/** Links in a body: our own website's pages open in the app, anything else in the browser. */
 export function onBodyClick(event: MouseEvent) {
   const link = (event.target as HTMLElement).closest("a");
   if (!link) return;
   event.preventDefault();
-  const href = link.getAttribute("href") ?? "";
-  if (href.startsWith("/")) ch.app.openSite(href);
-  else if (href) ch.app.openExternal(href);
+  void openLink(link.getAttribute("href") ?? "");
+}
+
+export async function openLink(href: string) {
+  if (!href) return;
+  const path = await ownSitePath(href);
+  if (path) void openPath(path);
+  else if (/^(https?|mailto):/i.test(href)) ch.app.openExternal(href);
 }
 
 const escape = (text: string) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AtSign, BellOff, Bookmark, ChevronDown, Hash, Headphones, Lock, MessagesSquare, Plus, SquarePen } from "lucide-react";
 import { ch } from "../lib/bridge";
 import { api } from "../lib/api";
@@ -7,6 +7,7 @@ import { addSection, refreshHs, setPrefs, useHsSidebar, useHuddles, type HsChann
 import { Avatar, channelName } from "../lib/ui";
 import { promptText } from "../views/hub/DealPanel";
 import { HuddleBar } from "../views/heysocial/Huddle";
+import { HsPreferences } from "../views/heysocial/Preferences";
 import { SidebarItem, Skeleton } from "./parts";
 
 /*
@@ -121,6 +122,12 @@ export function HeySocialSidebar() {
   const { data, isLoading } = useHsSidebar();
   const huddles = useHuddles().data;
   const [collapsed, toggleBuiltin] = useBuiltinCollapsed();
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  useEffect(() => {
+    const open = () => setPrefsOpen(true);
+    window.addEventListener("ch:hs-preferences", open);
+    return () => window.removeEventListener("ch:hs-preferences", open);
+  }, []);
   const isMember = data?.access === "member";
   const liveIds = useMemo(() => new Set((huddles?.huddles ?? []).map((h) => h.target.id)), [huddles]);
 
@@ -148,12 +155,12 @@ export function HeySocialSidebar() {
       ...(isMember ? [{ id: "create", label: "Create a channel…" }, { id: "browse", label: "Browse channels" }] : []),
       { id: "section", label: "Create a section…" },
       { type: "separator" },
-      { id: "prefs", label: "Preferences and themes (website)" },
+      { id: "prefs", label: "Preferences and themes…" },
     ]);
     if (choice === "create") window.dispatchEvent(new Event("ch:hs-create-channel"));
     if (choice === "browse") window.dispatchEvent(new Event("ch:hs-browse"));
     if (choice === "section") { const name = await promptText("New section"); if (name) await addSection(name.slice(0, 40)); }
-    if (choice === "prefs") ch.app.openSite("/hey-social/settings");
+    if (choice === "prefs") setPrefsOpen(true);
   }
 
   async function sectionMenu(section: Section) {
@@ -202,6 +209,7 @@ export function HeySocialSidebar() {
         ) : null}
       </div>
       <HuddleBar />
+      {prefsOpen ? <HsPreferences onClose={() => setPrefsOpen(false)} /> : null}
     </>
   );
 }

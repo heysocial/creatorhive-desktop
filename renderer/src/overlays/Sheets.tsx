@@ -1,7 +1,5 @@
 import { useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { ch, type SessionUser } from "../lib/bridge";
-import { commands } from "../lib/commands";
 
 function Sheet({ title, onClose, children, width }: { title: string; onClose: () => void; children: ReactNode; width?: number }) {
   useEffect(() => {
@@ -84,25 +82,6 @@ export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
             {rows.map(([label, keys]) => <div key={label} className="sc">{label}<kbd>{keys}</kbd></div>)}
           </div>
         ))}
-      </div>
-    </Sheet>
-  );
-}
-
-export function SettingsSheet({ user, version, onClose }: { user: SessionUser; version: string; onClose: () => void }) {
-  return (
-    <Sheet title="Settings" onClose={onClose} width={480}>
-      <div style={{ padding: "18px 20px 20px", display: "flex", flexDirection: "column", gap: 12, fontSize: 13.5 }}>
-        <div><div className="faint" style={{ fontSize: 12 }}>Signed in as</div><b>{user.name}</b> <span className="muted">{user.email}</span></div>
-        <p className="muted" style={{ lineHeight: 1.5 }}>
-          The Settings window (notifications, Dock badge, sound and more) comes in Phase 4. Until then, notifications are
-          set from the menu bar icon, and your account settings are on the website.
-        </p>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn" onClick={() => ch.app.openSite("/settings")}>Open settings on the website</button>
-          <button className="btn" style={{ marginLeft: "auto" }} onClick={() => { onClose(); commands.run("sign-out"); }}>Sign out</button>
-        </div>
-        <div className="faint" style={{ fontSize: 12 }}>Version {version}</div>
       </div>
     </Sheet>
   );

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Download, FileText, Loader2, Pencil, Send } from "lucide-react";
 import { InvoiceEditor } from "./InvoiceEditor";
+import { InvoiceDetailsForm, useInvoiceProfile } from "./InvoiceDetails";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
@@ -61,17 +62,39 @@ function stateLine(invoice: Invoice, deal: Deal | undefined) {
   return `${invoice.number} · Draft${deal?.status === "delivered" ? " · deal delivered" : ""}`;
 }
 
-export async function createInvoice(deal: Deal) {
+/** Makes the deal's invoice; false when your invoice details aren't set up yet. */
+async function createInvoice(deal: Deal): Promise<boolean> {
   try {
     await api(`/api/hub/deals/${deal.id}/invoice`, { method: "POST" });
   } catch (error) {
-    if (error instanceof ApiError && error.code === "PROFILE_NOT_SET_UP") {
-      if (window.confirm("Add your invoice details first (business name and email). Open them on the website?")) ch.app.openSite(`/settings/invoice?returnTo=/hub/deals/${deal.id}`);
-      return;
-    }
-    if (!(error instanceof ApiError && error.code === "ALREADY_EXISTS")) { window.alert("Couldn't create the invoice."); return; }
+    if (error instanceof ApiError && error.code === "PROFILE_NOT_SET_UP") return false;
+    if (!(error instanceof ApiError && error.code === "ALREADY_EXISTS")) { window.alert("Couldn't create the invoice."); return true; }
   }
   await queryClient.invalidateQueries({ queryKey: ["hub", "invoice", deal.id] });
+  return true;
+}
+
+/** Create invoice: asks for your invoice details first if they're missing, then makes it. */
+function CreateInvoice({ deal, children }: { deal: Deal; children: (start: () => void, busy: boolean) => ReactNode }) {
+  const [busy, setBusy] = useState(false);
+  const [needsDetails, setNeedsDetails] = useState(false);
+  const profile = useInvoiceProfile();
+  const start = async () => {
+    setBusy(true);
+    if (!(await createInvoice(deal))) setNeedsDetails(true);
+    setBusy(false);
+  };
+  return (
+    <>
+      {children(() => void start(), busy)}
+      {needsDetails ? (
+        <Modal title="Your invoice details" width={640} onClose={() => setNeedsDetails(false)}>
+          <p className="muted" style={{ marginTop: 0 }}>Set this up once. Every invoice you create starts with these details, and you can still change anything on a single invoice.</p>
+          {profile.data ? <InvoiceDetailsForm compact profile={profile.data} onSaved={(saved) => { if (saved.isSetUp) { setNeedsDetails(false); void start(); } }} /> : <p className="muted">{profile.isError ? "Couldn't load your details." : "Loading…"}</p>}
+        </Modal>
+      ) : null}
+    </>
+  );
 }
 
 export function InvoicePaper({ invoice }: { invoice: Invoice }) {
@@ -165,12 +188,12 @@ export function InvoiceSection({ deal }: { deal: Deal }) {
   const inv = data.invoice;
   if (!inv) {
     if (!(deal.status === "delivered" || deal.status === "completed") || dismissed) {
-      return data.canEdit ? <section className="dp-sec"><span className="section-label">Invoice</span><button className="link add" onClick={() => void createInvoice(deal)}>+ Create invoice</button></section> : null;
+      return data.canEdit ? <section className="dp-sec"><span className="section-label">Invoice</span><CreateInvoice deal={deal}>{(start, busy) => <button className="link add" disabled={busy} onClick={start}>+ Create invoice</button>}</CreateInvoice></section> : null;
     }
     return (
       <section className="dp-sec invoice-offer">
         <b>{deal.brand_name} is delivered — send the invoice</b>
-        <div className="row"><button className="btn honey" onClick={() => void createInvoice(deal)}><FileText />Create invoice</button>
+        <div className="row"><CreateInvoice deal={deal}>{(start, busy) => <button className="btn honey" disabled={busy} onClick={start}>{busy ? <Loader2 className="spin" /> : <FileText />}Create invoice</button>}</CreateInvoice>
           <button className="btn" onClick={() => { setDismissed(true); try { localStorage.setItem(`hub.invoice.offer.${deal.id}`, "no"); } catch { /* fine */ } }}>Not now</button></div>
       </section>
     );

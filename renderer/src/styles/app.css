@@ -1199,6 +1199,8 @@ html.is-popout body { background: var(--card); }
 .set-card { background: var(--card); border-radius: 12px; box-shadow: 0 0 0 .5px var(--line-strong); }
 .set-row { display: flex; align-items: center; gap: 16px; padding: 11px 16px; min-height: 52px; }
 .set-row + .set-row { border-top: 1px solid var(--line); }
+.set-row.set-form { align-items: flex-start; }
+.set-fields { display: flex; flex-direction: column; gap: 8px; width: 280px; flex: none; }
 .set-row > span:first-child { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .set-row b { font-weight: 500; font-size: 14px; }
 .set-row small { font-size: 12px; color: var(--ink-3); }
@@ -1470,6 +1472,10 @@ html.is-popout body { background: var(--card); }
 .pe-toolbar > i { width: 1px; height: 18px; background: var(--line-strong); margin: 0 4px; }
 .pe-toolbar .save-state { margin-left: auto; padding-right: 6px; }
 .doc-body.editable { outline: none; min-height: 300px; user-select: text; cursor: text; }
+.doc-body.editable:focus, .doc-body.editable:focus-visible { outline: none; box-shadow: none; }
+.doc-body.editable .ProseMirror-selectednode { outline: none; box-shadow: 0 0 0 2px rgba(255,190,46,.55); border-radius: 10px; }
+.doc-img-loading { display: grid; place-items: center; height: 120px; border-radius: 10px; background: var(--fill-2, rgba(127,127,127,.08)); color: var(--ink-4); }
+.doc-img-loading svg { width: 18px; height: 18px; }
 .doc-body.editable p.is-empty::before, .doc-body.editable .is-empty::before { content: attr(data-placeholder); color: var(--ink-4); float: left; height: 0; pointer-events: none; }
 .doc-body ul[data-type="taskList"] { list-style: none; padding-left: 4px; }
 .doc-body ul[data-type="taskList"] li { display: flex; gap: 8px; align-items: flex-start; }
@@ -1481,3 +1487,70 @@ html.is-popout body { background: var(--card); }
 .doc-body [data-type="details"].is-open > button::before { content: "▾"; }
 .doc-body hr { border: 0; border-top: 1px solid var(--line-strong); margin: 14px 0; }
 .doc-body .ProseMirror-selectednode { outline: 2px solid var(--blue); border-radius: 8px; }
+
+/* ---------- Invoice details (Settings → Hub & invoices, and before a first invoice) ---------- */
+.idf { display: flex; flex-direction: column; gap: 22px; }
+.idf-card { padding: 18px 20px; }
+.idf section { display: flex; flex-direction: column; gap: 10px; }
+.idf h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.idf section > p { margin: -6px 0 2px; font-size: 12.5px; }
+.idf label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--ink-2); font-weight: 500; }
+.idf label small { font-weight: 400; }
+.idf .field { width: 100%; }
+.idf-grid { display: grid; gap: 10px; }
+.idf-grid.two { grid-template-columns: 1fr 1fr; }
+.idf-grid.three { grid-template-columns: 1.3fr 1fr 1fr; }
+.idf-logo { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.idf-logo img, .idf-logo-empty { width: 48px; height: 48px; border-radius: 10px; object-fit: contain; background: var(--bg-2, rgba(127,127,127,.08)); flex: none; }
+.idf-logo-empty { display: grid; place-items: center; color: var(--ink-4); }
+.idf-logo-empty svg { width: 18px; height: 18px; }
+.idf-logo > div { display: flex; flex-direction: column; font-size: 13px; }
+.idf-method { display: grid; grid-template-columns: 20px 90px 1fr; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+.idf-method.bank { border-top: none; }
+.idf-method.bank .idf-grid { grid-column: 2 / -1; }
+.idf-method.bank > b { grid-column: 2 / -1; }
+.idf-check { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--ink-4); background: transparent; display: grid; place-items: center; padding: 0; color: var(--on-honey); }
+.idf-check.on { background: var(--honey); border-color: var(--honey); }
+.idf-check svg { width: 12px; height: 12px; stroke-width: 3; }
+.idf-foot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; font-size: 13px; }
+.idf.compact { gap: 18px; }
+
+/* ---------- Share my Hub ---------- */
+.share-hub { display: flex; flex-direction: column; gap: 12px; font-size: 13.5px; }
+.share-form { display: flex; flex-direction: column; gap: 6px; }
+.share-form .field { flex: 1; }
+.share-list { display: flex; flex-direction: column; }
+.share-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.share-row .t { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.share-row .t b { font-weight: 500; }
+.share-row.invite { flex-wrap: wrap; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.share-pill { gap: 8px; }
+.share-pill .stack { display: inline-flex; }
+.share-pill .stack > * + * { margin-left: -6px; }
+
+/* ---------- Hey Social preferences ---------- */
+.hs-themes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.hs-theme { display: flex; flex-direction: column; gap: 6px; align-items: stretch; background: none; border: none; padding: 0; font-size: 12.5px; color: var(--ink-2); text-align: left; cursor: default; }
+.hs-theme .sw { position: relative; height: 56px; border-radius: 10px; padding: 9px; display: flex; flex-direction: column; gap: 5px; background: var(--side, #FBFAF8); color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); }
+.hs-theme .sw i { display: block; height: 5px; border-radius: 3px; background: currentColor; opacity: .55; width: 70%; }
+.hs-theme .sw i:nth-child(2) { width: 50%; }
+.hs-theme .sw i:nth-child(3) { width: 60%; }
+.hs-theme.on .sw { box-shadow: 0 0 0 2px var(--honey); }
+.hs-theme .tick { position: absolute; right: 7px; bottom: 7px; width: 15px; height: 15px; padding: 2px; border-radius: 50%; background: var(--honey); color: var(--on-honey); stroke-width: 3; opacity: 1; }
+.hs-labels { display: flex; flex-direction: column; gap: 8px; }
+.hs-labels label { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 10px; font-size: 13px; }
+
+/* ---------- Upgrade (locked course) ---------- */
+.upgrade { display: flex; flex-direction: column; align-items: stretch; gap: 10px; text-align: center; padding: 8px 6px 2px; }
+.upgrade-mark { align-self: center; width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center; background: var(--honey); color: var(--on-honey); }
+.upgrade-mark svg { width: 26px; height: 26px; }
+.upgrade h2 { margin: 6px 0 0; font-size: 19px; }
+.upgrade p { margin: 0; line-height: 1.45; }
+.upgrade ul { list-style: none; padding: 0; margin: 6px 0; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.upgrade li { display: flex; gap: 8px; align-items: center; font-size: 13.5px; }
+.upgrade li svg { width: 17px; height: 17px; color: var(--honey); stroke-width: 2.6; flex: none; }
+.upgrade .btn { justify-content: center; }
+.upgrade .btn.ghost { background: transparent; box-shadow: none; color: var(--ink-3); }
+
+.signin-sub { margin: 0 0 6px; font-size: 13px; color: var(--ink-3); text-align: left; }
+.signin-note { padding: 12px 14px; border-radius: 12px; background: rgba(52,199,89,.12); color: var(--ink-2); font-size: 13.5px; line-height: 1.45; text-align: left; }

@@ -5,6 +5,7 @@ import { ch, type DesktopSettings, type SessionUser } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
 import { Avatar } from "../../lib/ui";
 import { SHORTCUTS } from "../../overlays/Sheets";
+import { InvoiceDetailsForm, useInvoiceProfile } from "../hub/InvoiceDetails";
 
 /* The Settings window (⌘,): what this Mac does, and your account on the server. */
 
@@ -126,43 +127,12 @@ function Shortcuts() {
   );
 }
 
-interface InvoiceProfile { businessName: string; ownerName: string; email: string; paypal: string; zelle: string; cashapp: string; defaultTermsDays: number; numberPrefix: string; nextNumber: number; isSetUp: boolean }
-
 function HubInvoices() {
-  const profile = useQuery({ queryKey: ["invoice-profile"], retry: false, queryFn: async () => { try { return (await api<{ profile: InvoiceProfile }>("/api/invoice-profile")).profile; } catch { return null; } } });
-  const [draft, setDraft] = useState<Partial<InvoiceProfile>>({});
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const profile = useInvoiceProfile();
   if (profile.isLoading) return <p className="muted">Loading…</p>;
+  if (profile.isError) return <p className="muted">Couldn't load your invoice details.</p>;
   if (!profile.data) return <p className="muted">Invoices aren't switched on for your account yet.</p>;
-  const v = { ...profile.data, ...draft };
-  const field = (key: keyof InvoiceProfile, label: string, type = "text") => (
-    <Row title={label}><input className="field" type={type} value={String(v[key] ?? "")} onChange={(e) => { setDraft({ ...draft, [key]: type === "number" ? Number(e.target.value) : e.target.value }); setSaved(false); }} /></Row>
-  );
-  return (
-    <>
-      <Group title="Invoice details">
-        {field("businessName", "Business name")}
-        {field("ownerName", "Your name")}
-        {field("email", "Email (clients reply here)", "email")}
-        {field("defaultTermsDays", "Default terms (days)", "number")}
-        {field("numberPrefix", "Invoice number prefix")}
-      </Group>
-      <Group title="How clients pay you">
-        {field("paypal", "PayPal")}
-        {field("zelle", "Zelle")}
-        {field("cashapp", "Cash App")}
-      </Group>
-      <div className="row" style={{ justifyContent: "flex-end", gap: 10 }}>
-        {saved ? <span className="muted">Saved</span> : null}
-        <button className="btn" onClick={() => ch.app.openSite("/settings/invoice")}>Logo and bank details on the website</button>
-        <button className="btn honey" disabled={saving || Object.keys(draft).length === 0} onClick={async () => {
-          setSaving(true);
-          try { await api("/api/invoice-profile", { method: "PUT", body: draft }); setDraft({}); setSaved(true); void profile.refetch(); } catch { window.alert("Couldn't save."); } finally { setSaving(false); }
-        }}>{saving ? <Loader2 className="spin" /> : null}Save</button>
-      </div>
-    </>
-  );
+  return <div className="set-card idf-card"><InvoiceDetailsForm profile={profile.data} /></div>;
 }
 
 function Privacy() {
@@ -194,7 +164,7 @@ function Privacy() {
   );
 }
 
-interface Profile { name: string; avatarUrl: string | null; bio: string | null; instagram: string | null; location: string | null; headline: string | null }
+interface Profile { name: string; avatarUrl: string | null; bio: string | null; instagram: string | null; location: string | null; headline: string | null; gender: "male" | "female" | "unspecified" | null }
 
 function Account({ user }: { user: SessionUser }) {
   const profile = useQuery({ queryKey: ["my-profile"], queryFn: async () => (await api<{ profile: Profile }>("/api/profile")).profile });
@@ -235,6 +205,11 @@ function Account({ user }: { user: SessionUser }) {
         {field("location", "Location", 100)}
         {field("instagram", "Instagram", 60)}
         {field("bio", "Bio", 160, true)}
+        <Row title="Gender" sub="Sets King Bee or Queen Bee at the top tier">
+          <select value={v.gender ?? ""} onChange={(e) => setDraft({ ...draft, gender: (e.target.value || null) as Profile["gender"] })}>
+            <option value="">Not set</option><option value="female">Female</option><option value="male">Male</option><option value="unspecified">Prefer not to say</option>
+          </select>
+        </Row>
         <div className="set-row" style={{ justifyContent: "flex-end" }}>
           <button className="btn honey" disabled={busy || Object.keys(draft).length === 0} onClick={async () => {
             setBusy(true);
@@ -246,15 +221,94 @@ function Account({ user }: { user: SessionUser }) {
         </div>
       </Group>
       <Group title="Sign-in">
-        <Row title="Email and password" sub={user.email}><button className="btn" onClick={() => ch.app.openSite("/settings")}>Change on the website</button></Row>
+        <ChangeEmail current={user.email} />
+        <ChangePassword />
         <Row title="Sign out of this Mac"><button className="btn" onClick={() => void ch.auth.signOut()}>Sign out</button></Row>
       </Group>
     </>
   );
 }
 
+const ACCOUNT_ERRORS: Record<string, string> = {
+  current_password_incorrect: "Your current password isn't right.",
+  invalid_email: "That doesn't look like an email address.",
+  email_already_in_use: "Another account already uses that email.",
+  invalid_new_password: "Your new password needs at least 8 characters.",
+  password_unchanged: "That's your current password. Pick a new one.",
+};
+const accountError = (e: unknown) => (e instanceof ApiError && ACCOUNT_ERRORS[e.code ?? ""]) || "Couldn't save. Try again.";
+
+/* Both changes ask for your current password, as the website does. */
+function ChangeEmail({ current }: { current: string }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [state, setState] = useState<{ busy?: boolean; error?: string; done?: string }>({});
+  const [shown, setShown] = useState(current);
+  if (!open) return <Row title="Email" sub={state.done ? `Changed to ${state.done}` : shown}><button className="btn" onClick={() => { setOpen(true); setEmail(""); setPassword(""); setState({}); }}>Change email</button></Row>;
+  return (
+    <div className="set-row set-form">
+      <span><b>Change email</b><small>You'll sign in with the new one from now on.</small></span>
+      <form className="set-fields" onSubmit={async (e) => {
+        e.preventDefault();
+        setState({ busy: true });
+        try {
+          const result = await api<{ email: string }>("/api/settings/account", { method: "PATCH", body: { action: "email", email, currentPassword: password } });
+          setShown(result.email); setState({ done: result.email }); setOpen(false);
+        } catch (err) { setState({ error: accountError(err) }); }
+      }}>
+        <input className="field" type="email" placeholder="New email" autoFocus required maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input className="field" type="password" placeholder="Current password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        {state.error ? <small className="late-text">{state.error}</small> : null}
+        <span className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+          <button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button>
+          <button className="btn honey" disabled={state.busy || !email || !password}>{state.busy ? <Loader2 className="spin" /> : null}Save email</button>
+        </span>
+      </form>
+    </div>
+  );
+}
+
+function ChangePassword() {
+  const [open, setOpen] = useState(false);
+  const [fields, setFields] = useState({ current: "", next: "", again: "" });
+  const [state, setState] = useState<{ busy?: boolean; error?: string; done?: boolean }>({});
+  if (!open) return <Row title="Password" sub={state.done ? "Changed" : "At least 8 characters"}><button className="btn" onClick={() => { setOpen(true); setFields({ current: "", next: "", again: "" }); setState({}); }}>Change password</button></Row>;
+  const set = (key: keyof typeof fields) => (e: React.ChangeEvent<HTMLInputElement>) => setFields({ ...fields, [key]: e.target.value });
+  return (
+    <div className="set-row set-form">
+      <span><b>Change password</b><small>Other devices stay signed in.</small></span>
+      <form className="set-fields" onSubmit={async (e) => {
+        e.preventDefault();
+        if (fields.next !== fields.again) { setState({ error: "The new passwords don't match." }); return; }
+        setState({ busy: true });
+        try {
+          await api("/api/settings/account", { method: "PATCH", body: { action: "password", currentPassword: fields.current, newPassword: fields.next } });
+          setState({ done: true }); setOpen(false);
+        } catch (err) { setState({ error: accountError(err) }); }
+      }}>
+        <input className="field" type="password" placeholder="Current password" autoFocus required value={fields.current} onChange={set("current")} />
+        <input className="field" type="password" placeholder="New password" required minLength={8} value={fields.next} onChange={set("next")} />
+        <input className="field" type="password" placeholder="New password again" required value={fields.again} onChange={set("again")} />
+        {state.error ? <small className="late-text">{state.error}</small> : null}
+        <span className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+          <button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button>
+          <button className="btn honey" disabled={state.busy || !fields.current || fields.next.length < 8}>{state.busy ? <Loader2 className="spin" /> : null}Save password</button>
+        </span>
+      </form>
+    </div>
+  );
+}
+
 export function SettingsWindow({ user }: { user: SessionUser }) {
-  const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(location.hash.split("?")[1] ?? "").get("tab") as Tab) || "general");
+  const tabInHash = () => new URLSearchParams(location.hash.split("?")[1] ?? "").get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(() => tabInHash() || "general");
+  // Edit profile, invoice details and the like open this window on their tab.
+  useEffect(() => {
+    const follow = () => { const next = tabInHash(); if (next && TABS.some((t) => t.id === next)) setTab(next); };
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, []);
   const current = TABS.find((t) => t.id === tab)!;
   return (
     <div className="settings-window">

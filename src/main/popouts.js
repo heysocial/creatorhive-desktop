@@ -18,9 +18,12 @@ function open(target, chrome) {
   const kind = target?.kind;
   const id = target?.id;
   if (!KINDS.has(kind) || typeof id !== "string" || !ID.test(id)) return;
-  const key = `${kind}:${id}`;
+  // One Settings window; its id names the tab to show ("main" keeps the last one).
+  const tab = kind === "settings" && id !== "main" ? id : null;
+  const key = kind === "settings" ? "settings:main" : `${kind}:${id}`;
   const existing = windows.get(key);
   if (existing && !existing.isDestroyed()) {
+    if (tab) void existing.webContents.executeJavaScript(`location.hash = ${JSON.stringify(`popout/settings/main?tab=${tab}`)}`);
     existing.show();
     existing.focus();
     return;
@@ -66,7 +69,7 @@ function open(target, chrome) {
     event.preventDefault();
   });
 
-  const hash = `popout/${kind}/${encodeURIComponent(id)}`;
+  const hash = kind === "settings" ? `popout/settings/main${tab ? `?tab=${tab}` : ""}` : `popout/${kind}/${encodeURIComponent(id)}`;
   if (RENDERER_URL) void win.loadURL(`${RENDERER_URL}#${hash}`);
   else void win.loadFile(path.join(__dirname, "..", "..", "renderer", "dist", "index.html"), { hash });
 }

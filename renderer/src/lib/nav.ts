@@ -24,6 +24,7 @@ export type View =
   | { kind: "activity"; filter?: "all" | "mentions" | "comments" | "reactions" | "hub" | "announcements" }
   | { kind: "course"; id: string; lessonId?: string }
   | { kind: "resource"; id: string }
+  | { kind: "improve-resource"; slug: string }
   | { kind: "script-writer"; chatId?: string }
   | { kind: "threads" }
   | { kind: "mentions" }

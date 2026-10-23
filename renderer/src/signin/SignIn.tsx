@@ -21,12 +21,40 @@ function GoogleMark() {
   );
 }
 
+/** Asks for a reset email (POST /api/auth/forgot-password); the link in it opens the website's reset page. */
+function ForgotPassword({ initialEmail, onBack }: { initialEmail: string; onBack: () => void }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [state, setState] = useState<"idle" | "busy" | "sent" | "error">("idle");
+  return (
+    <form className="signin-form" onSubmit={async (event) => {
+      event.preventDefault();
+      if (!email.trim() || state === "busy") return;
+      setState("busy");
+      setState((await ch.auth.forgotPassword(email.trim())).ok ? "sent" : "error");
+    }}>
+      {state === "sent" ? (
+        <div className="signin-note" role="status">If an account exists for {email.trim()}, reset instructions are on the way. Check your email, then come back to sign in.</div>
+      ) : (
+        <>
+          <p className="signin-sub">Type your email and we'll send you a link to choose a new password.</p>
+          <label htmlFor="reset-email">Email</label>
+          <input id="reset-email" className="field" type="email" autoComplete="username" autoFocus value={email} onChange={(event) => setEmail(event.target.value)} />
+          {state === "error" ? <div className="signin-error" role="alert">Couldn't send the email. Check your connection and try again.</div> : null}
+          <button type="submit" className="btn honey lg" style={{ marginTop: 10 }} disabled={state === "busy" || !email.trim()}>{state === "busy" ? "Sending…" : "Send reset link"}</button>
+        </>
+      )}
+      <button type="button" className="btn lg" style={{ marginTop: 6 }} onClick={onBack}>Back to sign in</button>
+    </form>
+  );
+}
+
 export function SignIn({ onSignedIn }: { onSignedIn: (user: SessionUser) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Hidden until the server offers it, so the app can ship before the website does.
+  const [forgot, setForgot] = useState(false);
   const [googleOffered, setGoogleOffered] = useState(false);
   const [googleWaiting, setGoogleWaiting] = useState(false);
 
@@ -63,6 +91,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: SessionUser) => void
         <h1>Welcome to CreatorHive</h1>
         <p>Sign in to your community, Hub and messages.</p>
 
+        {forgot ? <ForgotPassword initialEmail={email} onBack={() => setForgot(false)} /> : (
         <form className="signin-form" onSubmit={submit}>
           {googleOffered ? (
             <>
@@ -85,7 +114,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: SessionUser) => void
             onChange={(event) => setEmail(event.target.value)} />
           <label htmlFor="password">
             Password
-            <button type="button" onClick={() => ch.app.openSite("/forgot-password")}>Forgot password?</button>
+            <button type="button" onClick={() => setForgot(true)}>Forgot password?</button>
           </label>
           <input id="password" className="field" type="password" autoComplete="current-password" value={password}
             onChange={(event) => setPassword(event.target.value)} />
@@ -94,6 +123,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: SessionUser) => void
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
+        )}
         <p className="signin-foot">Invite-only. Contact your CSM if you don't have access yet.</p>
       </div>
     </div>

@@ -22,6 +22,16 @@ export function locationForPath(target: string): Location | null {
   // A DM or channel opens inside Home, unless the DMs view is already open.
   const chatSection = here.section === "dms" ? "dms" : "home";
 
+  // Paths with an id in them.
+  const deal = /^\/hub\/deals\/([0-9a-f-]{36})$/i.exec(url.pathname)?.[1];
+  if (deal) return { ws: "ch", section: "hub", view: { kind: "hub", page: "deals", dealId: deal } };
+  const course = /^\/courses\/([^/]+)$/.exec(url.pathname)?.[1];
+  if (course) return { ws: "ch", section: "learn", view: { kind: "course", id: decodeURIComponent(course), lessonId: params.get("lesson") ?? undefined } };
+  const page = /^\/resources\/([0-9a-f-]{36})$/i.exec(url.pathname)?.[1] ?? (url.pathname === "/resources" ? params.get("page") : null);
+  if (page) return { ws: "ch", section: "learn", view: { kind: "resource", id: page } };
+  const guide = /^\/library\/resources\/([\w-]+)$/.exec(url.pathname)?.[1];
+  if (guide) return { ws: "ch", section: "learn", view: guide === "ai-script-writer" ? { kind: "script-writer" } : { kind: "improve-resource", slug: guide } };
+
   switch (url.pathname) {
     case "/":
       return { ws: "ch", section: "home", view: params.get("post") ? { kind: "feed", postId: params.get("post")! } : { kind: "feed" } };
@@ -64,10 +74,21 @@ export function locationForPath(target: string): Location | null {
       return { ws: "ch", section: "hub", view: { kind: "hub", page: "dashboard" } };
     case "/hub/clients":
       return { ws: "ch", section: "hub", view: { kind: "hub", page: "clients" } };
+    case "/hub/cash":
+      return { ws: "ch", section: "hub", view: { kind: "hub", page: "dashboard" } };
+    case "/hub/deals":
+      return { ws: "ch", section: "hub", view: { kind: "hub", page: "deals" } };
     case "/events":
-      return { ws: "ch", section: "home", view: { kind: "events" } };
-    case "/profile":
-      return null;
+      return { ws: "ch", section: "home", view: { kind: "events", eventId: params.get("event") ?? undefined } };
+    case "/today":
+      return { ws: "ch", section: "home", view: { kind: "today" } };
+    case "/resources":
+      return { ws: "ch", section: "learn", view: { kind: "learn", page: "resources" } };
+    case "/library":
+      return { ws: "ch", section: "learn", view: { kind: "learn", page: "improve" } };
+    case "/hey-social/people":
+    case "/hey-social/search":
+      return { ws: "hs", section: "home", view: { kind: "threads" } };
     case "/leaderboard":
       return { ws: "ch", section: "home", view: { kind: "leaderboard" } };
     case "/members":
@@ -79,9 +100,41 @@ export function locationForPath(target: string): Location | null {
   }
 }
 
-/** Go to a website path in the app, or on the website if the app has no such page yet. */
-export function openPath(target: string) {
+/* Website pages that are a window or a dialog in the app rather than a place. */
+const SETTINGS_TABS: Record<string, Parameters<typeof openSettings>[0]> = { "/settings": "account", "/settings/invoice": "hub" };
+
+/**
+ * Go to a website path in the app. Only the website's own admin, legal and
+ * public pages (Admin, Terms, Privacy, Support, a client's invoice link) are
+ * left to the browser: the app has no copy of them.
+ */
+export async function openPath(target: string) {
   const location = locationForPath(target);
-  if (location) nav.open(location.view, location.section, location.ws);
-  else ch.app.openSite(target);
+  if (location) { nav.open(location.view, location.section, location.ws); return; }
+  const pathname = new URL(target, "https://app.invalid").pathname;
+  if (pathname in SETTINGS_TABS) { openSettings(SETTINGS_TABS[pathname]); return; }
+  if (pathname === "/hey-social/settings") { nav.workspace("hs"); window.dispatchEvent(new Event("ch:hs-preferences")); return; }
+  if (pathname === "/profile") {
+    const { user } = await ch.auth.session();
+    if (user) { nav.open({ kind: "profile", id: user.id }, "home", "ch"); return; }
+  }
+  ch.app.openSite(target);
+}
+
+/** A link's address, as a path on our own website, or null for anywhere else. */
+export async function ownSitePath(href: string): Promise<string | null> {
+  if (href.startsWith("/") && !href.startsWith("//")) return href;
+  try {
+    const url = new URL(href);
+    const { origin } = await ch.info();
+    const ours = [origin, "https://community.creatorhiveacademy.com", "https://creatorhive-app.vercel.app"];
+    return ours.includes(url.origin) ? `${url.pathname}${url.search}${url.hash}` : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The Settings window, on one of its tabs. */
+export function openSettings(tab?: "general" | "notifications" | "appearance" | "shortcuts" | "hub" | "heysocial" | "privacy" | "account") {
+  ch.window.popout({ kind: "settings", id: tab ?? "main" });
 }

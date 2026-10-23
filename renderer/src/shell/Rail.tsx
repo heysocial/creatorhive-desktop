@@ -2,6 +2,7 @@ import { Bell, Bookmark, GraduationCap, House, MessageCircle, Sparkles, type Luc
 import { ch, type SessionUser } from "../lib/bridge";
 import { useChannels, useConversations, useHeySocialAccess } from "../lib/api";
 import { commands } from "../lib/commands";
+import { openSettings } from "../lib/links";
 import { nav, useNav, type Section, SECTIONS } from "../lib/nav";
 import { Avatar, countLabel } from "../lib/ui";
 import { useActivityRows } from "../views/activity/Activity";
@@ -39,12 +40,14 @@ export function Rail({ user }: { user: SessionUser }) {
 
   async function meMenu() {
     const choice = await ch.menu.popup([
-      { id: "profile", label: "View profile on the website" },
+      { id: "profile", label: "View profile" },
+      { id: "edit", label: "Edit profile…" },
       { id: "settings", label: "Settings…", accelerator: "CommandOrControl+," },
       { type: "separator" },
       { id: "sign-out", label: `Sign out ${user.name}` },
     ]);
-    if (choice === "profile") ch.app.openSite("/profile");
+    if (choice === "profile") nav.open({ kind: "profile", id: user.id }, "home", "ch");
+    if (choice === "edit") openSettings("account");
     if (choice === "settings") commands.run("settings");
     if (choice === "sign-out") commands.run("sign-out");
   }

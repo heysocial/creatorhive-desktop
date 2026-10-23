@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, CalendarClock, ChartNoAxesColumn, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Columns3, Download, Layers, Plus, Sparkles, Table2, Users } from "lucide-react";
+import { ArrowUpRight, CalendarClock, ChartNoAxesColumn, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Columns3, Download, Layers, Plus, Sparkles, Table2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { ch } from "../../lib/bridge";
 import { api } from "../../lib/api";
 import {
   BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, active, allDeals, contracted, daysBetween, dealTypeLabel, isDraftPending, localToday,
@@ -12,6 +11,7 @@ import { nav } from "../../lib/nav";
 import { Modal, Monogram, StageButton, StagePill, moveDeal } from "./parts";
 import { openDealForm } from "./DealForm";
 import { openExport } from "./Export";
+import { ShareHubButton } from "./ShareHub";
 
 export type SmartView = "due" | "awaiting" | "retainers";
 
@@ -407,7 +407,7 @@ export function Deals({ board: boardParam, smart }: { board?: Board; smart?: Sma
       </div>
       <div className="acts">
         <button className="btn" onClick={() => openExport()}><Download />Export</button>
-        <button className="btn" onClick={() => ch.app.openSite("/hub?share=1")}><Users />Share my Hub</button>
+        <ShareHubButton />
         <button className="btn" onClick={() => nav.open({ kind: "hub", page: "dashboard" }, "hub", "ch")}><ChartNoAxesCombined />View full dashboard</button>
         <button className="btn honey" onClick={() => openDealForm({})}><Plus />New deal</button>
       </div>
