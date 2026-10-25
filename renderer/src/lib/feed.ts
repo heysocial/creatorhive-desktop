@@ -152,32 +152,11 @@ export async function likeComment(postId: string, comment: Comment) {
   }
 }
 
-/** A stored post, back as the plain text the Mac composer writes: paragraphs, line breaks, links as their words. */
-export function postHtmlToText(html: string) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  const blocks: string[] = [];
-  const text = (node: Node): string => {
-    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
-    if (!(node instanceof HTMLElement)) return "";
-    if (node.tagName === "BR") return "\n";
-    if (node.tagName === "LI") return `• ${[...node.childNodes].map(text).join("")}\n`;
-    return [...node.childNodes].map(text).join("");
-  };
-  for (const node of doc.body.childNodes) {
-    const block = text(node).replace(/\n+$/, "").trim();
-    if (block) blocks.push(block);
-  }
-  return blocks.join("\n\n");
-}
-
-/** Whether saving a post from the Mac would drop formatting the website gave it (bold, lists, mentions…). */
-export const postHasFormatting = (html: string) => /<(strong|b|em|i|u|s|ul|ol|h[1-6]|blockquote|code|pre)[\s>]|data-mention/i.test(html);
-
-/** Edit your own post. Only its words change; pictures and a poll stay as they are. */
-export async function editPost(post: Post, text: string) {
+/** Edit your own post: its formatted words (pictures and a poll stay as they are). The server sanitizes the HTML. */
+export async function editPost(post: Post, html: string) {
   const { post: saved } = await api<{ post: { body: string; edited_at: string | null } }>(`/api/posts/${post.id}`, {
     method: "PATCH",
-    body: { body: textToPostHtml(text) },
+    body: { body: html },
   });
   patchPost(post.id, (p) => ({ ...p, body: saved.body, editedAt: saved.edited_at ?? p.editedAt }));
 }
