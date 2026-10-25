@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ch, type DesktopSettings, type SessionUser } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
 import { Avatar } from "../../lib/ui";
-import { SHORTCUTS } from "../../overlays/Sheets";
+import { useShortcuts } from "../../overlays/Sheets";
 import { InvoiceDetailsForm, useInvoiceProfile } from "../hub/InvoiceDetails";
 
 /* The Settings window (⌘,): what this Mac does, and your account on the server. */
@@ -120,8 +120,9 @@ function Appearance() {
 }
 
 function Shortcuts() {
+  const shortcuts = useShortcuts();
   return (
-    <>{SHORTCUTS.map(([group, rows]) => (
+    <>{shortcuts.map(([group, rows]) => (
       <Group key={group} title={group}>{rows.map(([label, keys]) => <Row key={label} title={label}><kbd className="kbd-lg">{keys}</kbd></Row>)}</Group>
     ))}</>
   );

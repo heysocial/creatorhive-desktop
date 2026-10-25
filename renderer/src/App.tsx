@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ch, type SessionUser } from "./lib/bridge";
 import { queryClient, useHeySocialAccess } from "./lib/api";
 import { commands, type Command } from "./lib/commands";
@@ -23,7 +23,7 @@ import { BrowseChannels, CreateChannel } from "./views/heysocial/Lists";
 import { api } from "./lib/api";
 import { usePresence } from "./lib/realtime";
 
-type Auth = { state: "loading" } | { state: "signedOut" } | { state: "signedIn"; user: SessionUser };
+type Auth = { state: "loading" } | { state: "offline" } | { state: "signedOut" } | { state: "signedIn"; user: SessionUser };
 type Overlay = null | "quick-open" | "shortcuts" | "new-message";
 
 /* ⌥↑/⌥↓ walk the sidebar; with ⇧ they skip to the next unread item. */
@@ -41,20 +41,91 @@ function moveInSidebar(direction: 1 | -1, unreadOnly: boolean) {
   }
 }
 
-/** Touch ID is on and the Mac was locked, slept or just started: nothing shows until you unlock. */
+/**
+ * Touch ID is on and the Mac was locked, slept or just started: nothing shows until you unlock.
+ * When Touch ID doesn't work (wrong finger, lid closed, too many tries) your CreatorHive
+ * password opens it too, and Sign out is always there as the way out.
+ */
 export function LockScreen() {
   const [failed, setFailed] = useState(false);
-  const unlock = useCallback(async () => setFailed(!(await ch.app.unlock())), []);
+  const [usePassword, setUsePassword] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const failedRef = useRef(false);
+  const unlock = useCallback(async () => {
+    const ok = await ch.app.unlock();
+    failedRef.current = !ok;
+    setFailed(!ok);
+  }, []);
   useEffect(() => {
     void unlock();
-    return ch.window.onFocus((focused) => { if (focused) void unlock(); });
+    // Coming back to the window asks again, but not after a failure: the password is the next step then.
+    return ch.window.onFocus((focused) => { if (focused && !failedRef.current) void unlock(); });
   }, [unlock]);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!password || busy) return;
+    setBusy(true);
+    const result = await ch.app.unlockWithPassword(password);
+    setBusy(false);
+    if (result.ok) return;
+    setPassword("");
+    setError(result.error === "offline" ? "Can't check your password while offline. Try Touch ID or check your connection." : "That password isn't right. Try again.");
+  };
   return (
     <div className="lock-screen">
       <img src="./ch-logo.svg" alt="" />
       <h2>CreatorHive is locked</h2>
-      <p className="muted">{failed ? "Touch ID didn't unlock it. Try again." : "Use Touch ID to open it."}</p>
-      <button className="btn honey lg" onClick={() => void unlock()}>Unlock with Touch ID</button>
+      {usePassword ? (
+        <form className="lock-form" onSubmit={(event) => void submit(event)}>
+          <p className="muted">Enter your CreatorHive password to unlock.</p>
+          <input className="field" type="password" autoComplete="current-password" autoFocus aria-label="Password" placeholder="Password"
+            value={password} onChange={(event) => { setPassword(event.target.value); setError(null); }} />
+          {error ? <div className="signin-error" role="alert">{error}</div> : null}
+          <button type="submit" className="btn honey lg" disabled={busy || !password}>{busy ? "Checking…" : "Unlock"}</button>
+          <button type="button" className="btn lg" onClick={() => { setUsePassword(false); setError(null); void unlock(); }}>Use Touch ID</button>
+        </form>
+      ) : (
+        <>
+          <p className="muted">{failed ? "Touch ID didn't unlock it. Try again, or use your password." : "Use Touch ID to open it."}</p>
+          <button className="btn honey lg" onClick={() => void unlock()}>Unlock with Touch ID</button>
+          <button className="btn lg" onClick={() => setUsePassword(true)}>Use password</button>
+        </>
+      )}
+      <button className="lock-signout" onClick={() => void ch.auth.signOut()}>Sign out</button>
+    </div>
+  );
+}
+
+/*
+  Opened with no connection (at login before Wi-Fi is up, on a plane): the
+  saved session can't be checked, which isn't the same as signed out. Keep
+  asking until the server answers; only a real "signed out" shows sign-in.
+*/
+function Offline({ onSession }: { onSession: (user: SessionUser | null) => void }) {
+  const [checking, setChecking] = useState(false);
+  const retry = useCallback(async () => {
+    setChecking(true);
+    const { user, offline } = await ch.auth.session();
+    setChecking(false);
+    if (!offline) onSession(user);
+  }, [onSession]);
+  useEffect(() => {
+    const timer = setInterval(() => void retry(), 5000);
+    const online = () => void retry();
+    window.addEventListener("online", online);
+    const offFocus = ch.window.onFocus((focused) => { if (focused) void retry(); });
+    return () => { clearInterval(timer); window.removeEventListener("online", online); offFocus(); };
+  }, [retry]);
+  return (
+    <div className="signin">
+      <div className="signin-card">
+        <div className="mark"><img src="./ch-logo.svg" alt="" /></div>
+        <h1>Can't reach CreatorHive</h1>
+        <p>You're still signed in. CreatorHive opens on its own as soon as your Mac is back online.</p>
+        <button className="btn honey lg" style={{ marginTop: 10 }} disabled={checking} onClick={() => void retry()}>{checking ? "Connecting…" : "Try again"}</button>
+      </div>
     </div>
   );
 }
@@ -195,7 +266,7 @@ export function App() {
 
   useEffect(() => {
     void ch.info().then(setInfo);
-    void ch.auth.session().then(({ user }) => setAuth(user ? { state: "signedIn", user } : { state: "signedOut" }));
+    void ch.auth.session().then(({ user, offline }) => setAuth(user ? { state: "signedIn", user } : offline ? { state: "offline" } : { state: "signedOut" }));
     // Menu commands arrive before or after sign-in; route them through one place.
     const offCommand = ch.app.onCommand((id) => commands.run(id as Command));
     const offAuth = ch.auth.onChanged(() => {
@@ -210,6 +281,7 @@ export function App() {
   }, []);
 
   if (auth.state === "loading") return <div className="signin" />;
+  if (auth.state === "offline") return <Offline onSession={(user) => setAuth(user ? { state: "signedIn", user } : { state: "signedOut" })} />;
   if (auth.state === "signedOut") return <SignIn onSignedIn={(user) => setAuth({ state: "signedIn", user })} />;
   return <Workspace key={auth.user.id} user={auth.user} info={info} />;
 }

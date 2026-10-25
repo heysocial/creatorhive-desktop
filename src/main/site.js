@@ -63,15 +63,26 @@ async function apiRequest({ method = "GET", path, body } = {}) {
   }
 }
 
-/** The signed-in member, or null. Same shape as the website's `useSession`. */
+/** Whether a session cookie is still saved (the server decides if it's valid). */
+async function hasSessionCookie() {
+  const cookies = await appSession().cookies.get({ url: ORIGIN }).catch(() => []);
+  return cookies.some((cookie) => cookie.name.endsWith("session-token"));
+}
+
+/**
+ * The signed-in member, or null. Same shape as the website's `useSession`.
+ * Undefined when the server can't be reached (offline, or the host is down)
+ * and a session is saved: unknown, not signed out.
+ */
 async function getSession() {
   try {
     const response = await siteFetch("/api/auth/session");
+    if (response.status >= 500) return (await hasSessionCookie()) ? undefined : null;
     if (!response.ok) return null;
     const body = await response.json().catch(() => null);
     return body?.user ? { ...body.user, expires: body.expires } : null;
   } catch {
-    return undefined; // Offline: unknown, not signed out.
+    return (await hasSessionCookie()) ? undefined : null;
   }
 }
 

@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld("ch", {
     share: (url, text) => ipcRenderer.send("app:share", { url, text }),
     isLocked: () => ipcRenderer.invoke("app:isLocked"),
     unlock: () => ipcRenderer.invoke("app:unlock"),
+    unlockWithPassword: (password) => ipcRenderer.invoke("app:unlockWithPassword", password),
     onLocked: listen("app:locked"),
     onRelay: listen("app:relay"),
     onNavigateView: listen("navigate:view"),
