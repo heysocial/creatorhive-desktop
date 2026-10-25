@@ -92,26 +92,73 @@ function Chart({ trend }: { trend: Dash["trend"] }) {
   );
 }
 
-function Bars({ title, sub, rows, onDrill }: { title: string; sub?: string; rows: Breakdown[]; onDrill: (d: Drill) => void }) {
+function Bars({ title, sub, note, rows, onDrill }: { title: string; sub?: string; note?: string; rows: Breakdown[]; onDrill: (d: Drill) => void }) {
   const max = Math.max(1, ...rows.map((r) => r.amount));
-  const useful = rows.some((r) => r.key !== "not_set");
   return (
     <div className="card dash-card">
       <h3>{title}</h3>{sub ? <span className="faint">{sub}</span> : null}
-      {!useful ? <p className="faint">Add a {title.replace("By ", "").toLowerCase()} to your deals to see this.</p> : rows.map((r) => (
+      {rows.map((r) => (
         <button key={r.key} className="bar-row" onClick={() => onDrill({ title: r.label, figure: money(r.amount), ids: r.dealIds })}>
           <span className="bl">{r.label}</span><span className="bv">{money(r.amount)}</span>
           <span className="bt"><i style={{ width: `${(r.amount / max) * 100}%` }} /></span>
         </button>
       ))}
+      {note ? <span className="faint" style={{ fontSize: 12, marginTop: 4 }}>{note}</span> : null}
     </div>
   );
 }
 
-function delta(f: Figure) {
+const tagged = (rows: Breakdown[]) => rows.some((r) => r.key !== "not_set");
+
+/* The website's wording for a range and the period it's compared with (HubAnalyticsDashboard). */
+function during(rangeLabel: string) {
+  if (rangeLabel === "All Time") return "of all time";
+  if (rangeLabel === "This Month") return "this month";
+  return `in the ${rangeLabel.toLowerCase()}`;
+}
+function previousPeriod(range: Range) {
+  return { "7d": "the 7 days before", "30d": "the 30 days before", "90d": "the 90 days before", "1y": "the 12 months before", all: null }[range];
+}
+
+/** "+$12" / "−3", or null when there is nothing to compare or nothing changed. */
+function change(f: Figure, asMoney = false) {
   if (f.previous === null || f.previous === undefined) return null;
-  if (f.previous === 0) return f.value > 0 ? "new" : null;
-  return Math.round(((f.value - f.previous) / f.previous) * 100);
+  const delta = Math.round(f.value - f.previous);
+  if (!delta) return null;
+  return { text: `${delta > 0 ? "+" : "−"}${asMoney ? money(Math.abs(delta)) : Math.abs(delta).toLocaleString("en-US")}`, up: delta > 0 };
+}
+
+/** A stat's foot line: its change against the period before, in words. */
+function Comparison({ f, before, asMoney = false }: { f: Figure; before: string | null; asMoney?: boolean }) {
+  if (f.previous === null || f.previous === undefined || !before) return <>Lifetime</>;
+  const delta = change(f, asMoney);
+  if (!delta) return <>No change vs {before}</>;
+  return <><span className={`delta-text ${delta.up ? "up" : "down"}`}>{delta.text}</span> vs {before}</>;
+}
+
+/*
+  Top brands as the website shows them: collected in the range plus money in
+  play, per brand. Both come from the figures' own deal lists, so they use the
+  very filters the Collected and Money in play numbers use.
+*/
+function topBrands(d: Dash) {
+  const byId = new Map(d.deals.map((deal) => [deal.id, deal]));
+  const brands = new Map<string, { brandName: string; collected: number; inPlay: number; dealIds: string[] }>();
+  const add = (ids: string[] | undefined, key: "collected" | "inPlay") => {
+    for (const id of ids ?? []) {
+      const deal = byId.get(id);
+      if (!deal) continue;
+      const brand = brands.get(deal.brandName) ?? { brandName: deal.brandName, collected: 0, inPlay: 0, dealIds: [] };
+      brand[key] += deal.amount;
+      if (!brand.dealIds.includes(id)) brand.dealIds.push(id);
+      brands.set(deal.brandName, brand);
+    }
+  };
+  add(d.headline.collected.dealIds, "collected");
+  add(d.headline.moneyInPlay.dealIds, "inPlay");
+  return [...brands.values()].filter((b) => b.collected > 0 || b.inPlay > 0)
+    .sort((a, b) => b.collected + b.inPlay - a.collected - a.inPlay || a.brandName.localeCompare(b.brandName))
+    .slice(0, 6);
 }
 
 export function Dashboard() {
@@ -123,10 +170,13 @@ export function Dashboard() {
   const [drill, setDrill] = useState<Drill | null>(null);
   const pick = (r: Range) => { setRange(r); try { localStorage.setItem("ch.hub.range", r); } catch { /* fine */ } };
   const d = data;
-  const change = d ? delta(d.headline.collected) : null;
+  const collectedChange = d ? change(d.headline.collected, true) : null;
+  const when = d ? during(d.rangeLabel) : "";
+  const before = d ? previousPeriod(d.range) : null;
+  const brands = d ? topBrands(d) : [];
 
   return (
-    <div className="page">
+    <div className="page dash-page">
       <div className="mhead">
         <h1>Dashboard</h1><span className="sub">See what's earning, moving, and waiting.</span>
         <div className="acts">
@@ -143,8 +193,8 @@ export function Dashboard() {
               <div className="dh-top">
                 <button className="dh-fig" onClick={() => setDrill({ title: "Collected", figure: money(d.headline.collected.value), ids: d.headline.collected.dealIds ?? [] })}>
                   <span className="muted">Collected</span>
-                  <span><b>{money(d.headline.collected.value)}</b>{change !== null ? <span className={`delta ${change === "new" || change >= 0 ? "up" : "down"}`}>{change === "new" ? "New" : `${change >= 0 ? "▲" : "▼"} ${Math.abs(change)}%`}</span> : null}</span>
-                  <span className="muted">{plural(d.headline.collected.count ?? 0, "payout")} {d.range === "all" ? "in total" : `in the ${d.rangeLabel.toLowerCase()}`}</span>
+                  <span><b>{money(d.headline.collected.value)}</b>{collectedChange ? <span className={`delta ${collectedChange.up ? "up" : "down"}`}>{collectedChange.text}</span> : null}</span>
+                  <span className="muted">{plural(d.headline.collected.count ?? 0, "payout")} {when}{d.headline.collected.previous != null && before ? ` · ${money(d.headline.collected.previous)} ${before}` : ""}</span>
                 </button>
                 <div className="seg">{RANGES.map((r) => <button key={r.id} className={range === r.id ? "on" : ""} onClick={() => pick(r.id)}>{r.label}</button>)}</div>
               </div>
@@ -159,10 +209,10 @@ export function Dashboard() {
                   </button>
                 </div>
                 <button onClick={() => setDrill({ title: "Total deals", figure: String(d.headline.totalDeals.value), ids: d.headline.totalDeals.dealIds ?? [] })}>
-                  <span className="muted">Total deals</span><b>{d.headline.totalDeals.value}</b><small className="muted">{d.range === "all" ? "Lifetime" : `added in the ${d.rangeLabel.toLowerCase()}`}</small>
+                  <span className="muted">Total deals</span><b>{d.headline.totalDeals.value}</b><small className="muted"><Comparison f={d.headline.totalDeals} before={before} /></small>
                 </button>
                 <button onClick={() => setDrill({ title: "Avg deal size", figure: money(d.headline.averageDeal.value), ids: d.headline.averageDeal.dealIds ?? d.headline.totalDeals.dealIds ?? [] })}>
-                  <span className="muted">Avg deal size</span><b>{money(d.headline.averageDeal.value)}</b><small className="muted">across those deals</small>
+                  <span className="muted">Avg deal size</span><b>{money(d.headline.averageDeal.value)}</b><small className="muted"><Comparison f={d.headline.averageDeal} before={before} asMoney /></small>
                 </button>
               </div>
             </div>
@@ -192,16 +242,19 @@ export function Dashboard() {
                 ))}
               </div>
               <div className="card dash-card">
-                <h3>Top brands</h3><span className="faint">Collected</span>
-                {d.topBrands.length === 0 ? <p className="faint">Paid deals show up here.</p> : d.topBrands.map((b) => (
-                  <button key={b.key} className="brand-row" onClick={() => setDrill({ title: b.label, figure: money(b.amount), ids: b.dealIds })}>
-                    <Monogram name={b.label} size={22} /><span>{b.label}</span><b>{money(b.amount)}</b>
+                <h3>Top brands</h3><span className="faint">Collected in {d.rangeLabel.toLowerCase()} + current money in play</span>
+                {brands.length === 0 ? <p className="faint">Brands will appear here once deals are secured or collected.</p> : brands.map((b) => (
+                  <button key={b.brandName} className="brand-row" onClick={() => setDrill({ title: b.brandName, figure: money(b.collected + b.inPlay), ids: b.dealIds })}>
+                    <Monogram name={b.brandName} size={22} /><span>{b.brandName}<small className="faint">{money(b.collected)} collected · {money(b.inPlay)} in play</small></span><b>{money(b.collected + b.inPlay)}</b>
                   </button>
                 ))}
               </div>
-              <Bars title="By source" sub="A deal with several sources counts under each" rows={d.revenueBySource} onDrill={setDrill} />
-              <Bars title="By industry" rows={d.revenueByIndustry} onDrill={setDrill} />
-              <Bars title="By payment method" rows={d.revenueByPaymentMethod} onDrill={setDrill} />
+              {tagged(d.revenueBySource) ? <Bars title="By source" sub="Where collected deals came from" rows={d.revenueBySource} onDrill={setDrill}
+                note="A deal with more than one source counts in full under each one, so these rows can add up to more than you collected." /> : null}
+              {tagged(d.revenueByIndustry) ? <Bars title="By industry" sub="Niches paying you most" rows={d.revenueByIndustry} onDrill={setDrill} /> : null}
+              {tagged(d.revenueByPaymentMethod) ? <Bars title="By payment method" sub="How brands paid you" rows={d.revenueByPaymentMethod} onDrill={setDrill} /> : null}
+              {!tagged(d.revenueBySource) && !tagged(d.revenueByIndustry) && !tagged(d.revenueByPaymentMethod)
+                ? <p className="faint dash-prompt">Source, industry and payment method breakdowns will appear once you tag your deals.</p> : null}
             </div>
           </div>
           <aside className="dash-side scroll">

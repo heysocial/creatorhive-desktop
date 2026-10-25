@@ -753,7 +753,7 @@ html.is-popout body { background: var(--card); }
 .lane-amt { margin-left: auto; font-weight: 600; color: var(--ink-2); }
 .lane-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 2px 2px 20px; min-height: 60px; }
 .lane-empty { border: 1.5px dashed var(--line-strong); border-radius: 12px; padding: 18px; text-align: center; color: var(--ink-4); font-size: 13px; }
-.drop-hint { border: 2px dashed var(--blue); border-radius: 12px; padding: 14px; text-align: center; color: var(--blue); font-weight: 700; font-size: 13px; margin: 0 2px 8px; background: rgba(10,132,255,.06); }
+.drop-hint { position: absolute; top: 10px; right: 10px; z-index: 2; pointer-events: none; white-space: nowrap; border: 1.5px dashed var(--blue); border-radius: 8px; padding: 2px 9px; color: var(--blue); font-weight: 700; font-size: 12px; background: var(--card); }
 .show-more { font-size: 12.5px; font-weight: 600; color: var(--ink-3); padding: 6px; border-radius: 8px; }
 .show-more:hover { background: var(--sel); }
 .deal-card { background: var(--card); border-radius: 12px; box-shadow: 0 0 0 .5px var(--line-strong), 0 1px 2px rgba(0,0,0,.04); padding: 11px 12px; display: flex; flex-direction: column; gap: 7px; text-align: left; touch-action: none; }
@@ -791,11 +791,13 @@ html.is-popout body { background: var(--card); }
 /* Modals (the Hub's sheets and questions) */
 .scrim.center { align-items: center; }
 .modal { background: var(--card); border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.25); display: flex; flex-direction: column; max-height: calc(100% - 60px); max-width: 94vw; }
+.modal:focus-visible { box-shadow: 0 30px 80px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.25); }
 .modal-head { display: flex; align-items: center; gap: 8px; padding: 16px 20px 10px; font-weight: 800; font-size: 17px; }
 .modal-head .iconbtn { margin-left: auto; }
 .modal-body { padding: 4px 20px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
 .modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--line); }
 .form-error { color: #D93636; font-size: 12.5px; margin-right: auto; }
+.modal .field[aria-invalid="true"] { box-shadow: inset 0 0 0 1.5px #D93636; }
 .flabel { display: block; font-size: 12.5px; font-weight: 650; color: var(--ink-2); margin: 10px 0 5px; }
 .modal .field { height: 36px; width: 100%; }
 .field.area { height: auto; min-height: 64px; padding: 8px 12px; resize: vertical; line-height: 1.45; }
@@ -809,6 +811,14 @@ html.is-popout body { background: var(--card); }
 .chip.on { background: var(--honey-soft); box-shadow: inset 0 0 0 1.5px var(--honey); color: var(--honey-ink); }
 .chip.add { color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line-strong); border-style: dashed; }
 .chip .custom { font-size: 9.5px; letter-spacing: .06em; color: var(--ink-4); font-weight: 700; }
+.chip.static { cursor: default; color: var(--ink-3); }
+.chip.static:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.manage-list { display: flex; flex-direction: column; }
+.manage-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.manage-row > span { flex: 1; display: flex; flex-direction: column; min-width: 0; font-size: 14px; }
+.manage-row > span small { font-size: 12px; }
+.manage-row .field { flex: 1; height: 32px; }
+.manage-row .btn.danger { background: #D93636; color: #fff; }
 .chip-add { display: inline-flex; align-items: center; gap: 4px; }
 .chip-add input { height: 30px; border-radius: 15px; border: 0; box-shadow: inset 0 0 0 1px var(--blue); padding: 0 12px; outline: none; width: 160px; font-size: 13px; background: var(--card); }
 .deal-form .grid3 { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; }
@@ -859,7 +869,9 @@ html.is-popout body { background: var(--card); }
 
 /* Deal panel */
 /* The deal opens in the middle of the whole window, not the content pane's corner. */
-.scrim.side.deal-scrim { position: fixed; justify-content: center; align-items: center; z-index: 40; -webkit-app-region: no-drag; }
+/* Same layer as every other scrim, so what the deal opens (Edit, prompts, payday) stacks above it in the order it opened. */
+.scrim.side.deal-scrim { position: fixed; justify-content: center; align-items: center; z-index: 30; -webkit-app-region: no-drag; }
+.deal-panel:focus-visible { box-shadow: 0 30px 80px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.25); }
 .deal-panel { width: min(1080px, 94%); height: min(820px, 94%); background: var(--card); border-radius: 14px; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.25); overflow: hidden; }
 .deal-window { height: 100%; }
 .deal-window .deal-panel { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
@@ -897,6 +909,10 @@ html.is-popout body { background: var(--card); }
 .brief .fmeta b { font-size: 13px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .brief .more { color: var(--ink-3); display: grid; }
 .brief .more svg { width: 16px; height: 16px; }
+.new-briefs { display: flex; flex-direction: column; gap: 8px; }
+.new-briefs .brief:hover { background: none; }
+.brief-link-form { display: grid; grid-template-columns: 1.6fr 1fr auto auto; gap: 8px; align-items: center; }
+.brief-link-form .form-error { grid-column: 1 / -1; }
 .contact { display: flex; gap: 10px; align-items: center; }
 .contact > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; }
 .contact svg { width: 13px; height: 13px; }
@@ -949,7 +965,19 @@ html.is-popout body { background: var(--card); }
 .bar-row.grey .bt i { background: #8C877F; } .bar-row.green .bt i { background: #3DBB6A; }
 .bar-row.sec-outreach .bt i { background: #3B5BDB; } .bar-row.sec-campaigns .bt i { background: #6629A8; } .bar-row.sec-payment .bt i { background: #7A5800; }
 .brand-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 14px; text-align: left; }
-.brand-row > span:not(.mono) { flex: 1; }
+.brand-row > span:not(.mono) { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.brand-row small { font-size: 12px; }
+.delta-text { font-weight: 700; } .delta-text.up { color: #1F8A45; } .delta-text.down { color: #D93636; }
+.dash-prompt { grid-column: 1 / -1; text-align: center; padding: 6px 0; }
+/* A narrow window (or one with the sidebar open): Needs attention moves under the main column. */
+.dash-page { container-type: inline-size; }
+@container (max-width: 860px) {
+  .dash-body { flex-direction: column; overflow-y: auto; }
+  .dash-body > .dash-main, .dash-body > .dash-side { flex: none; overflow: visible; }
+  .dash-side { width: auto; border-left: 0; border-top: 1px solid var(--line); }
+  .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dh-top { flex-wrap: wrap; gap: 10px; }
+}
 
 /* Invoices */
 .inv-body { flex: 1; display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
@@ -964,7 +992,15 @@ html.is-popout body { background: var(--card); }
 .inv-bar .link { white-space: nowrap; }
 .inv-bar { flex-wrap: wrap; display: flex; align-items: center; gap: 10px; width: 100%; max-width: 760px; }
 .inv-bar .inv-badge { margin-left: 0; }
-.inv-bar .acts { margin-left: auto; display: flex; gap: 8px; }
+.inv-bar .acts { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+/* Too narrow for list and invoice side by side: the list goes on top, the invoice gets the width. */
+.inv-page { container-type: inline-size; }
+@container (max-width: 860px) {
+  .inv-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .inv-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 168px; }
+  .inv-preview { padding: 16px 18px 30px; }
+  .invoice-paper { padding: 28px 26px; }
+}
 .invoice-paper { width: 100%; max-width: 700px; background: #fff; color: #1F1E1C; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,.12), 0 0 0 .5px rgba(0,0,0,.1); padding: 40px 44px; display: flex; flex-direction: column; gap: 22px; font-size: 13.5px; }
 .invoice-paper .muted { color: #6E6B66; }
 .invoice-paper small { display: block; font-size: 12px; color: #6E6B66; }
@@ -1390,7 +1426,7 @@ html.is-popout body { background: var(--card); }
 .ks-head h3, .ts-head h3 { display: flex; align-items: center; gap: 8px; font-size: 19px; letter-spacing: -.01em; }
 .ks-head h3 i, .ts-head h3 i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 .ks-head .muted { font-size: 12.5px; }
-.stage-group { padding: 12px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.stage-group { padding: 12px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; position: relative; }
 .stage-group + .stage-group { border-top: 1px solid var(--line); }
 .stage-group > .stage-pill { align-self: flex-start; font-size: 12px; }
 .stage-group > .stage-pill b { margin-left: 4px; }

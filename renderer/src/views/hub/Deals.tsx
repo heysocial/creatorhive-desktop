@@ -261,12 +261,13 @@ function StageGroup({ status, deals, shared, drag, start }: { status: DealStatus
   return (
     <div className={`stage-group ${over ? "over" : ""}`} data-drop-status={status}>
       <span className={`stage-pill s-${status}`}>{STATUS_LABELS[status]} <b>{deals.length}</b></span>
-      {over ? <div className="drop-hint">Drop in {STATUS_LABELS[status]}</div> : null}
+      {/* Laid over the group, so nothing moves under the pointer while dragging. */}
+      {over ? <div className="drop-hint" aria-label={`Drop in ${STATUS_LABELS[status]}`}>Drop here</div> : null}
       {status === "completed" ? <CompletedLane deals={deals} shared={shared} onDragStart={start} draggingId={drag?.deal.id ?? null} /> : (
         <div className="sg-cards">
           {shown.map((d) => <DealCard key={d.id} deal={d} shared={shared} onDragStart={start} dragging={drag?.deal.id === d.id} />)}
           {deals.length > LANE_LIMIT ? <button className="show-more" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show ${deals.length - LANE_LIMIT} more`}</button> : null}
-          {deals.length === 0 && status === "pitching" && !drag ? <button className="show-more" onClick={() => openDealForm({ status: "pitching" })}>+ Add a pitch</button> : null}
+          {deals.length === 0 && status === "pitching" ? <button className="show-more" style={drag ? { visibility: "hidden" } : undefined} onClick={() => openDealForm({ status: "pitching" })}>+ Add a pitch</button> : null}
         </div>
       )}
     </div>
@@ -378,12 +379,13 @@ export function smartDeals(view: SmartView, deals: Deal[]) {
   week.setDate(week.getDate() + 7);
   const inAWeek = week.toISOString().slice(0, 10);
   if (view === "due") return deals.filter((d) => isDraftPending(d.status) && d.draft_due_at && d.draft_due_at <= inAWeek).sort((a, b) => a.draft_due_at!.localeCompare(b.draft_due_at!));
-  if (view === "awaiting") return deals.filter((d) => d.status === "pending_payment" || (d.status === "delivered" && d.payment_expected_at));
+  // As the Dashboard and the website count it: deals in Pending Payment.
+  if (view === "awaiting") return deals.filter((d) => d.status === "pending_payment");
   return deals.filter((d) => d.deal_type === "retainer" && d.status !== "completed");
 }
 export const SMART_LABELS: Record<SmartView, { title: string; sub: string }> = {
   due: { title: "Due this week", sub: "Drafts due in the next 7 days, and any overdue" },
-  awaiting: { title: "Awaiting payment", sub: "Delivered or pending, money on its way" },
+  awaiting: { title: "Awaiting payment", sub: "Deals in Pending payment: delivered, and the money hasn't come in yet" },
   retainers: { title: "Retainers", sub: "Your ongoing retainer deals" },
 };
 
