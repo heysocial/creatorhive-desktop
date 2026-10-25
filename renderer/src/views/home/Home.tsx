@@ -5,7 +5,7 @@ import { ch, type SessionUser } from "../../lib/bridge";
 import { api, queryClient } from "../../lib/api";
 import {
   CATEGORIES, POST_REACTIONS, addComment, categoryOf, createPost, deleteComment, editComment, editPost, likeComment, patchPost,
-  postHasFormatting, postHtmlToText, reactToPost, useComments, useFeed, usePinnedPosts, usePost, useUnreadCategories, vote,
+  reactToPost, useComments, useFeed, usePinnedPosts, usePost, useUnreadCategories, vote,
   type CategoryKey, type Comment, type Post,
 } from "../../lib/feed";
 import { ago, money } from "../../lib/format";
@@ -14,6 +14,7 @@ import { nav } from "../../lib/nav";
 import { Avatar } from "../../lib/ui";
 import { Badge } from "../messages/MessageRow";
 import { TodayPanel } from "./Today";
+import { PostEditor } from "./PostEditor";
 import { Modal, Monogram } from "../hub/parts";
 import { pastedFiles } from "../../lib/paste";
 import { ReportDialog, type ReportTarget } from "../../overlays/Report";
@@ -269,21 +270,21 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
   const staff = user.role === "owner" || user.role === "team";
   // Never your own: reporting yourself is noise for the team's queue, as on the website.
   const canReport = !own && post.author.role !== "system";
-  const [editing, setEditing] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [reporting, setReporting] = useState(false);
 
-  async function saveEdit() {
-    if (editing === null || saving) return;
+  async function saveEdit(html: string | null, empty: boolean) {
+    if (saving) return;
     // Nothing changed: close without stamping "edited" on it.
-    if (editing.trim() === postHtmlToText(post.body)) { setEditing(null); return; }
-    if (!editing.trim() && post.mediaUrls.length === 0 && !post.poll) { setEditError("A post needs some words, a photo or a poll."); return; }
+    if (html === null) { setEditing(false); return; }
+    if (empty && post.mediaUrls.length === 0 && !post.poll) { setEditError("A post needs some words, a photo or a poll."); return; }
     setSaving(true);
     setEditError(null);
     try {
-      await editPost(post, editing);
-      setEditing(null);
+      await editPost(post, html);
+      setEditing(false);
     } catch {
       setEditError("Couldn’t save your edit. Try again.");
     } finally {
@@ -303,7 +304,7 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
       ...(own || staff ? [{ id: "delete", label: "Delete post…" }] : []),
       ...(canReport ? [{ id: "report", label: "Report post…" }] : []),
     ]);
-    if (choice === "edit") { setEditError(null); setEditing(postHtmlToText(post.body)); }
+    if (choice === "edit") { setEditError(null); setEditing(true); }
     if (choice === "report") setReporting(true);
     if (choice === "comments") onOpen(post);
     if (choice === "copy") void navigator.clipboard.writeText(`${(await ch.info()).origin}/?post=${post.id}`);
@@ -336,20 +337,8 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
           <button className="iconbtn" onClick={() => void more()} aria-label="More"><MoreHorizontal /></button>
         </div>
       </header>
-      {editing !== null ? (
-        <div className="inline-edit">
-          <textarea autoFocus value={editing} rows={4} maxLength={20000} disabled={saving} onChange={(e) => setEditing(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setEditing(null); }
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void saveEdit(); }
-            }} />
-          {postHasFormatting(post.body) ? <div className="hint">Bold, lists and mentions from the website become plain text when you save here.</div> : null}
-          {editError ? <div className="signin-error">{editError}</div> : null}
-          <div className="hint">Escape to cancel · ⌘↩ to save
-            <button className="btn" disabled={saving} onClick={() => setEditing(null)}>Cancel</button>
-            <button className="btn honey" disabled={saving} onClick={() => void saveEdit()}>{saving ? <Loader2 className="spin" /> : null}{saving ? "Saving…" : "Save changes"}</button>
-          </div>
-        </div>
+      {editing ? (
+        <PostEditor html={post.body} saving={saving} error={editError} onSave={(html, empty) => void saveEdit(html, empty)} onCancel={() => setEditing(false)} />
       ) : <RichText html={post.body} />}
       {post.mediaUrls.length ? (
         <div className={`imgs n${Math.min(post.mediaUrls.length, 4)}`}>
