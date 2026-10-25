@@ -354,6 +354,7 @@ function configureIpc() {
 
   ipcMain.on("realtime:watch", (_event, name) => realtime.watch(name));
   ipcMain.on("realtime:unwatch", (_event, name) => realtime.unwatch(name));
+  ipcMain.on("realtime:ensure", (_event, names) => void realtime.ensure(names));
 
   ipcMain.on("app:viewing", (event, id) => {
     // Pop-outs report what they show themselves; only the main window sets this.
