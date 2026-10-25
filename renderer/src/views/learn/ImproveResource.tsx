@@ -704,7 +704,7 @@ function CameraSettingsBody({ data }: { data: NonNullable<Content["camera-settin
                   ) : null}
                 </div>
                 {step.image && image ? (
-                  <button className="ir-step-img" onClick={() => ch.app.openExternal(image)} title="Open full size">
+                  <button className="ir-step-img" onClick={() => void ch.files.quickLook(image, step.image!.src.split("/").pop() || "Step.jpg")} title="Open full size">
                     <img src={image} alt={step.image.alt} style={{ aspectRatio: `${step.image.width} / ${step.image.height}` }} loading="lazy" />
                     <span className="faint">Click to enlarge</span>
                   </button>

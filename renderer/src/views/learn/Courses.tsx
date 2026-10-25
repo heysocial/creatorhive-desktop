@@ -23,11 +23,13 @@ const GRADIENTS = [
 function Cover({ title, url, index, children }: { title: string; url: string | null; index: number; children?: React.ReactNode }) {
   return (
     <div className="cover-art" style={url ? undefined : { background: GRADIENTS[index % GRADIENTS.length] }}>
-      {url ? <img src={url} alt={title} /> : <b>{title}</b>}
+      {url ? <img src={url} alt={title} /> : null}
       {children}
     </div>
   );
 }
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 const ACADEMY_INCLUDES = ["All courses, not just New Bee", "Group coaching calls and events", "Every channel and the full feed", "DM any creator in the hive"];
 
@@ -89,8 +91,12 @@ export function Courses() {
             <button key={c.id} className={`card course-card ${c.locked ? "locked" : ""}`}
               onClick={() => (c.locked ? setUpgrade(true) : nav.open({ kind: "course", id: c.id }, "learn", "ch"))}>
               <Cover title={c.title} url={c.coverUrl} index={i}>{c.locked ? <span className="lock"><Lock /></span> : null}</Cover>
+              <div className="cc-text">
+                <b>{c.title}</b>
+                {c.description ? <span className="muted">{c.description}</span> : null}
+              </div>
               <div className="cc-foot">
-                <span className="muted">{c.lessonCount ? `${c.moduleCount} modules · ${c.lessonCount} lessons` : "Coming soon"}</span>
+                <span className="muted">{c.lessonCount ? `${plural(c.moduleCount, "module")} · ${plural(c.lessonCount, "lesson")}` : "Coming soon"}</span>
                 <span className="muted">{percent(c)}%</span>
               </div>
               <span className="bar"><i style={{ width: `${percent(c)}%` }} /></span>
@@ -128,6 +134,7 @@ function useYouTube(frame: React.RefObject<HTMLIFrameElement | null>, enabled: b
     time,
     playing,
     toggle: () => command(playing ? "pauseVideo" : "playVideo"),
+    pause: () => command("pauseVideo"),
     seek: (seconds: number) => { command("seekTo", [Math.max(0, seconds), true]); command("playVideo"); },
     skip: (delta: number) => command("seekTo", [Math.max(0, time.current + delta), true]),
   };
@@ -144,6 +151,8 @@ function Notes({ lessonId, timed, now, seek }: { lessonId: string; timed: boolea
   const [draft, setDraft] = useState("");
   const [at, setAt] = useState<number | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  // Notes still being saved: their real id, once the server answers (a delete waits for it).
+  const saving = useRef(new Map<string, Promise<string | null>>());
   useEffect(() => { setNotes(loadNotes(lessonId)); setDraft(""); }, [lessonId]);
   useEffect(() => {
     const start = () => { setAt(timed ? now() : null); input.current?.focus(); };
@@ -156,12 +165,28 @@ function Notes({ lessonId, timed, now, seek }: { lessonId: string; timed: boolea
     const note: LessonNote = { id: crypto.randomUUID(), at: timed ? Math.floor(at ?? now()) : null, text: draft.trim(), createdAt: new Date().toISOString() };
     update([...notes, note].sort((a, b) => (a.at ?? 1e9) - (b.at ?? 1e9)));
     if (onServer) {
-      void api<{ note: { id: string } }>(`/api/lessons/${lessonId}/notes`, { method: "POST", body: { body: note.text, atSeconds: note.at } })
-        .then(({ note: saved }) => setNotes((list) => list.map((n) => (n.id === note.id ? { ...n, id: saved.id } : n))))
-        .catch(() => window.alert("That note wasn't saved."));
+      const saved = api<{ note: { id: string } }>(`/api/lessons/${lessonId}/notes`, { method: "POST", body: { body: note.text, atSeconds: note.at } })
+        .then(({ note: s }) => { setNotes((list) => list.map((n) => (n.id === note.id ? { ...n, id: s.id } : n))); return s.id; })
+        .catch(() => { window.alert("That note wasn't saved."); return null; })
+        .finally(() => saving.current.delete(note.id));
+      saving.current.set(note.id, saved);
     }
     setDraft("");
     setAt(null);
+  }
+  async function remove(note: LessonNote) {
+    update(notes.filter((x) => x.id !== note.id));
+    if (!onServer) return;
+    // A note deleted while it's still saving has no server id yet: wait for it, then delete that.
+    const id = saving.current.has(note.id) ? await saving.current.get(note.id) : note.id;
+    if (!id) return;
+    setNotes((list) => list.filter((x) => x.id !== id));
+    try {
+      await api(`/api/lessons/${lessonId}/notes?noteId=${id}`, { method: "DELETE" });
+    } catch {
+      setNotes((list) => [...list, { ...note, id }].sort((a, b) => (a.at ?? 1e9) - (b.at ?? 1e9)));
+      window.alert("That note wasn't deleted.");
+    }
   }
   return (
     <div className="card lesson-notes">
@@ -170,10 +195,7 @@ function Notes({ lessonId, timed, now, seek }: { lessonId: string; timed: boolea
         <div key={n.id} className="ln-row">
           {n.at !== null ? <button className="ln-time" onClick={() => seek(n.at!)} title="Jump to this moment">{stamp(n.at)}</button> : <span className="ln-time none">•</span>}
           <span className="selectable">{n.text}</span>
-          <button className="iconbtn sm" aria-label="Delete note" onClick={() => {
-            update(notes.filter((x) => x.id !== n.id));
-            if (onServer) void api(`/api/lessons/${lessonId}/notes?noteId=${n.id}`, { method: "DELETE" }).catch(() => null);
-          }}><Trash2 /></button>
+          <button className="iconbtn sm" aria-label="Delete note" onClick={() => void remove(n)}><Trash2 /></button>
         </div>
       ))}
       <div className="ln-add">
@@ -203,6 +225,14 @@ export function CoursePage({ id, lessonId: requested }: { id: string; lessonId?:
   const yt = useYouTube(frame, embed?.provider === "youtube");
   const done = lessons.filter((l) => l.completed).length;
   const go = (lid: string) => nav.open({ kind: "course", id, lessonId: lid }, "learn", "ch");
+  const [reloads, setReloads] = useState(0);
+  // The floating window picks up where this player is, and this one stops so the two don't play at once.
+  const popOut = () => {
+    const start = embed?.provider === "youtube" ? Math.floor(yt.time.current) : 0;
+    if (embed?.provider === "youtube") yt.pause();
+    else setReloads((n) => n + 1);
+    ch.window.popout({ kind: "lesson", id: `${id}:${lessonId}:${start}`, title: lesson.data?.title });
+  };
 
   useEffect(() => { if (lessonId) rememberLesson(id, lessonId); }, [id, lessonId]);
 
@@ -220,6 +250,18 @@ export function CoursePage({ id, lessonId: requested }: { id: string; lessonId?:
   }, [lesson.data, embed?.provider, id, yt]);
 
   if (course.isError) return <div className="page"><div className="empty-state">This course isn't available.</div></div>;
+  // A course announced before its lessons are up: say so, instead of an empty player.
+  if (course.data && lessons.length === 0) {
+    return (
+      <div className="page">
+        <div className="mhead">
+          <button className="iconbtn" onClick={() => nav.open({ kind: "learn", page: "courses" }, "learn", "ch")} aria-label="All courses"><ChevronLeft /></button>
+          <h1>{course.data.title}</h1>
+        </div>
+        <div className="empty-state"><div><b>Coming soon</b><p className="muted">This course's lessons aren't up yet. Check back soon.</p></div></div>
+      </div>
+    );
+  }
 
   return (
     <div className="page lesson-page">
@@ -228,7 +270,7 @@ export function CoursePage({ id, lessonId: requested }: { id: string; lessonId?:
         <h1>{lesson.data?.title ?? course.data?.title ?? ""}</h1>
         <span className="sub">{course.data?.title}{index >= 0 ? ` · ${lessons[index].moduleTitle}` : ""}</span>
         <div className="acts">
-          <button className="btn" disabled={!prev} onClick={() => prev && go(prev.id)}><ArrowLeft />Previous</button>
+          <button className="btn" disabled={!prev} onClick={() => prev && go(prev.id)} title="Previous lesson"><ArrowLeft /><span className="btn-label">Previous</span></button>
           {lesson.data ? (
             <button className={`btn ${lesson.data.completed ? "" : "honey"}`} onClick={() => void setComplete(lesson.data!, id, !lesson.data!.completed)}>
               <Check />{lesson.data.completed ? "Completed" : "Mark complete"}<span className="kbd-in">⌘↩</span>
@@ -242,14 +284,14 @@ export function CoursePage({ id, lessonId: requested }: { id: string; lessonId?:
           {lesson.data?.videoUrl ? (
             embed ? (
               <div className="player">
-                <iframe ref={frame} key={embed.src} src={embed.src} title={lesson.data.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
+                <iframe ref={frame} key={`${embed.src}#${reloads}`} src={embed.src} title={lesson.data.title} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowFullScreen />
               </div>
             ) : <div className="player empty"><VideoOff />This lesson's video link isn't one we can play. <button className="link" onClick={() => ch.app.openExternal(lesson.data!.videoUrl!)}>Open it in the browser</button></div>
           ) : lesson.data ? <div className="player empty"><PlayCircle />No video yet</div> : <div className="player empty" />}
           {embed ? (
             <div className="player-bar faint">
               {embed.provider === "youtube" ? <span>Space play · J / L skip 10s · ⌘↩ mark complete</span> : <span>⌘↩ mark complete</span>}
-              <button className="link" onClick={() => ch.window.popout({ kind: "lesson", id: `${id}:${lessonId}`, title: lesson.data?.title })}><PictureInPicture2 />Watch in a floating window</button>
+              <button className="link" onClick={popOut}><PictureInPicture2 />Watch in a floating window</button>
             </div>
           ) : null}
           {lessonId ? <Notes lessonId={lessonId} timed={embed?.provider === "youtube"} now={() => yt.time.current} seek={yt.seek} /> : null}
@@ -277,14 +319,16 @@ export function CoursePage({ id, lessonId: requested }: { id: string; lessonId?:
 }
 
 /** The floating lesson window: just the video, kept above other windows. */
-export function LessonVideo({ courseId, lessonId }: { courseId: string; lessonId: string }) {
+export function LessonVideo({ courseId, lessonId, start = 0 }: { courseId: string; lessonId: string; start?: number }) {
   const lesson = useLesson(lessonId);
   const embed = embedFor(lesson.data?.videoUrl ?? null);
   void courseId;
+  // A YouTube lesson carries on from where the main window's player was.
+  const src = embed?.provider === "youtube" ? `${embed.src}&start=${start}&autoplay=1` : embed?.src;
   return (
     <div className="floating-video">
       <div className="popout-drag" />
-      {embed ? <iframe src={embed.src} title={lesson.data?.title ?? "Lesson"} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen /> : <div className="empty-state">Loading…</div>}
+      {embed ? <iframe src={src} title={lesson.data?.title ?? "Lesson"} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen /> : <div className="empty-state">Loading…</div>}
     </div>
   );
 }

@@ -42,8 +42,8 @@ function PopoutBody({ kind, id, user }: { kind: string; id: string; user: Sessio
   if (kind === "settings") return <SettingsWindow user={user} />;
   if (kind === "huddle") return <HuddleWindow target={id} user={user} />;
   if (kind === "lesson") {
-    const [courseId, lessonId] = id.split(":");
-    return <LessonVideo courseId={courseId} lessonId={lessonId} />;
+    const [courseId, lessonId, start] = id.split(":");
+    return <LessonVideo courseId={courseId} lessonId={lessonId} start={Number(start) || 0} />;
   }
   if (kind === "deal") {
     return (
