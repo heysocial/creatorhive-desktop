@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowRight, ChevronDown, Clock, FileText, Link2, Loader2, Mail, MoreHorizontal, Paperclip, Phone, Trash2, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
@@ -10,7 +11,7 @@ import {
 } from "../../lib/hub";
 import { bytes, money } from "../../lib/format";
 import { nav } from "../../lib/nav";
-import { Monogram, StagePill, moveDeal } from "./parts";
+import { Monogram, StagePill, moveDeal, useLayer } from "./parts";
 import { openDealForm } from "./DealForm";
 import { InvoiceSection } from "./Invoices";
 
@@ -34,6 +35,38 @@ function urgency(deal: Deal) {
   return { text: `${days} ${days === 1 ? "day" : "days"} in your pipeline`, late: false };
 }
 
+const BRIEF_EXT_TYPES: Record<string, string> = {
+  pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", heic: "image/heic", webp: "image/webp",
+};
+
+/** Upload one brief file to a deal and add it; false when it couldn't be. */
+export async function uploadBrief(dealId: string, file: File) {
+  // Briefs live in the website's private store (its upload token only allows that), typed by extension when the Mac gives no type.
+  const type = file.type || BRIEF_EXT_TYPES[file.name.split(".").pop()?.toLowerCase() ?? ""] || "";
+  const up = await ch.files.upload({ route: `/api/hub/deals/${dealId}/briefs/upload`, name: `briefs/${dealId}/${file.name}`, type, bytes: await file.arrayBuffer(), access: "private" });
+  if (!up.ok) return false;
+  return api(`/api/hub/deals/${dealId}/briefs`, { method: "POST", body: { pathname: up.pathname, filename: file.name } }).then(() => true, () => false);
+}
+
+/** Add a link brief; the server names it after its site unless it's given a name. */
+export function addBriefLink(dealId: string, url: string, name?: string) {
+  return api(`/api/hub/deals/${dealId}/briefs`, { method: "POST", body: { url, ...(name ? { name } : {}) } }).then(() => true, () => false);
+}
+
+/** "https://" in front when it's missing, as a browser's address bar would; null when it isn't a web link. */
+export function briefLink(value: string) {
+  let typed = value.trim();
+  if (!typed || /\s/.test(typed)) return null;
+  if (!/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(typed) && /^[^/]+\.[^/]+/.test(typed)) typed = `https://${typed}`;
+  try {
+    const url = new URL(typed);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname && !url.username && !url.password ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 function Briefs({ deal }: { deal: Deal }) {
   const { data } = useQuery({
     queryKey: ["hub", "briefs", deal.id],
@@ -48,9 +81,7 @@ function Briefs({ deal }: { deal: Deal }) {
   async function addFiles(files: File[]) {
     setBusy(true);
     for (const file of files.slice(0, 5 - briefs.length)) {
-      const up = await ch.files.upload({ route: `/api/hub/deals/${deal.id}/briefs/upload`, name: `briefs/${deal.id}/${file.name}`, type: file.type, bytes: await file.arrayBuffer() });
-      if (!up.ok) { window.alert(`${file.name} couldn't be uploaded (PDF, Word or pictures, up to 20 MB).`); continue; }
-      await api(`/api/hub/deals/${deal.id}/briefs`, { method: "POST", body: { pathname: up.pathname, filename: file.name } }).catch(() => window.alert(`${file.name} couldn't be added.`));
+      if (!(await uploadBrief(deal.id, file))) window.alert(`${file.name} couldn't be uploaded (PDF, Word or pictures, up to 20 MB).`);
     }
     setBusy(false);
     void refresh();
@@ -120,15 +151,23 @@ export function PromptHost() {
   useEffect(() => { setPromptState = setState; }, []);
   if (!state) return null;
   const done = (value: string | null) => { promptResolve?.(value); promptResolve = null; setState(null); };
-  return (
+  return <Prompt state={state} setState={setState} done={done} />;
+}
+
+function Prompt({ state, setState, done }: { state: { title: string; value: string }; setState: (s: { title: string; value: string }) => void; done: (value: string | null) => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  useLayer(() => done(null), box);
+  // On top of whatever asked, the deal pop-up included.
+  return createPortal(
     <div className="scrim center" onMouseDown={(e) => e.target === e.currentTarget && done(null)}>
-      <div className="modal" style={{ width: 420 }}>
+      <div ref={box} className="modal" role="dialog" aria-modal="true" aria-label={state.title} tabIndex={-1} style={{ width: 420 }}>
         <div className="modal-head">{state.title}</div>
         <div className="modal-body"><input className="field" autoFocus value={state.value} onChange={(e) => setState({ ...state, value: e.target.value })}
-          onKeyDown={(e) => { if (e.key === "Enter") done(state.value.trim() || null); if (e.key === "Escape") done(null); }} /></div>
+          onKeyDown={(e) => { if (e.key === "Enter") done(state.value.trim() || null); }} /></div>
         <div className="modal-foot"><button className="btn" onClick={() => done(null)}>Cancel</button><button className="btn honey" onClick={() => done(state.value.trim() || null)}>Add</button></div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -169,19 +208,21 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
   const deal = useDeal(id);
   const shared = useDeals().data?.shared ?? false;
   const [moving, setMoving] = useState(false);
+  const box = useRef<HTMLElement>(null);
+  // The pop-up is the bottom layer: Esc closes it only when nothing it opened is showing.
+  useLayer(onClose, box, !popout);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (document.querySelector(".modal")) return;
-      if (e.key === "Escape" && !popout) onClose();
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "e" && deal) { e.preventDefault(); openDealForm({ deal }); }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [deal, onClose, popout]);
+  }, [deal]);
 
   if (!deal) {
-    return <div className={popout ? "deal-window" : "scrim side deal-scrim"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}><aside className="deal-panel"><div className="empty-state">Loading…</div></aside></div>;
+    return <div className={popout ? "deal-window" : "scrim side deal-scrim"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}><aside ref={box} className="deal-panel" tabIndex={-1}><div className="empty-state">Loading…</div></aside></div>;
   }
 
   const next = deal.status === "pending_payment" ? "completed" : nextStatus(deal.status);
@@ -221,7 +262,7 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
   }
 
   const panel = (
-    <aside className="deal-panel" role="dialog" aria-label={deal.brand_name}>
+    <aside ref={box} className="deal-panel" role="dialog" aria-modal={!popout} aria-label={deal.brand_name} tabIndex={-1}>
       <div className={`dp-head ${popout ? "popout-head" : ""}`}>
         <Monogram name={deal.brand_name} size={28} />
         <b className="dp-brand">{deal.brand_name}</b>

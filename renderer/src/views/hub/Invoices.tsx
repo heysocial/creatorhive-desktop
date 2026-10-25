@@ -237,7 +237,7 @@ export function Invoices() {
   const count = (f: typeof filter) => invoices.filter(({ invoice, deal }) => { const s = stateOf(invoice, deal); return f === "all" || (f === "sent" ? s === "sent" || s === "overdue" : s === f); }).length;
 
   return (
-    <div className="page">
+    <div className="page inv-page">
       <div className="mhead">
         <h1>Invoices</h1><span className="sub">One per deal, all in one list</span>
         <div className="acts"><div className="seg">

@@ -233,12 +233,19 @@ export async function deleteDeal(id: string) {
 export function errorText(error: unknown) {
   const code = (error as { code?: string; message?: string })?.message ?? "";
   if (!code || code.startsWith("HTTP")) return "Something went wrong. Try again.";
+  // The server's field codes ("invalid contact_email"), in words.
+  const words: Record<string, string> = {
+    "invalid contact_email": "That contact email doesn't look right.",
+    "paid_on can't be in the future": "The paid date can't be in the future.",
+    "invalid paid_on": "That paid date doesn't look right.",
+  };
+  if (words[code]) return words[code];
   return code.charAt(0).toUpperCase() + code.slice(1);
 }
 
 /* ---------- Pickers (default + custom sources, industries, payment methods) ---------- */
 
-export interface Option { id: string; label: string; custom: boolean }
+export interface Option { id: string; label: string; custom: boolean; dealCount?: number }
 
 function useOptions(kind: "sources" | "industries" | "payment-methods", key: string) {
   return useQuery({
@@ -246,7 +253,7 @@ function useOptions(kind: "sources" | "industries" | "payment-methods", key: str
     staleTime: 5 * 60_000,
     queryFn: async () => {
       const data = await api<Record<string, unknown>>(`/api/hub/${kind}`);
-      const custom = ((data[key] as { id: string; name: string }[]) ?? []).map((c) => ({ id: c.id, label: c.name, custom: true }));
+      const custom = ((data[key] as { id: string; name: string; deal_count?: number }[]) ?? []).map((c) => ({ id: c.id, label: c.name, custom: true, dealCount: c.deal_count }));
       const defaults = ((data.defaults as { id: string; label: string }[]) ?? []).map((d) => ({ id: d.id, label: d.label, custom: false }));
       return [...defaults, ...custom] as Option[];
     },
@@ -255,6 +262,24 @@ function useOptions(kind: "sources" | "industries" | "payment-methods", key: str
 export const useSources = () => useOptions("sources", "sources");
 export const useIndustries = () => useOptions("industries", "industries");
 export const usePaymentMethods = () => useOptions("payment-methods", "payment_methods");
+
+export type OptionKind = "sources" | "industries" | "payment-methods";
+
+/** Rename one of the Hub's own sources, industries or payment methods; every deal using it shows the new name. */
+export async function renameOption(kind: OptionKind, id: string, name: string) {
+  await api(`/api/hub/${kind}/${id}`, { method: "PATCH", body: { name } });
+  void queryClient.invalidateQueries({ queryKey: ["hub"] });
+}
+
+/** Delete one; it comes off its deals and nothing else about them changes. */
+export async function deleteOption(kind: OptionKind, id: string) {
+  try {
+    await api(`/api/hub/${kind}/${id}`, { method: "DELETE" });
+  } catch (error) {
+    if (!(error instanceof ApiError && error.status === 404)) throw error;
+  }
+  void queryClient.invalidateQueries({ queryKey: ["hub"] });
+}
 
 export async function createOption(kind: "sources" | "industries" | "payment-methods", name: string): Promise<Option> {
   const objectKey = kind === "sources" ? "source" : kind === "industries" ? "industry" : "payment_method";

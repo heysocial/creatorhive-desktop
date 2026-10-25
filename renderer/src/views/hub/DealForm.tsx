@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Loader2, Plus } from "lucide-react";
-import { api } from "../../lib/api";
+import { Check, FileText, Link2, Loader2, Paperclip, Pencil, Plus, Trash2, X } from "lucide-react";
+import { api, ApiError, queryClient } from "../../lib/api";
+import { bytes } from "../../lib/format";
 import {
-  DEAL_STATUSES, DEAL_TYPES, STATUS_LABELS, createDeal, dayOf, createOption, errorText, localToday, patchDeal, useIndustries, usePaymentMethods,
-  useSources, withTz, type Deal, type DealStatus, type DealType, type Option,
+  DEAL_STATUSES, DEAL_TYPES, STATUS_LABELS, createDeal, dayOf, createOption, deleteOption, errorText, localToday, patchDeal, renameOption, useIndustries,
+  usePaymentMethods, useSources, withTz, type Deal, type DealStatus, type DealType, type Option, type OptionKind,
 } from "../../lib/hub";
-import { Modal, celebrate } from "./parts";
+import { Modal, celebrate, hubToast, useLayer } from "./parts";
+import { addBriefLink, briefLink, uploadBrief } from "./DealPanel";
 import { openDeal } from "./Deals";
 
 export interface FormStart { deal?: Deal; status?: DealStatus; brand?: string; duplicateOf?: Deal }
@@ -13,8 +15,108 @@ export interface FormStart { deal?: Deal; status?: DealStatus; brand?: string; d
 let open: (start: FormStart | null) => void = () => {};
 export const openDealForm = (start: FormStart) => open(start);
 
-function ChipPicker({ options, selected, onToggle, kind, onCreate, multi }: {
-  options: Option[]; selected: string[]; onToggle: (id: string) => void; kind: string; onCreate: (name: string) => Promise<void>; multi: boolean;
+/* The words for each list's manager, as the website's DealSourcesManager / DealIndustriesManager / DealPaymentMethodsManager say them. */
+const MANAGE: Record<OptionKind, { one: string; title: string; description: string; deleteEffect: (count: number) => string; emptyHint: string }> = {
+  sources: {
+    one: "source", title: "Deal sources",
+    description: "Where deals come from. Sources you create are shared with your Hub. Renaming one updates every deal that uses it.",
+    deleteEffect: (count) => `It comes off ${count} deal${count === 1 ? "" : "s"}. Their amounts and other sources stay.`,
+    emptyHint: "None yet. Use + New source on a deal to create one.",
+  },
+  industries: {
+    one: "industry", title: "Industries",
+    description: "What brands sell. Industries you create are shared with your Hub. Renaming one updates every deal that uses it.",
+    deleteEffect: (count) => `${count} deal${count === 1 ? " is" : "s are"} left with no industry. Their amounts and sources stay.`,
+    emptyHint: "None yet. Use + New industry on a deal to create one.",
+  },
+  "payment-methods": {
+    one: "payment method", title: "Payment methods",
+    description: "How brands pay you. Methods you create are shared with your Hub. Renaming one updates every deal that uses it.",
+    deleteEffect: (count) => `${count} deal${count === 1 ? " is" : "s are"} left with no payment method. Their amounts and dates stay.`,
+    emptyHint: "None yet. Use + New method on a deal to create one.",
+  },
+};
+
+/** Rename and delete the Hub's own sources, industries or payment methods; the defaults are listed below, fixed. */
+function ManageOptions({ kind, options, onClose, onDeleted }: { kind: OptionKind; options: Option[]; onClose: () => void; onDeleted: (id: string) => void }) {
+  const words = MANAGE[kind];
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const custom = options.filter((o) => o.custom).sort((a, b) => a.label.localeCompare(b.label));
+  const defaults = options.filter((o) => !o.custom);
+  const used = (o: Option) => (o.dealCount ? `${o.dealCount} deal${o.dealCount === 1 ? "" : "s"}` : "Not used yet");
+
+  async function rename() {
+    if (!editing || !editing.name.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await renameOption(kind, editing.id, editing.name.trim());
+      setEditing(null);
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : "";
+      const match = e instanceof ApiError && typeof e.data?.default_id === "string" ? defaults.find((d) => d.id === e.data!.default_id) : undefined;
+      setError(code === "exists" ? `You already have a${/^[aeiou]/.test(words.one) ? "n" : ""} ${words.one} with that name.` : match ? `“${match.label}” is already one of the defaults.` : errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteOption(kind, id);
+      onDeleted(id);
+      setConfirming(null);
+    } catch {
+      setError(`Couldn't delete that ${words.one}.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={words.title} onClose={onClose} width={520} foot={<button className="btn" onClick={onClose}>Done</button>}>
+      <p className="muted" style={{ marginTop: 0 }}>{words.description}</p>
+      <div className="section-label" style={{ marginTop: 10 }}>Yours · {custom.length}</div>
+      {custom.length === 0 ? <p className="faint">{words.emptyHint}</p> : null}
+      <div className="manage-list">
+        {custom.map((o) => editing?.id === o.id ? (
+          <div key={o.id} className="manage-row">
+            <EscapeLayer onEscape={() => setEditing(null)} />
+            <input className="field" autoFocus value={editing.name} maxLength={40} aria-label={`Rename ${o.label}`}
+              onChange={(e) => { setEditing({ ...editing, name: e.target.value }); setError(null); }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void rename(); } }} />
+            <button className="btn honey" disabled={busy || !editing.name.trim()} onClick={() => void rename()}>{busy ? <Loader2 className="spin" /> : null}Save</button>
+            <button className="btn" onClick={() => setEditing(null)}>Cancel</button>
+          </div>
+        ) : confirming === o.id ? (
+          <div key={o.id} className="manage-row confirm">
+            <span><b>Delete “{o.label}”?</b>{o.dealCount ? <small className="muted">{words.deleteEffect(o.dealCount)}</small> : null}</span>
+            <button className="btn danger" disabled={busy} onClick={() => void remove(o.id)}>{busy ? <Loader2 className="spin" /> : null}Delete {words.one}</button>
+            <button className="btn" onClick={() => setConfirming(null)}>Keep it</button>
+          </div>
+        ) : (
+          <div key={o.id} className="manage-row">
+            <span><b>{o.label}</b><small className="faint">{used(o)}</small></span>
+            <button className="btn" onClick={() => { setError(null); setConfirming(null); setEditing({ id: o.id, name: o.label }); }}><Pencil />Rename</button>
+            <button className="btn" onClick={() => { setError(null); setEditing(null); setConfirming(o.id); }}><Trash2 />Delete</button>
+          </div>
+        ))}
+      </div>
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      <div className="section-label" style={{ marginTop: 14 }}>CreatorHive defaults · everyone has these</div>
+      <div className="chips">{defaults.map((d) => <span key={d.id} className="chip static">{d.label}</span>)}</div>
+    </Modal>
+  );
+}
+
+function ChipPicker({ options, selected, onToggle, kind, onCreate, multi, onManage }: {
+  options: Option[]; selected: string[]; onToggle: (id: string) => void; kind: string; onCreate: (name: string) => Promise<void>; multi: boolean; onManage: () => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
@@ -28,9 +130,9 @@ function ChipPicker({ options, selected, onToggle, kind, onCreate, multi }: {
       ))}
       {adding ? (
         <span className="chip-add">
+          <EscapeLayer onEscape={() => setAdding(false)} />
           <input autoFocus value={name} maxLength={40} placeholder={`New ${kind}`} onChange={(e) => setName(e.target.value)}
             onKeyDown={async (e) => {
-              if (e.key === "Escape") { e.stopPropagation(); setAdding(false); }
               if (e.key === "Enter" && name.trim()) {
                 e.preventDefault();
                 setBusy(true);
@@ -40,8 +142,92 @@ function ChipPicker({ options, selected, onToggle, kind, onCreate, multi }: {
           {busy ? <Loader2 className="spin" /> : null}
         </span>
       ) : <button type="button" className="chip add" onClick={() => setAdding(true)}><Plus />New {kind}</button>}
+      {options.some((o) => o.custom) ? <button type="button" className="chip add" onClick={onManage}><Pencil />Edit {kind === "industry" ? "industries" : `${kind}s`}</button> : null}
     </div>
   );
+}
+
+/** While a little inline field is open, Esc closes the field, not the whole dialog. */
+function EscapeLayer({ onEscape }: { onEscape: () => void }) {
+  useLayer(onEscape);
+  return null;
+}
+
+/* ---------- Brief on a new deal: held until the deal exists, then attached (the website's NewDealBriefs) ---------- */
+
+type DraftBrief = { key: string; kind: "file"; file: File } | { key: string; kind: "link"; url: string; name: string };
+const BRIEF_TYPES = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|image\/(jpeg|png|heic|webp))$/;
+const BRIEF_EXTENSIONS = /\.(pdf|docx?|jpe?g|png|heic|webp)$/i;
+
+function NewDealBriefs({ value, onChange }: { value: DraftBrief[]; onChange: (next: DraftBrief[]) => void }) {
+  const [link, setLink] = useState<{ url: string; name: string; error: string | null } | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const full = value.length >= 5;
+
+  function addFiles(files: File[]) {
+    setMessage(null);
+    const next = [...value];
+    for (const file of files) {
+      if (!BRIEF_TYPES.test(file.type) && !BRIEF_EXTENSIONS.test(file.name)) { setMessage("Briefs can be a PDF, a Word document or a photo."); continue; }
+      if (file.size > 20 * 1024 * 1024) { setMessage(`${file.name} is over 20 MB.`); continue; }
+      if (next.length >= 5) { setMessage("A deal can have up to 5 briefs."); break; }
+      next.push({ key: crypto.randomUUID(), kind: "file", file });
+    }
+    onChange(next);
+  }
+
+  function addLink() {
+    if (!link) return;
+    const url = briefLink(link.url);
+    if (!url) { setLink({ ...link, error: "Links need to start with https:// or http://" }); return; }
+    onChange([...value, { key: crypto.randomUUID(), kind: "link", url, name: link.name.trim() }]);
+    setLink(null);
+  }
+
+  // A group of fields, not a <form>: Enter here adds the link instead of saving the deal.
+  const onLinkKey = (e: React.KeyboardEvent) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); addLink(); } };
+  return (
+    <div className="new-briefs" onDragOver={(e) => e.dataTransfer.types.includes("Files") && e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles([...e.dataTransfer.files]); }}>
+      {value.map((b) => (
+        <div key={b.key} className="brief">
+          <span className={`ficon ${b.kind === "link" ? "link" : /pdf$/i.test(b.file.name) ? "pdf" : "word"}`}>{b.kind === "link" ? <Link2 /> : /pdf$/i.test(b.file.name) ? "PDF" : <FileText />}</span>
+          <span className="fmeta"><b>{b.kind === "file" ? b.file.name : b.name || new URL(b.url).hostname.replace(/^www\./, "")}</b><span>{b.kind === "file" ? bytes(b.file.size) : new URL(b.url).hostname.replace(/^www\./, "")}</span></span>
+          <button type="button" className="iconbtn" aria-label="Remove" onClick={() => onChange(value.filter((x) => x.key !== b.key))}><X /></button>
+        </div>
+      ))}
+      {link ? (
+        <div className="brief-link-form" role="group" aria-label="Add a link">
+          <EscapeLayer onEscape={() => setLink(null)} />
+          <input className="field" autoFocus type="url" placeholder="https://docs.google.com/…" value={link.url} aria-invalid={Boolean(link.error) || undefined} maxLength={2048}
+            onChange={(e) => setLink({ ...link, url: e.target.value, error: null })} onKeyDown={onLinkKey} aria-label="Link" />
+          <input className="field" placeholder="Name · optional" value={link.name} maxLength={200} onChange={(e) => setLink({ ...link, name: e.target.value })} onKeyDown={onLinkKey} aria-label="Name" />
+          <button type="button" className="btn honey" disabled={!link.url.trim()} onClick={addLink}>Add link</button>
+          <button type="button" className="btn" onClick={() => setLink(null)}>Cancel</button>
+          {link.error ? <span className="form-error">{link.error}</span> : null}
+        </div>
+      ) : !full ? (
+        <div className="row">
+          <button type="button" className="btn" onClick={() => picker.current?.click()}><Paperclip />Add file</button>
+          <button type="button" className="btn" onClick={() => { setMessage(null); setLink({ url: "", name: "", error: null }); }}><Link2 />Add link</button>
+          <span className="faint">{value.length ? `${value.length} of 5` : "The brand's brief, mood board or contract"}</span>
+        </div>
+      ) : null}
+      {message ? <span className="form-error">{message}</span> : null}
+      <input ref={picker} type="file" multiple hidden accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.heic,.webp" onChange={(e) => { const files = [...(e.target.files ?? [])]; e.target.value = ""; addFiles(files); }} />
+    </div>
+  );
+}
+
+/** Attach the briefs picked on New deal to the deal just created; says which ones didn't make it. */
+async function attachBriefs(dealId: string, drafts: DraftBrief[]) {
+  const failed: string[] = [];
+  for (const d of drafts) {
+    const ok = d.kind === "file" ? await uploadBrief(dealId, d.file) : await addBriefLink(dealId, d.url, d.name);
+    if (!ok) failed.push(d.kind === "file" ? d.file.name : d.name || d.url);
+  }
+  void queryClient.invalidateQueries({ queryKey: ["hub", "briefs", dealId] });
+  if (failed.length) hubToast(`The deal was saved, but ${failed.join(", ")} couldn't be added to its brief.`);
 }
 
 interface Values {
@@ -91,10 +277,13 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apply, setApply] = useState<{ count: number; saved: Deal; change: ReturnType<typeof brandChange> } | null>(null);
+  const [managing, setManaging] = useState<OptionKind | null>(null);
+  const [briefs, setBriefs] = useState<DraftBrief[]>([]);
   const sources = useSources().data ?? [];
   const industries = useIndustries().data ?? [];
   const methods = usePaymentMethods().data ?? [];
   const brandInput = useRef<HTMLInputElement>(null);
+  const emailInput = useRef<HTMLInputElement>(null);
   const set = <K extends keyof Values>(key: K, value: Values[K]) => setV((current) => ({ ...current, [key]: value }));
 
   useEffect(() => { if (!editing) brandInput.current?.focus(); }, [editing]);
@@ -129,6 +318,12 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
 
   async function save() {
     if (!v.brand.trim() || saving) return;
+    // The server's own check (lib/hub/validation.ts), said in words before it says "invalid contact_email".
+    if (v.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email.trim())) {
+      setError("That contact email doesn't look right.");
+      emailInput.current?.focus();
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -149,6 +344,7 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
         onClose();
       } else {
         const result = await createDeal(body());
+        if (briefs.length) await attachBriefs(result.deal.id, briefs);
         celebrate(result.deal, result.payday);
         onClose();
         openDeal(result.deal.id);
@@ -212,19 +408,21 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
         <label className="flabel">Brand</label>
         <input ref={brandInput} className="field" value={v.brand} maxLength={120} required onChange={(e) => set("brand", e.target.value)} />
         <div className="grid3">
-          <div><label className="flabel">Contact email</label><input className="field" type="email" value={v.email} onChange={(e) => set("email", e.target.value)} /></div>
+          <div><label className="flabel">Contact email</label><input ref={emailInput} className="field" type="email" value={v.email} aria-invalid={error?.includes("email") || undefined} onChange={(e) => { set("email", e.target.value); if (error?.includes("email")) setError(null); }} /></div>
           <div><label className="flabel">Contact name</label><input className="field" value={v.name} maxLength={120} onChange={(e) => set("name", e.target.value)} /></div>
           <div><label className="flabel">Phone</label><input className="field" value={v.phone} maxLength={40} onChange={(e) => set("phone", e.target.value)} /></div>
         </div>
         <label className="flabel">Where the deal came from · optional</label>
         <ChipPicker multi kind="source" options={sources} selected={v.sources}
           onToggle={(id) => set("sources", v.sources.includes(id) ? v.sources.filter((s) => s !== id) : [...v.sources, id].slice(0, 10))}
-          onCreate={async (name) => { const o = await createOption("sources", name); setV((c) => ({ ...c, sources: c.sources.includes(o.id) ? c.sources : [...c.sources, o.id] })); }} />
+          onCreate={async (name) => { const o = await createOption("sources", name); setV((c) => ({ ...c, sources: c.sources.includes(o.id) ? c.sources : [...c.sources, o.id] })); }}
+          onManage={() => setManaging("sources")} />
         <p className="hint">The app, agency or person that brought it: Backstage, Instagram, a referral.</p>
         <label className="flabel">Brand's industry · optional</label>
         <ChipPicker multi={false} kind="industry" options={industries} selected={v.industry ? [v.industry] : []}
           onToggle={(id) => set("industry", v.industry === id ? null : id)}
-          onCreate={async (name) => { const o = await createOption("industries", name); set("industry", o.id); }} />
+          onCreate={async (name) => { const o = await createOption("industries", name); set("industry", o.id); }}
+          onManage={() => setManaging("industries")} />
         <label className="flabel">Deal type</label>
         <div className="chips">{DEAL_TYPES.map((t) => <button type="button" key={t.id} className={`chip ${v.type === t.id ? "on" : ""}`} onClick={() => set("type", t.id)}>{t.label}</button>)}</div>
         <label className="flabel">Sales stage</label>
@@ -246,13 +444,16 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
             <label className="flabel">Payment via</label>
             <ChipPicker multi={false} kind="method" options={methods} selected={v.method ? [v.method] : []}
               onToggle={(id) => set("method", v.method === id ? null : id)}
-              onCreate={async (name) => { const o = await createOption("payment-methods", name); set("method", o.id); }} />
+              onCreate={async (name) => { const o = await createOption("payment-methods", name); set("method", o.id); }}
+              onManage={() => setManaging("payment-methods")} />
           </>
         ) : null}
         <label className="flabel">Deliverables</label>
         <textarea className="field area" maxLength={1000} value={v.deliverables} placeholder="3 UGC videos + 5 product photos" onChange={(e) => set("deliverables", e.target.value)} />
         <label className="flabel">Notes</label>
         <textarea className="field area" maxLength={4000} value={v.notes} onChange={(e) => set("notes", e.target.value)} />
+        {/* A saved deal keeps its briefs in its pop-up, so only a new one asks here. */}
+        {!editing ? <><label className="flabel">Brief · optional</label><NewDealBriefs value={briefs} onChange={setBriefs} /></> : null}
         <div className="grid4">
           <div><label className="flabel">Draft due</label><input className="field" type="date" value={v.draftDue} onChange={(e) => set("draftDue", e.target.value)} /></div>
           <div><label className="flabel">Payment expected</label><input className="field" type="date" value={v.paymentExpected} onChange={(e) => set("paymentExpected", e.target.value)} /></div>
@@ -260,6 +461,10 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
           <div><label className="flabel">Deliverables count</label><input className="field" type="number" min={0} max={1000} value={v.count} onChange={(e) => set("count", e.target.value)} /></div>
         </div>
       </form>
+      {managing ? (
+        <ManageOptions kind={managing} options={managing === "sources" ? sources : managing === "industries" ? industries : methods} onClose={() => setManaging(null)}
+          onDeleted={(id) => setV((c) => ({ ...c, sources: c.sources.filter((s) => s !== id), industry: c.industry === id ? null : c.industry, method: c.method === id ? null : c.method }))} />
+      ) : null}
     </Modal>
   );
 }

@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Loader2, Plus, Trash2, X } from "lucide-react";
 import { api, ApiError, queryClient } from "../../lib/api";
 import type { Invoice } from "./Invoices";
+import { useLayer } from "./parts";
 
 /*
   Editing an invoice, as the website's editor does: every change saves itself
@@ -65,20 +67,17 @@ export function InvoiceEditor({ invoice, onClose }: { invoice: Invoice; onClose:
 
   // Close (Esc, ✕) saves anything still waiting.
   const close = useCallback(async () => { await flush(); void queryClient.invalidateQueries({ queryKey: ["hub", "invoice", invoice.dealId] }); onClose(); }, [flush, onClose, invoice.dealId]);
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); void close(); } };
-    window.addEventListener("keydown", key, true);
-    return () => window.removeEventListener("keydown", key, true);
-  }, [close]);
+  const box = useRef<HTMLDivElement>(null);
+  useLayer(() => void close(), box);
 
   // Stable keys so a removed line doesn't hand its typed rate to the next one.
   const [keys, setKeys] = useState(() => invoice.lines.map(() => crypto.randomUUID()));
   const setLine = (i: number, patch: Partial<Line>) => change({ lines: doc.lines.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
   const subtotal = doc.lines.reduce((t, l) => t + lineTotal(l), 0);
 
-  return (
+  return createPortal(
     <div className="scrim center" onMouseDown={(e) => e.target === e.currentTarget && void close()}>
-      <div className="modal invoice-editor" role="dialog" aria-label={`Edit invoice ${doc.number}`}>
+      <div ref={box} className="modal invoice-editor" role="dialog" aria-modal="true" tabIndex={-1} aria-label={`Edit invoice ${doc.number}`}>
         <div className="modal-head">
           Edit invoice
           <span className={`save-state ${save.kind}`}>{save.kind === "saving" ? <><Loader2 className="spin" />Saving…</> : save.kind === "saved" ? <><Check />Saved</> : save.kind === "error" ? save.message : ""}</span>
@@ -136,6 +135,7 @@ export function InvoiceEditor({ invoice, onClose }: { invoice: Invoice; onClose:
           <p className="hint">Your business details, logo and how you get paid come from Settings → Hub & invoices.</p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

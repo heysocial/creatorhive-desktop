@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 import { ch } from "../../lib/bridge";
@@ -42,16 +42,55 @@ export function Monogram({ name, size = 30 }: { name: string; size?: number }) {
   );
 }
 
-export function Modal({ title, onClose, children, width = 460, foot }: { title?: ReactNode; onClose: () => void; children: ReactNode; width?: number; foot?: ReactNode }) {
+/*
+  The Hub's dialogs stack: the deal pop-up, then whatever it opens (Edit, a
+  prompt, the payday card…). Esc and Tab belong to the top one only, so Esc
+  closes one layer at a time and Tab doesn't wander into the layer below.
+*/
+const layers: { box?: RefObject<HTMLElement | null> }[] = [];
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+export function useLayer(onEscape: () => void, box?: RefObject<HTMLElement | null>, active = true) {
+  const latest = useRef(onEscape);
+  latest.current = onEscape;
   useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    if (!active) return;
+    const me = { box };
+    layers.push(me);
+    const before = document.activeElement as HTMLElement | null;
+    // Take focus, unless something inside (an autoFocus field) already has it.
+    const el = box?.current;
+    if (el && !el.contains(document.activeElement)) (el.querySelector<HTMLElement>("[autofocus]") ?? el).focus({ preventScroll: true });
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && layers[layers.length - 1] === me) { e.stopImmediatePropagation(); e.preventDefault(); latest.current(); return; }
+      // Tab stays in the top layer that has a box (a little inline field has none).
+      const root = box?.current;
+      if (e.key !== "Tab" || !root || layers.findLast((l) => l.box) !== me) return;
+      const items = [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.offsetParent !== null);
+      if (!items.length) return;
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      if (at === -1 || (e.shiftKey && at === 0) || (!e.shiftKey && at === items.length - 1)) {
+        e.preventDefault();
+        items[e.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at === -1 || at === items.length - 1 ? 0 : at + 1)].focus();
+      }
+    };
     window.addEventListener("keydown", key, true);
-    return () => window.removeEventListener("keydown", key, true);
-  }, [onClose]);
+    return () => {
+      window.removeEventListener("keydown", key, true);
+      layers.splice(layers.indexOf(me), 1);
+      // Hand focus back to what opened it, if that's still on screen.
+      if (before?.isConnected && (!document.activeElement || document.activeElement === document.body || box?.current?.contains(document.activeElement))) before.focus({ preventScroll: true });
+    };
+  }, [active]);
+}
+
+export function Modal({ title, onClose, children, width = 460, foot }: { title?: ReactNode; onClose: () => void; children: ReactNode; width?: number; foot?: ReactNode }) {
+  const box = useRef<HTMLDivElement>(null);
+  useLayer(onClose, box);
   // Over the whole window, centred, whichever pane opened it.
   return createPortal(
     <div className="scrim center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" style={{ width }}>
+      <div ref={box} className="modal" role="dialog" aria-modal="true" tabIndex={-1} style={{ width }}>
         {title ? <div className="modal-head">{title}<button className="iconbtn" onClick={onClose} aria-label="Close"><X /></button></div> : null}
         <div className="modal-body">{children}</div>
         {foot ? <div className="modal-foot">{foot}</div> : null}
@@ -127,14 +166,16 @@ function PaydayDialog({ deal, payday, close }: { deal: Deal; payday: Payday; clo
   const monthName = payday.month_label.charAt(0) + payday.month_label.slice(1).toLowerCase();
   const before = Math.max(0, Math.min(100, payday.collected_after_usd ? (payday.collected_before_usd / payday.collected_after_usd) * payday.tier_progress_percent_after : 0));
   const pieces = Array.from({ length: 60 }, (_, i) => i);
-  return (
+  const box = useRef<HTMLDivElement>(null);
+  useLayer(close, box);
+  return createPortal(
     <div className="scrim center payday-scrim" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <div className="confetti" aria-hidden>
         {pieces.map((i) => (
           <i key={i} style={{ left: `${(i * 37) % 100}%`, background: CONFETTI[i % CONFETTI.length], animationDelay: `${(i % 12) * 0.08}s`, transform: `rotate(${i * 29}deg)` }} />
         ))}
       </div>
-      <div className="modal payday" role="dialog" aria-label="You got paid">
+      <div ref={box} className="modal payday" role="dialog" aria-modal="true" aria-label="You got paid" tabIndex={-1}>
         <div className="pd-check">✓</div>
         <div className="pd-eyebrow">YOU GOT PAID</div>
         <div className="pd-amount">{money(deal.amount_usd)}</div>
@@ -160,7 +201,8 @@ function PaydayDialog({ deal, payday, close }: { deal: Deal; payday: Payday; clo
         </div>
         <div className="faint" style={{ fontSize: 12, textAlign: "center" }}>Opens a post in 🏆 Wins on Home for you to check before posting.</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
