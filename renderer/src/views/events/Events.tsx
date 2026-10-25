@@ -67,11 +67,12 @@ function Detail({ event, past }: { event: CommunityEvent | undefined; past: Comm
       <h2>{event.title}</h2>
       <div className="ev-line"><Clock />{timeRange(event)}</div>
       {event.organizer ? <div className="ev-line"><User />Hosted by {event.organizer}</div> : null}
-      {!ended || !event.recordingUrl ? (
+      {!ended ? (
         <button className="btn zoom lg" disabled={!event.joinUrl} onClick={() => event.joinUrl && ch.app.openExternal(event.joinUrl)}>
           <Video />{event.joinUrl ? `Join ${meetingName(event.joinUrl)}` : "Join Zoom meeting · link coming soon"}
         </button>
       ) : null}
+      {ended && !event.recordingUrl && event.source === "calendar" ? <div className="muted">No recording for this call</div> : null}
       {ended && event.recordingUrl ? <button className="btn lg" onClick={() => ch.app.openExternal(event.recordingUrl!)}><PlayCircle />Watch recording</button> : null}
       {event.source === "community" && event.rsvpCount ? <div className="muted">{event.rsvpCount} going</div> : null}
       <div className="ev-actions">
@@ -129,7 +130,7 @@ function TimeGrid({ days, events, selected, onSelect }: { days: Date[]; events: 
   const hours = Array.from({ length: 24 }, (_, h) => h);
   return (
     <div className="tg">
-      <div className="tg-head" style={{ gridTemplateColumns: `56px repeat(${days.length}, 1fr)` }}>
+      <div className="tg-head" style={{ gridTemplateColumns: `56px repeat(${days.length}, minmax(0, 1fr))` }}>
         <span />
         {days.map((d) => (
           <span key={d.toISOString()} className={sameDay(d, now) ? "today" : ""}>
@@ -138,7 +139,7 @@ function TimeGrid({ days, events, selected, onSelect }: { days: Date[]; events: 
         ))}
       </div>
       <div className="tg-body scroll" ref={scroller}>
-        <div className="tg-grid" style={{ gridTemplateColumns: `56px repeat(${days.length}, 1fr)`, height: HOUR_PX * 24 }}>
+        <div className="tg-grid" style={{ gridTemplateColumns: `56px repeat(${days.length}, minmax(0, 1fr))`, height: HOUR_PX * 24 }}>
           <div className="tg-hours">{hours.map((h) => <span key={h} style={{ top: h * HOUR_PX }}>{h === 0 ? "" : new Date(2000, 0, 1, h).toLocaleTimeString([], { hour: "numeric" })}</span>)}</div>
           {days.map((day) => {
             const dayEvents = events.filter((e) => sameDay(new Date(e.startsAt), day));
@@ -219,7 +220,7 @@ function ListView({ events, selected, onSelect }: { events: CommunityEvent[]; se
 }
 
 export function Events({ eventId }: { eventId?: string }) {
-  const { all, isLoading, isError } = useEvents();
+  const { all, isLoading, isError, calendarUnavailable } = useEvents();
   const [mode, setMode] = useState<Mode>(() => (localStorage.getItem("ch.events.mode") as Mode) || "week");
   const [anchor, setAnchor] = useState(() => new Date());
   const [selected, setSelected] = useState<string | undefined>(eventId);
@@ -273,6 +274,7 @@ export function Events({ eventId }: { eventId?: string }) {
       </div>
       <div className="ev-body">
         <div className="ev-main">
+          {calendarUnavailable && !isError ? <div className="ev-notice"><Video />Coaching calls are temporarily unavailable. Community events are still available.</div> : null}
           {isLoading ? <div className="empty-state">Loading events…</div> : isError ? <div className="empty-state">Couldn't load events.</div> : (
             mode === "month" ? <MonthGrid anchor={anchor} events={all} selected={selected} onSelect={setSelected} />
               : mode === "list" ? <ListView events={all} selected={selected} onSelect={setSelected} />

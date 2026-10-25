@@ -274,9 +274,21 @@ export function App() {
       nav.reset();
       setAuth({ state: "signedOut" });
     });
+    // A profile saved in the Settings window: this window has its own cache, so read your profile again and show the new name or photo.
+    const offProfile = ch.app.onRelay((message) => {
+      if (message.topic !== "profile" || message.action !== "changed") return;
+      const change = (message.data ?? {}) as { name?: string; image?: string | null };
+      for (const key of ["profile", "my-profile", "members", "posts", "post", "comments"]) void queryClient.invalidateQueries({ queryKey: [key] });
+      setAuth((current) => (current.state === "signedIn" ? { ...current, user: {
+        ...current.user,
+        ...(change.name ? { name: change.name } : {}),
+        ...("image" in change ? { image: change.image } : {}),
+      } } : current));
+    });
     return () => {
       offCommand();
       offAuth();
+      offProfile();
     };
   }, []);
 

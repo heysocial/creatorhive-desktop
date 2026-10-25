@@ -9,8 +9,10 @@ import { Avatar, channelName } from "../../lib/ui";
 import { useGlance } from "./Home";
 import { STATUS_LABELS, type DealStatus } from "../../lib/hub";
 
+interface HubTask { id: string; brand_name: string; amount_usd: number | string | null; status: string; draft_due_at: string | null; payment_expected_at: string | null; updated_at: string }
+
 interface HubToday {
-  tasks: { id: string; brand_name: string; amount_usd: number | string | null; status: string; draft_due_at: string | null; payment_expected_at: string | null }[];
+  tasks: HubTask[];
   momentum: { comingUp: { id: string; brandName: string; amountUsd: number; kind: "payment" | "delivery"; label: string; meta: string }[] };
 }
 
@@ -47,24 +49,56 @@ function when(event: CommunityEvent) {
   return `${start.toLocaleDateString([], { weekday: "short" })} ${clock(start)}`;
 }
 
-/** Counts for the sidebar's "Today" badge: things that need you today. */
-export function useTodayCount() {
+const daysSince = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+
+/*
+  The server's `tasks` are the website's "Needs you today": the deals that have
+  gone quiet too long, padded up to three with any open deal so the Hub's own
+  Today screen is never empty. Here only the ones that really need you count,
+  by the same thresholds (lib/hub/deals.ts needsYouToday), and a deal already
+  shown as an overdue payment isn't listed twice.
+*/
+function needsYou(task: HubTask) {
+  const days = daysSince(task.updated_at);
+  return (task.status === "pitching" && days > 2)
+    || (task.status === "pending_payment" && days > 7)
+    || (["production", "post_production", "revisions"].includes(task.status) && days > 3);
+}
+
+/** The website's wording for each kind of deal that needs you (components/hub/TodayScreen.tsx). */
+function taskCopy(task: HubTask) {
+  const days = daysSince(task.updated_at);
+  const amount = money(Number(task.amount_usd ?? 0));
+  if (task.status === "pitching") return { title: `Follow up with ${task.brand_name}`, meta: `Pitched ${days} day${days === 1 ? "" : "s"} ago · ${amount} on the table` };
+  if (task.status === "pending_payment") return { title: `Follow up with ${task.brand_name} about payment`, meta: `Last updated ${days} days ago · ${amount}` };
+  return { title: `Move ${task.brand_name} forward`, meta: `${STATUS_LABELS[task.status as DealStatus] ?? task.status} · updated ${days}d ago · ${amount}` };
+}
+
+/** What Today lists from the Hub: overdue payments (two at most), then the deals that need you. */
+function useHubNeeds() {
   const hub = useHubToday().data;
   const glance = useGlance().data;
-  return (hub?.tasks.length ?? 0) + (glance?.pastDue.deals.length ? 1 : 0);
+  const late = (glance?.pastDue.deals ?? []).slice(0, 2);
+  const lateIds = new Set(glance?.pastDue.deals.map((d) => d.id));
+  const tasks = (hub?.tasks ?? []).filter((t) => needsYou(t) && !lateIds.has(t.id)).slice(0, 3);
+  return { late, tasks };
+}
+
+/** Counts for the sidebar's "Today" badge: the Hub items Today lists. */
+export function useTodayCount() {
+  const { late, tasks } = useHubNeeds();
+  return late.length + tasks.length;
 }
 
 export function TodayItems() {
-  const events = useEvents().all;
-  const hub = useHubToday().data;
-  const glance = useGlance().data;
+  const { all: events, calendarUnavailable } = useEvents();
+  const { late, tasks } = useHubNeeds();
   const points = usePoints().data;
   const conversations = useConversations("creatorhive").data ?? [];
   const channels = useChannels("creatorhive").data ?? [];
   const event = useMemo(() => nextEvent(events), [events]);
   const waiting = conversations.filter((c) => c.unreadCount > 0).slice(0, 3);
   const mentioned = channels.filter((c) => c.mentionCount > 0).slice(0, 3);
-  const late = glance?.pastDue.deals ?? [];
 
   return (
     <>
@@ -73,21 +107,24 @@ export function TodayItems() {
           <span className="t-ico honey">{event.joinUrl ? <Video /> : <Calendar />}</span>
           <span><b>{event.title}</b><small>{when(event)}{event.organizer ? ` · ${event.organizer}` : ""}{event.rsvpCount ? ` · ${event.rsvpCount} going` : ""}</small></span>
         </button>
-      ) : null}
+      ) : calendarUnavailable ? <div className="faint t-note">Coaching calls are temporarily unavailable.</div> : null}
 
-      {(hub?.tasks.length || late.length) ? <div className="t-label">Today in your Hub</div> : null}
-      {late.slice(0, 2).map((deal) => (
+      {(tasks.length || late.length) ? <div className="t-label">Today in your Hub</div> : null}
+      {late.map((deal) => (
         <button key={`late-${deal.id}`} className="t-card" onClick={() => nav.open({ kind: "hub", page: "deals", dealId: deal.id }, "hub", "ch")}>
           <Avatar name={deal.brandName} size={34} radius="9px" />
           <span><b>Payment expected · {deal.brandName}</b><small className="late-text">{money(deal.amountUsd)} · {deal.daysOverdue} {deal.daysOverdue === 1 ? "day" : "days"} late</small></span>
         </button>
       ))}
-      {hub?.tasks.slice(0, 3).map((deal) => (
-        <button key={deal.id} className="t-card" onClick={() => nav.open({ kind: "hub", page: "deals", dealId: deal.id }, "hub", "ch")}>
-          <Avatar name={deal.brand_name} size={34} radius="9px" />
-          <span><b>{deal.brand_name}</b><small>{STATUS_LABELS[deal.status as DealStatus] ?? deal.status}{deal.amount_usd ? ` · ${money(deal.amount_usd)}` : ""}</small></span>
-        </button>
-      ))}
+      {tasks.map((deal) => {
+        const copy = taskCopy(deal);
+        return (
+          <button key={deal.id} className="t-card" onClick={() => nav.open({ kind: "hub", page: "deals", dealId: deal.id }, "hub", "ch")}>
+            <Avatar name={deal.brand_name} size={34} radius="9px" />
+            <span><b>{copy.title}</b><small>{copy.meta}</small></span>
+          </button>
+        );
+      })}
 
       {waiting.length || mentioned.length ? <div className="t-label">Waiting on you</div> : null}
       {waiting.map((c) => (
@@ -112,7 +149,7 @@ export function TodayItems() {
           </div>
         </>
       ) : null}
-      {!event && !hub?.tasks.length && !late.length && !waiting.length && !mentioned.length && !points ? <div className="faint" style={{ padding: 8 }}>Nothing needs you right now.</div> : null}
+      {!event && !tasks.length && !late.length && !waiting.length && !mentioned.length && !points ? <div className="faint" style={{ padding: 8 }}>Nothing needs you right now.</div> : null}
     </>
   );
 }
