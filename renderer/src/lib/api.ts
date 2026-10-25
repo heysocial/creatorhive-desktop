@@ -33,10 +33,14 @@ export interface Conversation {
   displayName: string;
   realtimeChannel: string;
   participants: Participant[];
+  lastMessageId?: string | null;
   lastMessageAt: string | null;
   lastMessagePreview: string | null;
   lastMessageAuthorId: string | null;
   unreadCount: number;
+  /** 1:1 DMs: how far the other person has received and read (null on groups). */
+  receipts?: { deliveredThrough: string | null; readThrough: string | null };
+  receiptsSince?: string | null;
   other: Participant;
 }
 

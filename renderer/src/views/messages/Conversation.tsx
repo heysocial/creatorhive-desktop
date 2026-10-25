@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bell, BellOff, ExternalLink, Hash, Info, Lock, Pin, SquareArrowOutUpRight, Star, Upload, Users, X } from "lucide-react";
+import { Bell, BellOff, ExternalLink, Hash, Info, Lock, Pin, Search, SquareArrowOutUpRight, Star, Upload, Users, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, keys, queryClient, useChannels, useConversations, type Workspace } from "../../lib/api";
 import {
-  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
+  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, receiptFor, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
 } from "../../lib/community";
 import { dayLabel } from "../../lib/format";
@@ -13,9 +13,9 @@ import { nav } from "../../lib/nav";
 import { sitePathFor } from "../../lib/sitePaths";
 import { Avatar, channelName } from "../../lib/ui";
 import { Composer, type ComposerHandle, type ComposerSend, type MentionCandidate } from "./Composer";
-import { MessageRow, type RowActions } from "./MessageRow";
+import { Badge, MessageRow, type RowActions } from "./MessageRow";
 import { RichText } from "../../lib/html";
-import { huddleFor, setPrefs, toggleSaved, useHsSidebar, useHuddles } from "../../lib/heysocial";
+import { HS_KEY, huddleFor, setPrefs, toggleSaved, useHsSidebar, useHuddles } from "../../lib/heysocial";
 import { HuddleButton } from "../heysocial/Huddle";
 
 const GROUP_GAP_MS = 5 * 60_000;
@@ -27,14 +27,40 @@ function grouped(previous: Message | undefined, message: Message) {
   return new Date(message.createdAt).getTime() - new Date(previous.createdAt).getTime() < GROUP_GAP_MS && !message.pin;
 }
 
+/** A message from a link (a notification, search, Copy link): scrolled to the middle and lit up for a moment, as on the website. */
+function showMessage(el: HTMLElement) {
+  el.scrollIntoView({ block: "center" });
+  el.classList.add("jump-target");
+  setTimeout(() => el.classList.remove("jump-target"), 1800);
+}
+
 function toAuthor(user: SessionUser): Author {
   return { id: user.id, name: user.name, avatarUrl: user.image ?? null, role: user.role ?? "student", instagram: user.instagram ?? null };
 }
 
 /** The scrolling list: loads older pages at the top, sticks to the bottom while you're there. */
-function MessageList({ where, actions, header, empty }: { where: Thread; actions: RowActions; header?: ReactNode; empty: ReactNode }) {
+function MessageList({ where, actions, header, empty, jumpTo, onJumped, receipts = false }: {
+  where: Thread;
+  actions: RowActions;
+  header?: ReactNode;
+  empty: ReactNode;
+  /** A message to show (from a link): older pages load until it's there. */
+  jumpTo?: string | null;
+  onJumped?: () => void;
+  /** 1:1 DMs: Sent, Delivered or Read under your newest message. */
+  receipts?: boolean;
+}) {
   const query = useMessages(where);
   const messages = useMemo(() => flatten(query.data), [query.data]);
+  const receipt = useMemo(() => {
+    if (!receipts) return null;
+    // The newest page carries the other person's watermarks.
+    const newest = query.data?.pages[0];
+    const mine = messages.findLast((m) => m.author.id === actions.meId);
+    if (!mine || mine.sending || mine.failed || mine.id.startsWith("local-")) return null;
+    const state = receiptFor(mine, newest?.receipts, newest?.receiptsSince);
+    return { id: mine.id, label: state === "read" ? "Read ✓✓" : state === "delivered" ? "Delivered" : "Sent" };
+  }, [receipts, messages, query.data, actions.meId]);
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const restore = useRef<number | null>(null);
@@ -69,6 +95,22 @@ function MessageList({ where, actions, header, empty }: { where: Thread; actions
     return () => observer.disconnect();
   }, [query.isSuccess]);
 
+  // Up to 20 older pages, as the website looks back for a pinned message; then it gives up quietly.
+  useEffect(() => {
+    if (!jumpTo || !query.isSuccess || query.isFetchingNextPage) return;
+    const el = scroller.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(jumpTo)}"]`);
+    atBottom.current = false;
+    if (el) {
+      showMessage(el);
+      onJumped?.();
+    } else if (query.hasNextPage && query.data.pages.length < 20) {
+      void query.fetchNextPage();
+    } else {
+      atBottom.current = true;
+      onJumped?.();
+    }
+  }, [jumpTo, query.isSuccess, query.isFetchingNextPage, query.data]);
+
   function onScroll() {
     const el = scroller.current!;
     atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
@@ -94,7 +136,7 @@ function MessageList({ where, actions, header, empty }: { where: Thread; actions
           return (
             <div key={message.clientMutationId ?? message.id}>
               {newDay ? <div className="day"><span>{dayLabel(message.createdAt)}</span></div> : null}
-              <MessageRow message={message} grouped={!newDay && grouped(previous, message)} actions={actions} />
+              <MessageRow message={message} grouped={!newDay && grouped(previous, message)} actions={actions} receipt={receipt?.id === message.id ? receipt.label : null} />
             </div>
           );
         })}
@@ -104,8 +146,11 @@ function MessageList({ where, actions, header, empty }: { where: Thread; actions
 }
 
 /** Replies beside the channel (or alone, in a pop-out). */
-export function ThreadPanel({ where, parentId, user, onClose, title, popout = false, realtimeChannel, workspace = "creatorhive" }: {
+export function ThreadPanel({ where, parentId, user, onClose, title, popout = false, realtimeChannel, workspace = "creatorhive", jumpTo, onJumped }: {
   workspace?: Workspace;
+  /** A reply to show (from a link), once the thread has loaded. */
+  jumpTo?: string | null;
+  onJumped?: () => void;
   where: Thread;
   parentId: string;
   user: SessionUser;
@@ -125,6 +170,18 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
     const el = scroller.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [count, query.isSuccess]);
+
+  useEffect(() => {
+    if (!jumpTo || !query.isFetched) return;
+    const el = scroller.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(jumpTo)}"]`);
+    if (el) showMessage(el);
+    onJumped?.();
+  }, [jumpTo, query.isFetched]);
+
+  // A thread in its own window is named after it in the Window menu and Mission Control.
+  useEffect(() => {
+    if (popout && query.data) document.title = `Thread · ${query.data.parent.author.name}`;
+  }, [popout, query.data?.parent.author.name]);
 
   return (
     <aside className={`thread ${popout ? "alone" : ""}`}>
@@ -231,9 +288,11 @@ function useRowActions(where: Thread, user: SessionUser, { inThread = false, onO
     },
     onProfile: (userId) => nav.open({ kind: "profile", id: userId }),
     copyLink: async (message) => {
+      // The website's own form (?thread=…&message=…), so the link opens at the message there and here.
       const { origin } = await ch.info();
-      const path = where.kind === "channel" ? `${sitePathFor({ ...nav.get(), view: { kind: "channel", id: where.id } })}&m=${message.id}` : `${sitePathFor({ ...nav.get(), view: { kind: "dm", id: where.id } })}&m=${message.id}`;
-      void navigator.clipboard.writeText(`${origin}${path}`);
+      const place = sitePathFor({ ws: heySocial ? "hs" : "ch", section: "home", view: { kind: where.kind, id: where.id } });
+      const thread = message.parentMessageId ? `&thread=${encodeURIComponent(message.parentMessageId)}` : "";
+      void navigator.clipboard.writeText(`${origin}${place}${thread}&message=${encodeURIComponent(message.id)}`);
     },
   }), [where.kind, where.id, user.id, isStaff, inThread, onOpenThread, onReply, heySocial, saved]);
 }
@@ -263,8 +322,47 @@ function PinsPopover({ channelId, onClose, onJump }: { channelId: string; onClos
   );
 }
 
+/** Who is in a channel, owner and team first, as the website's Members dialog lists them. */
+function ChannelMembers({ channelId, title, onClose, onProfile }: { channelId: string; title: string; onClose: () => void; onProfile: (id: string) => void }) {
+  const { data, isLoading, isError } = useChannelMembers(channelId);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [onClose]);
+  const query = q.trim().toLowerCase();
+  const shown = (data?.members ?? []).filter((m) => !query || m.name.toLowerCase().includes(query));
+  const isStaff = (m: { role: string }) => m.role === "owner" || m.role === "team";
+  const staff = shown.filter(isStaff);
+  const others = shown.filter((m) => !isStaff(m));
+  const row = (m: (typeof shown)[number]) => (
+    <button key={m.id} className="palette-row" onClick={() => onProfile(m.id)}>
+      <Avatar name={m.name} src={m.avatarUrl} seed={m.id} size={28} radius="8px" presence={m.presence} />
+      <span className="t">{m.name}</span><Badge badge={m.badge} role={m.role} />
+    </button>
+  );
+  return (
+    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="sheet members-sheet" role="dialog" aria-label="Members">
+        <div className="sheet-head">Members<span className="faint">{title}</span><button className="iconbtn" onClick={onClose} aria-label="Close"><X /></button></div>
+        <div className="palette-input"><Search /><input autoFocus value={q} placeholder="Search members" aria-label="Search members" onChange={(e) => setQ(e.target.value)} /></div>
+        <div className="palette-list">
+          {isLoading ? <div className="palette-empty">Loading…</div> : null}
+          {isError ? <div className="palette-empty">Couldn't load the members.</div> : null}
+          {data && shown.length === 0 ? <div className="palette-empty">No one matches “{q.trim()}”.</div> : null}
+          {staff.length ? <div className="palette-group">Owner &amp; team</div> : null}
+          {staff.map(row)}
+          {others.length ? <div className="palette-group">Members · {others.length}</div> : null}
+          {others.map(row)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** A channel or DM: header, messages, composer, and threads beside it. */
-export function Conversation({ where, user, workspace, popout = false, threadId: initialThread }: { where: Thread; user: SessionUser; workspace: Workspace; popout?: boolean; threadId?: string }) {
+export function Conversation({ where, user, workspace, popout = false, threadId: initialThread, messageId }: { where: Thread; user: SessionUser; workspace: Workspace; popout?: boolean; threadId?: string; messageId?: string }) {
   const heySocial = workspace === "heysocial";
   const hsSidebar = useHsSidebar(heySocial).data;
   const huddles = useHuddles(heySocial).data;
@@ -276,6 +374,8 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
   const [threadId, setThreadId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [pins, setPins] = useState(false);
+  const [members, setMembers] = useState(false);
+  const [jump, setJump] = useState<string | null>(messageId ?? null);
   const [dragging, setDragging] = useState(false);
   const composer = useRef<ComposerHandle>(null);
   const people = useMentionSearch(where);
@@ -296,6 +396,8 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
     setReplyTo(null);
     void markRead(where).then(() => {
       void queryClient.invalidateQueries({ queryKey: where.kind === "channel" ? keys.channels(workspace) : keys.conversations(workspace) });
+      // Hey Social Inc.'s sidebar has its own list.
+      if (heySocial) void queryClient.invalidateQueries({ queryKey: HS_KEY });
       ch.app.refreshBadge();
     });
     if (!popout) ch.app.setViewing(where.id);
@@ -308,6 +410,22 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
     };
   }, [where.kind, where.id, workspace, popout]);
 
+  // A link to a thread or a message in this same conversation, while it's open.
+  useEffect(() => {
+    if (initialThread) setThreadId(initialThread);
+    setJump(messageId ?? null);
+  }, [initialThread, messageId]);
+  useEffect(() => {
+    const reopen = (event: Event) => {
+      const view = (event as CustomEvent<{ id?: string; threadId?: string; messageId?: string }>).detail;
+      if (popout || view?.id !== where.id) return;
+      if (view.threadId) setThreadId(view.threadId);
+      setJump(view.messageId ?? null);
+    };
+    window.addEventListener("ch:reopen", reopen);
+    return () => window.removeEventListener("ch:reopen", reopen);
+  }, [where.id, popout]);
+
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape" && threadId && !document.querySelector(".emoji-pop, .scrim")) setThreadId(null);
@@ -318,6 +436,11 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
 
   const title = where.kind === "channel" ? (channel ? channelName(channel.name) : "") : conversation?.displayName ?? "";
   const other = conversation?.other;
+
+  // A pop-out is named after its conversation in the Window menu and Mission Control.
+  useEffect(() => {
+    if (popout && title) document.title = where.kind === "channel" ? `#${title}` : title;
+  }, [popout, title, where.kind]);
 
   const head = (
     <div className={`mhead ${popout ? "popout-head" : ""}`}>
@@ -338,7 +461,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
       {where.kind === "channel" && channel?.description && !popout ? <span className="sub">{channel.description}</span> : null}
       {conversation?.isGroup ? <span className="sub">{conversation.participants.length + 1} people</span> : null}
       <div className="acts">
-        {where.kind === "channel" && channel ? <span className="faint member-count" title="Members"><Users />{channel.memberCount}</span> : null}
+        {where.kind === "channel" && channel ? <button className="faint member-count" title="Members" onClick={() => setMembers(true)}><Users />{channel.memberCount}</button> : null}
         {heySocial && huddles?.configured ? <HuddleButton kind={where.kind} id={where.id} label={where.kind === "channel" ? `#${title}` : title} huddle={huddle} meId={user.id} /> : null}
         {where.kind === "channel" ? (
           <span style={{ position: "relative" }}>
@@ -350,7 +473,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
           </span>
         ) : null}
         {where.kind === "dm" && other && !conversation?.isGroup ? <button className="iconbtn" title="Profile" onClick={() => (popout ? ch.app.openMain(`profile:${other.id}`) : nav.open({ kind: "profile", id: other.id }))}><Info /></button> : null}
-        {!popout ? <button className="iconbtn" title="Open in its own window (⌘⇧O)" onClick={() => ch.window.popout({ kind: where.kind, id: where.id, title })}><SquareArrowOutUpRight /></button> : null}
+        {!popout ? <button className="iconbtn" title="Open in its own window (⌘⇧O)" onClick={() => ch.window.popout({ kind: where.kind, id: where.id, title: where.kind === "channel" ? `#${title}` : title })}><SquareArrowOutUpRight /></button> : null}
         {popout ? <button className="iconbtn" title="Show in the main window" onClick={() => ch.app.openMain(`${where.kind}:${where.id}`)}><ExternalLink /></button> : null}
       </div>
     </div>
@@ -370,7 +493,8 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
       onDragEnter={(event) => event.dataTransfer.types.includes("Files") && setDragging(true)}>
       <div className="convo-main">
         {head}
-        <MessageList where={where} actions={actions} header={intro} empty={null} />
+        <MessageList where={where} actions={actions} header={intro} empty={null} receipts={where.kind === "dm" && conversation?.isGroup === false}
+          jumpTo={threadId ? null : jump} onJumped={() => setJump(null)} />
         <div className="typing">{typingLine(typing)}</div>
         {replyTo ? (
           <div className="replying"><span>Replying to <b>{replyTo.author.name}</b>: {replyTo.body.slice(0, 120)}</span><button className="iconbtn" onClick={() => setReplyTo(null)}><X /></button></div>
@@ -400,8 +524,13 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
             <div><Upload /><b>{heySocial ? "Upload to" : "Drop to share in"} {where.kind === "channel" ? `#${title}` : title}</b><span>{heySocial ? "Any file up to 1 GB, 10 at a time" : "Pictures and documents (PDF, Word, Excel, PowerPoint)"}</span></div>
           </div>
         ) : null}
+        {members && where.kind === "channel" ? (
+          <ChannelMembers channelId={where.id} title={`#${title}`} onClose={() => setMembers(false)}
+            onProfile={(id) => { setMembers(false); if (popout) ch.app.openMain(`profile:${id}`); else nav.open({ kind: "profile", id }); }} />
+        ) : null}
       </div>
-      {threadId ? <ThreadPanel where={where} parentId={threadId} user={user} title={where.kind === "channel" ? `#${title}` : title} onClose={() => setThreadId(null)} realtimeChannel={realtimeChannel} workspace={workspace} /> : null}
+      {threadId ? <ThreadPanel where={where} parentId={threadId} user={user} title={where.kind === "channel" ? `#${title}` : title} onClose={() => setThreadId(null)} realtimeChannel={realtimeChannel} workspace={workspace}
+        jumpTo={jump} onJumped={() => setJump(null)} /> : null}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { AlarmClock, Archive, Bookmark, Check, Hash, Loader2, RotateCcw, Trash2,
 import { ch } from "../../lib/bridge";
 import { api, queryClient } from "../../lib/api";
 import { shortTime } from "../../lib/format";
-import { placeView, refreshHs, useHsActivity, useHsSaved, useHsSidebar, useHsThreads, type SavedItem } from "../../lib/heysocial";
+import { messageView, placeView, refreshHs, useHsActivity, useHsSaved, useHsSidebar, useHsThreads, type SavedItem } from "../../lib/heysocial";
 import { nav } from "../../lib/nav";
 import { Avatar, channelName } from "../../lib/ui";
 
@@ -49,7 +49,7 @@ export function HsMentions() {
         {isLoading ? <div className="empty-state">Loading…</div> : null}
         {data?.length === 0 ? <div className="empty-state">Nothing yet. When someone @mentions you or reacts to your message, it shows up here.</div> : null}
         {data?.map((a) => (
-          <button key={a.id} className={`act-row ${a.unread ? "unread" : ""}`} onClick={() => nav.open(placeView(a.place), "home", "hs")}>
+          <button key={a.id} className={`act-row ${a.unread ? "unread" : ""}`} onClick={() => nav.open(messageView(a.place, a.messageId), "home", "hs")}>
             <Avatar name={a.actor.name} src={a.actor.avatarUrl} seed={a.actor.id} size={40} radius="10px" />
             <span className="act-text">
               <span><b>{a.actor.name}</b> <span className="muted">{a.kind === "mention" ? "mentioned you" : <>reacted {a.emoji} to your message</>}</span> <span className="tag-s">{a.place.label}</span></span>
@@ -123,7 +123,7 @@ export function HsSaved() {
         {data?.items.length === 0 ? <div className="empty-state"><div><Bookmark /><p>{status === "in_progress" ? "Save messages to come back to them. Hover a message and choose Save." : "Nothing here."}</p></div></div> : null}
         {data?.items.map((item) => (
           <div key={item.messageId} className="hs-card saved">
-            <button className="hs-card-main" onClick={() => nav.open(placeView(item.place), "home", "hs")}>
+            <button className="hs-card-main" onClick={() => nav.open(messageView(item.place, item.messageId), "home", "hs")}>
               <div className="hs-card-head"><b>{item.place.label}</b>{item.remindAt ? <span className={`due ${new Date(item.remindAt).getTime() - Date.now() < 3 * 3600_000 ? "soon" : ""}`}><AlarmClock />{item.remindedAt ? `Reminded ${shortTime(item.remindedAt)}` : dueLabel(item.remindAt)}</span> : null}</div>
               <div className="hs-card-msg"><Avatar name={item.author.name} src={item.author.avatarUrl} seed={item.author.id} size={30} radius="7px" /><span><b>{item.author.name}</b> <span className="faint">{shortTime(item.createdAt)}</span><br />{item.preview}</span></div>
             </button>

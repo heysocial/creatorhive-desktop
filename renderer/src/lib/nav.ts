@@ -16,8 +16,8 @@ export type View =
   | { kind: "profile"; id: string }
   | { kind: "leaderboard" }
   | { kind: "members" }
-  | { kind: "channel"; id: string; threadId?: string }
-  | { kind: "dm"; id: string; threadId?: string }
+  | { kind: "channel"; id: string; threadId?: string; messageId?: string }
+  | { kind: "dm"; id: string; threadId?: string; messageId?: string }
   | { kind: "dms-home" }
   | { kind: "hub"; page: "deals" | "dashboard" | "clients" | "invoices"; dealId?: string; board?: "outreach" | "campaigns" | "payment"; smart?: "due" | "awaiting" | "retainers" }
   | { kind: "learn"; page: "courses" | "improve" | "resources" }
@@ -71,8 +71,8 @@ function initial(): State {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
     if (saved?.current?.ws && saved?.current?.view) {
-      // An open deal doesn't come back on the next launch; its page does.
-      const clean = (v: View): View => (v.kind === "hub" ? { ...v, dealId: undefined } : v);
+      // An open deal doesn't come back on the next launch; its page does. Nor does a jump to one message.
+      const clean = (v: View): View => (v.kind === "hub" ? { ...v, dealId: undefined } : v.kind === "channel" || v.kind === "dm" ? { ...v, messageId: undefined } : v);
       const remembered = Object.fromEntries(Object.entries(saved.remembered ?? {}).map(([k, v]) => [k, clean(v as View)]));
       return { ...saved, current: { ...saved.current, view: clean(saved.current.view) }, remembered, back: [], forward: [] };
     }

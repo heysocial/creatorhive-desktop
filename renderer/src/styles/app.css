@@ -302,7 +302,8 @@ img { -webkit-user-drag: none; }
 .page, .home, .convo { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
 .page-body { flex: 1; padding: 22px 26px 30px; }
 .page-body.flush { padding: 0; }
-.mhead .member-count { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; margin-right: 4px; }
+.mhead .member-count { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; margin-right: 4px; height: 28px; padding: 0 6px; border-radius: 7px; }
+.mhead .member-count:hover { background: var(--sel); color: var(--ink); }
 .mhead .member-count svg { width: 14px; height: 14px; }
 .kbd-in { font-size: 11px; opacity: .65; border: .5px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 2px; }
 .btn.glassy { background: rgba(255,255,255,.7); backdrop-filter: blur(10px); }
@@ -318,7 +319,7 @@ img { -webkit-user-drag: none; }
 .big { font-size: 28px; font-weight: 800; letter-spacing: -.02em; display: block; }
 
 /* ---------- Conversation ---------- */
-.convo { flex-direction: row; }
+.convo { flex-direction: row; container-type: inline-size; }
 .convo-main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 .msgs { flex: 1; padding: 0 18px; }
 .msgs-inner { display: flex; flex-direction: column; justify-content: flex-end; min-height: 100%; padding: 12px 0 6px; }
@@ -365,7 +366,7 @@ img { -webkit-user-drag: none; }
 .react.add svg { width: 15px; height: 15px; }
 .react.ghost { opacity: .75; }
 .react:hover { box-shadow: inset 0 0 0 1px var(--ink-4); }
-.hover-bar { position: absolute; top: -14px; right: 12px; display: none; gap: 1px; padding: 2px; border-radius: 9px; background: var(--card); box-shadow: 0 0 0 .5px var(--line-strong), 0 4px 12px rgba(0,0,0,.1); z-index: 5; }
+.hover-bar { position: absolute; top: -30px; right: 12px; display: none; gap: 1px; padding: 2px; border-radius: 9px; background: var(--card); box-shadow: 0 0 0 .5px var(--line-strong), 0 4px 12px rgba(0,0,0,.1); z-index: 5; }
 .msg:hover .hover-bar, .hover-bar.show { display: flex; }
 .hover-bar button { width: 30px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--ink-3); }
 .hover-bar button svg { width: 16px; height: 16px; }
@@ -420,6 +421,18 @@ img { -webkit-user-drag: none; }
 .thread-head .acts { margin-left: auto; display: flex; gap: 2px; }
 .thread .msgs { padding: 0 14px; }
 .thread .msgs-inner { justify-content: flex-start; }
+/* The thread's first message has nothing above it to sit over. */
+.thread .msgs-inner > .msg:first-child .hover-bar { top: 4px; }
+/* Too narrow for both (a pop-out, the window at its smallest): the thread takes the place of the channel until it's closed. */
+@container (max-width: 740px) {
+  .convo.with-thread > .convo-main { display: none; }
+  .convo.with-thread > .thread { flex: 1; width: auto; border-left: 0; }
+}
+.msg.jump-target { animation: jump-target 1.8s ease-out; }
+@keyframes jump-target { 0%, 25% { background: var(--honey-soft); box-shadow: 0 0 0 2px var(--honey); } 100% { box-shadow: 0 0 0 0 transparent; } }
+.msg .receipt { margin-top: 3px; font-size: 11.5px; color: var(--ink-4); }
+.members-sheet { width: min(440px, 92vw); }
+.members-sheet .sheet-head .faint { margin-left: 8px; font-weight: 500; font-size: 13px; }
 .replies-rule { display: flex; align-items: center; gap: 10px; margin: 8px 0; color: var(--ink-3); font-size: 12px; font-weight: 600; }
 .replies-rule::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .popover { position: absolute; right: 0; top: calc(100% + 6px); z-index: 25; width: 360px; max-height: 420px; overflow-y: auto; background: var(--overlay); backdrop-filter: blur(30px); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.25), 0 0 0 .5px rgba(0,0,0,.2); padding: 6px; }
@@ -1311,6 +1324,7 @@ html.is-popout body { background: var(--card); }
 .voice-rec .wave i { flex: 1; max-width: 4px; background: var(--ink-3); border-radius: 2px; }
 .voice-rec .send { width: 34px; height: 28px; border-radius: 7px; background: var(--honey); color: var(--on-honey); display: grid; place-items: center; }
 .voice-rec svg { width: 16px; height: 16px; }
+.voice-rec.review .grow { flex: 1; }
 .lock-screen { position: absolute; inset: 0; z-index: 100; background: var(--card-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; -webkit-app-region: drag; }
 .lock-screen img { width: 64px; height: 64px; border-radius: 16px; background: #1F1E1C; padding: 12px; }
 .lock-screen button { -webkit-app-region: no-drag; margin-top: 8px; }

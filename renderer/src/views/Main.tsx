@@ -41,7 +41,7 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
       return <ProfilePage key={view.id} id={view.id} user={user} />;
     case "channel":
     case "dm":
-      return <Conversation key={`${view.kind}:${view.id}`} where={{ kind: view.kind, id: view.id }} user={user} workspace={workspace} threadId={view.threadId} />;
+      return <Conversation key={`${view.kind}:${view.id}`} where={{ kind: view.kind, id: view.id }} user={user} workspace={workspace} threadId={view.threadId} messageId={view.messageId} />;
     case "threads":
       return <HsThreads />;
     case "mentions":
