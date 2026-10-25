@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import { api, keys, queryClient, type Conversation, type Workspace } from "../lib/api";
+import { ch } from "../lib/bridge";
 import { useMembers, type Member } from "../lib/community";
 import { nav } from "../lib/nav";
 import { Avatar } from "../lib/ui";
@@ -15,16 +16,19 @@ export function NewMessage({ onClose, workspace }: { onClose: () => void; worksp
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  // You aren't someone to message, as on the website's picker.
+  const [meId, setMeId] = useState<string | null>(null);
 
   useEffect(() => input.current?.focus(), []);
+  useEffect(() => { void ch.auth.session().then(({ user }) => setMeId(user?.id ?? null)); }, []);
 
   const results = useMemo(() => {
     const query = q.trim().toLowerCase();
     return (members ?? [])
-      .filter((m) => !picked.some((p) => p.id === m.id))
+      .filter((m) => m.id !== meId && !picked.some((p) => p.id === m.id))
       .filter((m) => !query || m.name.toLowerCase().includes(query))
       .slice(0, 30);
-  }, [members, q, picked]);
+  }, [members, q, picked, meId]);
 
   async function start(people: Member[]) {
     if (people.length === 0 || busy) return;

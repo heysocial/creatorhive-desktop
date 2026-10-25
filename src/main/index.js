@@ -359,6 +359,7 @@ function configureIpc() {
 
   ipcMain.on("realtime:watch", (_event, name) => realtime.watch(name));
   ipcMain.on("realtime:unwatch", (_event, name) => realtime.unwatch(name));
+  ipcMain.on("realtime:ensure", (_event, names) => void realtime.ensure(names));
 
   ipcMain.on("app:viewing", (event, id) => {
     // Pop-outs report what they show themselves; only the main window sets this.
@@ -383,9 +384,17 @@ function configureIpc() {
   files.configure(ipcMain);
   ipcMain.handle("app:isLocked", () => locked);
   // A picture on the clipboard (a screenshot, an image copied from Preview or a browser), as PNG bytes.
-  ipcMain.handle("clipboard:image", () => {
-    const image = clipboard.readImage();
-    return image.isEmpty() ? null : image.toPNG();
+  // Electron 44's clipboard is async and speaks MIME types; some Mac apps only offer TIFF, made into PNG here.
+  ipcMain.handle("clipboard:image", async () => {
+    for (const item of await clipboard.read()) {
+      const type = item.types.includes("image/png") ? "image/png" : item.types.find((t) => t.startsWith("image/"));
+      if (!type) continue;
+      const bytes = Buffer.from(await (await item.getType(type)).arrayBuffer());
+      if (type === "image/png") return bytes;
+      const image = nativeImage.createFromBuffer(bytes);
+      if (!image.isEmpty()) return image.toPNG();
+    }
+    return null;
   });
   ipcMain.handle("app:unlock", async () => {
     if (!locked) return true;

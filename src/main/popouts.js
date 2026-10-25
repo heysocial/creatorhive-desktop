@@ -52,6 +52,8 @@ function open(target, chrome) {
   });
   // One huddle at a time: starting another leaves the first.
   if (kind === "huddle") for (const [k, w] of windows) if (k.startsWith("huddle:") && !w.isDestroyed()) w.close();
+  // A title given here (the conversation's name) stays: the page's own <title> would make every window "CreatorHive".
+  if (typeof target.title === "string" && target.title) win.on("page-title-updated", (event) => event.preventDefault());
   windows.set(key, win);
   win.on("closed", () => { windows.delete(key); onChange(); });
   onChange();

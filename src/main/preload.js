@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld("ch", {
   realtime: {
     watch: (name) => ipcRenderer.send("realtime:watch", name),
     unwatch: (name) => ipcRenderer.send("realtime:unwatch", name),
+    ensure: (names) => ipcRenderer.send("realtime:ensure", names),
     onMessage: listen("realtime:message"),
     onState: listen("realtime:state"),
   },

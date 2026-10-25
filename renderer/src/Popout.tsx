@@ -32,7 +32,7 @@ export function Popout({ kind, id }: { kind: string; id: string }) {
 }
 
 function PopoutBody({ kind, id, user }: { kind: string; id: string; user: SessionUser }) {
-  useRealtimeRefresh(user.id);
+  useRealtimeRefresh(user.id, { sidebar: false });
   // The workspace isn't in the address: look the id up in Hey Social Inc.'s lists.
   const hs = useHeySocialAccess().data === true;
   const hsChannels = useChannels("heysocial", hs).data;

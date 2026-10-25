@@ -75,6 +75,8 @@ export interface Bridge {
   realtime: {
     watch(name: string): void;
     unwatch(name: string): void;
+    /** Channels the live connection should be able to hear (a DM started after it connected gets a fresh token). */
+    ensure(names: string[]): void;
     onMessage: Listen<RealtimeMessage>;
     onState: Listen<string>;
   };

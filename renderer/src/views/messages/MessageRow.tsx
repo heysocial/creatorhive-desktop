@@ -133,11 +133,13 @@ export function ThreadLine({ message, onOpen }: { message: Message; onOpen: () =
   );
 }
 
-export const MessageRow = memo(function MessageRow({ message, grouped, actions, inThread = false }: {
+export const MessageRow = memo(function MessageRow({ message, grouped, actions, inThread = false, receipt = null }: {
   message: Message;
   grouped: boolean;
   actions: RowActions;
   inThread?: boolean;
+  /** Under your newest 1:1 DM: Sent, Delivered or Read, as on the website. */
+  receipt?: string | null;
 }) {
   const [picker, setPicker] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -218,6 +220,7 @@ export const MessageRow = memo(function MessageRow({ message, grouped, actions, 
           ) : null}
           <ReactionChips reactions={message.reactions} onToggle={(emoji) => actions.onReact(message, emoji)} />
           {!inThread && actions.onOpenThread ? <ThreadLine message={message} onOpen={() => actions.onOpenThread?.(message)} /> : null}
+          {receipt ? <div className="receipt">{receipt}</div> : null}
         </div>
       </div>
       {!local ? (

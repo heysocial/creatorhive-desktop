@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ch } from "./bridge";
 import { api, queryClient } from "./api";
-import { addMessage, markRead, mergeCounts, messageKeys, patchMessage, removeMessage, type Message, type Thread } from "./community";
+import { addMessage, advanceReceipt, countsChanged, markRead, mergeCounts, messageKeys, patchMessage, refreshReactions, removeMessage, type Message, type Thread } from "./community";
 
 /*
   Live updates for an open channel or DM: new, edited and deleted messages,
@@ -45,8 +45,23 @@ export function useLiveThread(where: Thread, realtimeChannel: string | null, meI
           removeMessage(where, String(payload.messageId));
           if (payload.parentMessageId) void queryClient.invalidateQueries({ queryKey: messageKeys.list(where) });
           break;
-        case "reaction:updated":
-          patchMessage(where, String(payload.messageId), (m) => ({ ...m, reactions: mergeCounts(m.reactions, payload.reactions as Record<string, { count: number }>) }));
+        case "reaction:updated": {
+          const id = String(payload.messageId);
+          const counts = (payload.reactions ?? {}) as Record<string, { count: number }>;
+          let changed = false;
+          patchMessage(where, id, (m) => {
+            changed ||= countsChanged(m.reactions, counts);
+            return { ...m, reactions: mergeCounts(m.reactions, counts) };
+          });
+          if (changed) refreshReactions(where, id);
+          break;
+        }
+        case "receipt:delivered":
+        case "receipt:read":
+          // 1:1 DMs: the other person got (or read) your messages up to this time.
+          if (where.kind === "dm" && typeof payload.through === "string" && payload.userId !== meId) {
+            advanceReceipt(where, name === "receipt:read" ? "readThrough" : "deliveredThrough", payload.through);
+          }
           break;
         case "message:pinned":
           patchMessage(where, String(payload.messageId), (m) => ({ ...m, pin: (payload.pin as Message["pin"]) ?? null }));

@@ -73,8 +73,14 @@ export async function toggleSaved(messageId: string, saved: boolean) {
 }
 
 /** A website link to a Hey Social place (/hey-social?c=slug&thread=…, /hey-social/dm?convo=…), as a view in the app. */
-export function placeView(place: Place, threadId?: string) {
-  return place.kind === "channel" ? { kind: "channel" as const, id: place.id, threadId } : { kind: "dm" as const, id: place.id, threadId };
+export function placeView(place: Place, threadId?: string, messageId?: string) {
+  return place.kind === "channel" ? { kind: "channel" as const, id: place.id, threadId, messageId } : { kind: "dm" as const, id: place.id, threadId, messageId };
+}
+
+/** A mention or a saved message: its place, opened at the message (and its thread, which the channel link names). */
+export function messageView(place: Place, messageId: string) {
+  const thread = place.kind === "channel" ? new URL(place.href, "https://app.invalid").searchParams.get("thread") ?? undefined : undefined;
+  return placeView(place, thread, messageId);
 }
 
 /* ---------- Huddles ---------- */
