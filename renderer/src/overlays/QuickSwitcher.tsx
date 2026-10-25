@@ -5,7 +5,6 @@ import {
 } from "lucide-react";
 import { api, useChannels, useConversations, useHeySocialAccess, useSearch } from "../lib/api";
 import { useQuery } from "@tanstack/react-query";
-import { placeView, type Place } from "../lib/heysocial";
 import { commands } from "../lib/commands";
 import { openPath } from "../lib/links";
 import { nav, type Location } from "../lib/nav";
@@ -73,7 +72,7 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
   const hsSearch = useQuery({
     queryKey: ["hey-social", "search", debounced.trim()],
     enabled: inHs && debounced.trim().length >= 2,
-    queryFn: () => api<{ messages: { id: string; preview: string; author: { name: string; avatarUrl: string | null }; place: Place & { thread: boolean } }[] }>(`/api/hey-social/search?tab=messages&q=${encodeURIComponent(debounced.trim())}`),
+    queryFn: () => api<{ messages: { id: string; preview: string; author: { name: string; avatarUrl: string | null }; place: { kind: "channel" | "dm"; label: string; href: string; thread: boolean } }[] }>(`/api/hey-social/search?tab=messages&q=${encodeURIComponent(debounced.trim())}`),
   });
 
   const rows = useMemo<Row[]>(() => {
@@ -131,7 +130,8 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
     const hsMessages: Row[] = q.length >= 2 && inHs ? (hsSearch.data?.messages ?? []).slice(0, 8).map((m) => ({
       id: `hs:${m.id}`, group: "Messages in Hey Social Inc.", title: m.preview, sub: `${m.author.name} · ${m.place.label}`,
       glyph: <Avatar name={m.author.name} src={m.author.avatarUrl} size={28} radius="8px" />,
-      run: () => nav.open(placeView(m.place), "home", "hs"),
+      // The server names the place by its website link (channel slug or DM id), not an id.
+      run: () => void openPath(m.place.href),
     })) : [];
 
     return [...dms, ...channels, ...screens, ...hsMessages, ...server, ...actions];
