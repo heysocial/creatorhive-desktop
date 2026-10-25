@@ -185,7 +185,7 @@ function Account({ user }: { user: SessionUser }) {
     <>
       <Group title="Profile">
         <div className="set-row">
-          <span className="row"><Avatar name={v.name ?? user.name} src={v.avatarUrl} size={56} seed={user.id} /><span><b>{v.name}</b><small>{user.email}</small></span></span>
+          <span className="set-who"><Avatar name={v.name ?? user.name} src={v.avatarUrl} size={56} seed={user.id} /><span><b>{v.name}</b><small>{user.email}</small></span></span>
           <span className="set-ctl">
             <button className="btn" disabled={avatarBusy} onClick={() => picker.current?.click()}>{avatarBusy ? <Loader2 className="spin" /> : null}Change photo</button>
             <input ref={picker} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={async (e) => {
@@ -195,7 +195,8 @@ function Account({ user }: { user: SessionUser }) {
               setAvatarBusy(true);
               const result = await ch.files.uploadForm({ path: "/api/profile/avatar", field: "file", name: file.name, type: file.type, bytes: await file.arrayBuffer() });
               setAvatarBusy(false);
-              if (!result.ok) window.alert(result.error === "avatar_upload_rate_limited" ? "You can change your photo again in a few minutes." : result.error === "avatar_file_too_large" ? "That photo is over 3 MB." : "Couldn't change your photo.");
+              if (!result.ok) window.alert(result.error === "avatar_upload_rate_limited" ? photoWait(result.data) : result.error === "avatar_file_too_large" ? "That photo is over 3 MB." : "Couldn't change your photo.");
+              else profileChanged({ image: (result.data as { avatarUrl?: string } | undefined)?.avatarUrl ?? null });
               void profile.refetch();
             }} />
           </span>
@@ -214,7 +215,12 @@ function Account({ user }: { user: SessionUser }) {
           <button className="btn honey" disabled={busy || Object.keys(draft).length === 0} onClick={async () => {
             setBusy(true);
             setErrors({});
-            try { await api("/api/profile", { method: "PATCH", body: draft }); setDraft({}); void profile.refetch(); void queryClient.invalidateQueries({ queryKey: ["profile"] }); }
+            try {
+              const saved = await api<{ profile: Profile }>("/api/profile", { method: "PATCH", body: draft });
+              setDraft({});
+              void profile.refetch();
+              profileChanged({ name: saved.profile.name });
+            }
             catch (e) { if (e instanceof ApiError && e.data?.fieldErrors) setErrors(e.data.fieldErrors as Record<string, string>); else window.alert("Couldn't save your profile."); }
             finally { setBusy(false); }
           }}>Save profile</button>
@@ -225,7 +231,97 @@ function Account({ user }: { user: SessionUser }) {
         <ChangePassword />
         <Row title="Sign out of this Mac"><button className="btn" onClick={() => void ch.auth.signOut()}>Sign out</button></Row>
       </Group>
+      <DeleteAccount />
     </>
+  );
+}
+
+/** "Try again in 7 minutes", from the wait the server sends with a rate limit. */
+function photoWait(data: unknown) {
+  const seconds = Number((data as { retryAfterSeconds?: unknown } | undefined)?.retryAfterSeconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) return "You can change your photo again in a few minutes.";
+  const minutes = Math.ceil(seconds / 60);
+  return `You changed your photo recently. Try again in ${minutes === 1 ? "a minute" : `${minutes} minutes`}.`;
+}
+
+/*
+  The main window is its own renderer with its own cache: tell every window the
+  profile changed (through the main process's relay), so your profile, the
+  feed and the rail show the new name or photo straight away.
+*/
+function profileChanged(change: { name?: string; image?: string | null }) {
+  void queryClient.invalidateQueries({ queryKey: ["profile"] });
+  ch.app.relay({ topic: "profile", action: "changed", data: change });
+}
+
+/* The website's three lines of what goes (the iPhone shows the same). */
+const ERASED = [
+  "Your Hub — every deal, its contacts, and your recorded income",
+  "Your course progress, streaks and points",
+  "Your profile, photo and notification settings",
+];
+
+function deleteError(e: unknown) {
+  const status = e instanceof ApiError ? e.status : 0;
+  const code = e instanceof ApiError ? e.code : undefined;
+  if (status === 403 || code === "current_password_incorrect") return "That password doesn't match. Your account has not been deleted.";
+  if (code === "current_password_required") return "Enter your password to delete your account.";
+  if (status === 401) return "Your session has ended. Sign in again to delete your account.";
+  return "We couldn't delete your account. Check your connection and try again.";
+}
+
+/*
+  Deleting the account, in the website's order: the password first, then one
+  last confirmation, then the request. The server re-checks the password and
+  erases the account; signing out afterwards leaves nothing of it on this Mac.
+*/
+function DeleteAccount() {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    if (busy || !password) return;
+    setError(null);
+    if (!window.confirm("Delete your account?\n\nThis cannot be undone. Your Hub deals, progress and profile are erased. Posts and messages you sent stay in the community, but no longer show your name.")) return;
+    setBusy(true);
+    try {
+      await api("/api/settings/account", { method: "DELETE", body: { currentPassword: password } });
+    } catch (e) {
+      setError(deleteError(e));
+      setBusy(false);
+      return;
+    }
+    // The account is gone whatever happens next.
+    await ch.auth.signOut();
+  }
+
+  return (
+    <Group title="Delete account">
+      <div className="set-row set-form">
+        <span>
+          <b>Deleting your account is permanent</b>
+          <small>There is no undo, and no way for the team to bring it back.</small>
+          <small className="set-del-head">What is erased</small>
+          <ul className="set-del-list">{ERASED.map((line) => <li key={line}><small>{line}</small></li>)}</ul>
+          <small className="set-del-head">What stays</small>
+          <small>Posts, comments and messages you sent remain in the community so other members' conversations still make sense. Your name and photo come off them.</small>
+        </span>
+      </div>
+      <div className="set-row set-form">
+        <span>
+          <b>Password</b>
+          <small>Your password is the confirmation. You'll be asked once more before anything is erased.</small>
+        </span>
+        <form className="set-fields" onSubmit={(e) => { e.preventDefault(); void remove(); }}>
+          <input className="field" type="password" placeholder="Your password" autoComplete="current-password" value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} />
+          {error ? <small className="late-text">{error}</small> : null}
+          <span className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+            <button className="btn" disabled={busy || !password}>{busy ? <Loader2 className="spin" /> : null}{busy ? "Deleting…" : "Delete my account"}</button>
+          </span>
+        </form>
+      </div>
+    </Group>
   );
 }
 

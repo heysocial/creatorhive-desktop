@@ -183,7 +183,8 @@ async function uploadForm({ path, field, name, type, bytes, fields } = {}) {
     }
     const response = await appSession().fetch(`${ORIGIN}${path}`, { method: "POST", body: form, headers: { Origin: ORIGIN, Accept: "application/json" } });
     const data = await response.json().catch(() => null);
-    return response.ok ? { ok: true, data } : { ok: false, error: data?.error ?? `HTTP ${response.status}` };
+    // The failure's body too: a rate limit says how long to wait (retryAfterSeconds).
+    return response.ok ? { ok: true, data } : { ok: false, error: data?.error ?? `HTTP ${response.status}`, data };
   } catch (error) {
     debug("upload form failed", error?.message);
     return { ok: false, error: "offline" };
