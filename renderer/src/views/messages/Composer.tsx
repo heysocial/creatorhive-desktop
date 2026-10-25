@@ -187,16 +187,18 @@ export const Composer = forwardRef<ComposerHandle, {
     input.current?.focus();
   }, [allowFiles, staged.length, uploadFolder, uploadVideo]);
 
+  /** Puts text at the caret; returns the new value and caret. */
   const insert = useCallback((text: string) => {
     const el = input.current;
-    if (!el) return setValue((v) => v + text);
+    if (!el) { setValue((v) => v + text); return null; }
     const { selectionStart: start, selectionEnd: end } = el;
     const next = value.slice(0, start) + text + value.slice(end);
     caretAfter.current = start + text.length;
     setValue(next);
+    return { next, caret: start + text.length };
   }, [value]);
 
-  useImperativeHandle(ref, () => ({ addFiles, focus: () => input.current?.focus(), insert }), [addFiles, insert]);
+  useImperativeHandle(ref, () => ({ addFiles, focus: () => input.current?.focus(), insert: (text) => void insert(text) }), [addFiles, insert]);
 
   /** Wrap the selection in markdown (⌘B, ⌘I, ⌘⇧X, ...). */
   function wrap(before: string, after = before, linePrefix = false) {
@@ -394,7 +396,11 @@ export const Composer = forwardRef<ComposerHandle, {
           <button title="Emoji" onClick={() => setEmoji(!emoji)}><Smile /></button>
           {emoji ? <EmojiPicker onPick={(e) => { insert(e); setEmoji(false); }} onClose={() => setEmoji(false)} placement="above" /> : null}
         </span>
-        {searchPeople ? <button title="Mention someone" onClick={() => insert(value && !/\s$/.test(value) ? " @" : "@")}><AtSign /></button> : null}
+        {searchPeople ? <button title="Mention someone" onClick={() => {
+          // The list opens right away, as if "@" had been typed.
+          const at = insert(value && !/\s$/.test(value) ? " @" : "@");
+          if (at) trackMention(at.next, at.caret);
+        }}><AtSign /></button> : null}
         {voice ? <button title="Record a voice memo" onClick={() => setRecording(true)}><Mic /></button> : null}
         <button className={`send ${canSend ? "on" : ""}`} disabled={!canSend} title="Send (Return)" onClick={() => void send()}>
           {sending ? <Loader2 className="spin" /> : <SendHorizontal />}
