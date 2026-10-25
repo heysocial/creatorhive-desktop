@@ -33,16 +33,11 @@ export function useEvents() {
     queryKey: ["events", "community"],
     queryFn: async () => (await api<{ events: ApiEvent[] }>("/api/events?scope=all")).events,
   });
+  // A failure stays a failure (not an empty list), so Events can say coaching calls are unavailable, as the website does.
   const calendar = useQuery({
     queryKey: ["events", "calendar"],
     retry: false,
-    queryFn: async () => {
-      try {
-        return (await api<{ events: CalendarEvent[] }>("/api/events/calendar")).events;
-      } catch {
-        return [];
-      }
-    },
+    queryFn: async () => (await api<{ events: CalendarEvent[] }>("/api/events/calendar")).events,
   });
   const all = useMemo<CommunityEvent[]>(() => [
     ...(community.data ?? []).map((e) => ({
@@ -54,7 +49,7 @@ export function useEvents() {
       joinUrl: e.joinUrl, organizer: e.organizer, recordingUrl: e.recordingUrl, summary: e.summary, tier: e.tier,
     })),
   ].sort((a, b) => a.startsAt.localeCompare(b.startsAt)), [community.data, calendar.data]);
-  return { all, isLoading: community.isLoading, isError: community.isError && calendar.isError };
+  return { all, isLoading: community.isLoading, isError: community.isError && calendar.isError, calendarUnavailable: calendar.isError };
 }
 
 export async function toggleRsvp(event: CommunityEvent) {
