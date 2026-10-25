@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { useHeySocialAccess } from "../lib/api";
 
 function Sheet({ title, onClose, children, width }: { title: string; onClose: () => void; children: ReactNode; width?: number }) {
   useEffect(() => {
@@ -72,11 +73,19 @@ export const SHORTCUTS: [string, [string, string][]][] = [
   ]],
 ];
 
+/* The team's workspace (and switching to it) is only listed for people who have it. */
+const TEAM_ONLY = new Set(["Hey Social Inc.", "Workspaces"]);
+export function useShortcuts() {
+  const heySocial = useHeySocialAccess().data === true;
+  return heySocial ? SHORTCUTS : SHORTCUTS.filter(([group]) => !TEAM_ONLY.has(group));
+}
+
 export function ShortcutsSheet({ onClose }: { onClose: () => void }) {
+  const shortcuts = useShortcuts();
   return (
     <Sheet title="Keyboard shortcuts" onClose={onClose} width={500}>
       <div className="shortcuts">
-        {SHORTCUTS.map(([group, rows]) => (
+        {shortcuts.map(([group, rows]) => (
           <div key={group} style={{ display: "contents" }}>
             <h3>{group}</h3>
             {rows.map(([label, keys]) => <div key={label} className="sc">{label}<kbd>{keys}</kbd></div>)}

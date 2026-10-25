@@ -293,6 +293,11 @@ function setSignedIn(next) {
     setUnread(0);
     heySocialAccess = false;
     viewing = null;
+    // Signing out is the lock screen's way out; the next account starts unlocked.
+    if (locked) {
+      locked = false;
+      broadcast("app:locked", false);
+    }
     popouts.closeAll();
     send("auth:changed", null);
   }
@@ -358,7 +363,10 @@ function configureIpc() {
   ipcMain.on("app:viewing", (event, id) => {
     // Pop-outs report what they show themselves; only the main window sets this.
     if (mainWindow && event.sender !== mainWindow.webContents) return;
+    const was = viewing;
     viewing = typeof id === "string" && id ? id : null;
+    // File › Open in New Window only has something to pop out in a DM or channel.
+    if (Boolean(was) !== Boolean(viewing)) createAppMenu();
   });
   ipcMain.on("window:popout", (_event, target) => popouts.open(target, windowChrome));
   ipcMain.handle("settings:get", () => publicSettings());
@@ -389,6 +397,28 @@ function configureIpc() {
     } catch {
       return false;
     }
+  });
+  /*
+    The lock's fallback when Touch ID can't be used. Electron only offers the
+    biometric prompt (not the Mac's login password), so it's the account's own
+    password: the website's account settings check it first and, given the
+    email the account already has, change nothing.
+  */
+  ipcMain.handle("app:unlockWithPassword", async (_event, password) => {
+    if (!locked) return { ok: true };
+    if (typeof password !== "string" || !password || password.length > 200) return { ok: false, error: "wrong" };
+    const user = await site.getSession();
+    if (user === undefined) return { ok: false, error: "offline" };
+    if (!user?.email) return { ok: false, error: "wrong" };
+    const result = await site.apiRequest({
+      method: "PATCH",
+      path: "/api/settings/account",
+      body: { action: "email", currentPassword: password, email: user.email },
+    });
+    if (!result.ok) return { ok: false, error: result.status === 0 ? "offline" : "wrong" };
+    locked = false;
+    broadcast("app:locked", false);
+    return { ok: true };
   });
   // The Mac's Share menu (Messages, Mail, AirDrop, Notes…) for a link.
   ipcMain.on("app:share", (event, { url, text } = {}) => {
@@ -472,10 +502,12 @@ function showNotification(payload) {
   const replyTarget = typeof data.conversationId === "string" ? { kind: "dms", id: data.conversationId }
     : typeof data.channelId === "string" && /mention|thread|reply/.test(String(data.type ?? "")) ? { kind: "channels", id: data.channelId, parent: data.parentMessageId ?? data.threadId ?? null }
     : null;
+  // Locked with Touch ID: say something arrived, not who or what, and no Reply (as iPhone does with previews hidden).
+  const hidden = locked;
   const notification = new Notification({
-    title: payload.title,
-    body: typeof payload.body === "string" ? payload.body : "",
-    hasReply: Boolean(replyTarget),
+    title: hidden ? (IS_PREVIEW ? "CreatorHive Preview" : "CreatorHive") : payload.title,
+    body: hidden ? (data.conversationId || data.channelId ? "New message" : "New notification") : typeof payload.body === "string" ? payload.body : "",
+    hasReply: Boolean(replyTarget) && !hidden,
     replyPlaceholder: "Reply…",
     silent: settings.sound === "none",
     // The honey chime is macOS's Glass until the app ships its own sound.
@@ -484,6 +516,8 @@ function showNotification(payload) {
   notification.on("click", () => openPath(payload.url));
   notification.on("reply", (_event, reply) => {
     if (!replyTarget || typeof reply !== "string" || !reply.trim()) return;
+    // The banner came before the lock: nothing is sent until CreatorHive is unlocked.
+    if (locked) return void new Notification({ title: "Your reply wasn't sent", body: "Unlock CreatorHive to reply." }).show();
     void site.apiRequest({
       method: "POST",
       path: `/api/${replyTarget.kind}/${replyTarget.id}/messages`,
@@ -576,7 +610,8 @@ function updateTray() {
     },
     { type: "separator" },
     { label: "New message", enabled: signedIn, click: () => command("new-message") },
-    { label: "CreatorHive community", enabled: signedIn, click: () => command("workspace:ch") },
+    // The community feed itself, from wherever the window was.
+    { label: "CreatorHive community", enabled: signedIn, click: () => openPath("/") },
     ...(heySocialAccess ? [{ label: "Hey Social Inc.", click: () => command("workspace:hs") }] : []),
     { type: "separator" },
     {
@@ -651,7 +686,7 @@ function createAppMenu() {
         go("New Message", "CommandOrControl+N", "new-message"),
         go("New Post", "Shift+CommandOrControl+N", "new-post"),
         { type: "separator" },
-        go("Open in New Window", "Shift+CommandOrControl+O", "popout"),
+        go("Open in New Window", "Shift+CommandOrControl+O", "popout", signedIn && Boolean(viewing)),
         { type: "separator" },
         go("New Deal", "Alt+CommandOrControl+N", "new-deal"),
         go("Export Deals…", "Shift+CommandOrControl+E", "export"),
@@ -688,7 +723,8 @@ function createAppMenu() {
         go("Activity", "CommandOrControl+5", "go:activity"),
         { type: "separator" },
         go("CreatorHive", "Control+CommandOrControl+1", "workspace:ch"),
-        go("Hey Social Inc.", "Control+CommandOrControl+2", "workspace:hs", signedIn && heySocialAccess),
+        // Students never see the team's workspace, not even greyed out.
+        ...(heySocialAccess ? [go("Hey Social Inc.", "Control+CommandOrControl+2", "workspace:hs")] : []),
       ],
     },
     { role: "windowMenu" },
@@ -756,6 +792,49 @@ function installUpdate() {
   autoUpdater.quitAndInstall();
 }
 ipcMain.on("update:install", installUpdate);
+
+/* ---------- Text menu ---------- */
+
+/*
+  The Mac's own right-click menu for text, in the main window and every
+  pop-out: spelling, Look Up, Cut, Copy, Paste. The interface's own menus
+  (on a message, a channel) cancel the page's contextmenu, so this never
+  shows over them.
+*/
+function textMenu(contents, params) {
+  const { isEditable, selectionText, misspelledWord, dictionarySuggestions, editFlags, linkURL } = params;
+  const selected = selectionText.trim();
+  if (!isEditable && !selected && !/^(https?|mailto):/.test(linkURL)) return;
+  const template = [];
+  if (isEditable && misspelledWord) {
+    for (const suggestion of dictionarySuggestions.slice(0, 5)) {
+      template.push({ label: suggestion, click: () => contents.replaceMisspelling(suggestion) });
+    }
+    if (dictionarySuggestions.length === 0) template.push({ label: "No Guesses Found", enabled: false });
+    template.push(
+      { label: "Learn Spelling", click: () => contents.session.addWordToSpellCheckerDictionary(misspelledWord) },
+      { type: "separator" },
+    );
+  }
+  if (selected && IS_MAC) {
+    template.push(
+      { label: `Look Up “${selected.length > 24 ? `${selected.slice(0, 24)}…` : selected}”`, click: () => contents.showDefinitionForSelection() },
+      { type: "separator" },
+    );
+  }
+  if (/^(https?|mailto):/.test(linkURL)) {
+    template.push({ label: "Copy Link", click: () => clipboard.writeText(linkURL) }, { type: "separator" });
+  }
+  if (isEditable) template.push({ role: "cut", enabled: editFlags.canCut });
+  if (isEditable || selected) template.push({ role: "copy", enabled: editFlags.canCopy });
+  if (isEditable) template.push({ role: "paste", enabled: editFlags.canPaste }, { type: "separator" }, { role: "selectAll", enabled: editFlags.canSelectAll });
+  if (template.at(-1)?.type === "separator") template.pop();
+  Menu.buildFromTemplate(template).popup({ window: BrowserWindow.fromWebContents(contents) ?? undefined });
+}
+
+app.on("web-contents-created", (_event, contents) => {
+  contents.on("context-menu", (_e, params) => textMenu(contents, params));
+});
 
 /* ---------- Lifecycle ---------- */
 

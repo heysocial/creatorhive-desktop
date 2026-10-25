@@ -97,6 +97,8 @@ export interface Bridge {
     share(url: string, text?: string): void;
     isLocked(): Promise<boolean>;
     unlock(): Promise<boolean>;
+    /** The Touch ID lock's fallback: the account's password, checked by the server. */
+    unlockWithPassword(password: string): Promise<{ ok: boolean; error?: "wrong" | "offline" }>;
     onLocked: Listen<boolean>;
     onRelay: Listen<{ topic: string; action: string; data?: unknown }>;
     onNavigateView: Listen<string>;

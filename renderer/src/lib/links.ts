@@ -85,7 +85,7 @@ export function locationForPath(target: string): Location | null {
     case "/resources":
       return { ws: "ch", section: "learn", view: { kind: "learn", page: "resources" } };
     case "/library":
-      return { ws: "ch", section: "learn", view: { kind: "learn", page: "improve" } };
+      return { ws: "ch", section: "learn", view: params.get("id") ? { kind: "resource", id: params.get("id")! } : { kind: "learn", page: "improve" } };
     case "/hey-social/people":
     case "/hey-social/search":
       return { ws: "hs", section: "home", view: { kind: "threads" } };
