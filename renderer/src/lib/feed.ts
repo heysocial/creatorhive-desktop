@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
-import { api, queryClient } from "./api";
+import { api, ApiError, queryClient } from "./api";
 import type { Author, Reactions } from "./community";
 
 export const CATEGORIES = [
@@ -150,4 +150,58 @@ export async function likeComment(postId: string, comment: Comment) {
   } catch {
     void queryClient.invalidateQueries({ queryKey: ["comments", postId] });
   }
+}
+
+/** A stored post, back as the plain text the Mac composer writes: paragraphs, line breaks, links as their words. */
+export function postHtmlToText(html: string) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const blocks: string[] = [];
+  const text = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+    if (!(node instanceof HTMLElement)) return "";
+    if (node.tagName === "BR") return "\n";
+    if (node.tagName === "LI") return `• ${[...node.childNodes].map(text).join("")}\n`;
+    return [...node.childNodes].map(text).join("");
+  };
+  for (const node of doc.body.childNodes) {
+    const block = text(node).replace(/\n+$/, "").trim();
+    if (block) blocks.push(block);
+  }
+  return blocks.join("\n\n");
+}
+
+/** Whether saving a post from the Mac would drop formatting the website gave it (bold, lists, mentions…). */
+export const postHasFormatting = (html: string) => /<(strong|b|em|i|u|s|ul|ol|h[1-6]|blockquote|code|pre)[\s>]|data-mention/i.test(html);
+
+/** Edit your own post. Only its words change; pictures and a poll stay as they are. */
+export async function editPost(post: Post, text: string) {
+  const { post: saved } = await api<{ post: { body: string; edited_at: string | null } }>(`/api/posts/${post.id}`, {
+    method: "PATCH",
+    body: { body: textToPostHtml(text) },
+  });
+  patchPost(post.id, (p) => ({ ...p, body: saved.body, editedAt: saved.edited_at ?? p.editedAt }));
+}
+
+export async function editComment(postId: string, comment: Comment, body: string) {
+  const { comment: saved } = await api<{ comment: { body: string; editedAt: string | null } }>(`/api/posts/${postId}/comments/${comment.id}`, {
+    method: "PATCH",
+    body: { body },
+  });
+  queryClient.setQueryData<Comment[]>(["comments", postId], (list) => list?.map((c) => (c.id === comment.id ? { ...c, body: saved.body, editedAt: saved.editedAt } : c)));
+}
+
+/**
+ * The server decides what's left: a comment with replies stays as "Comment
+ * deleted" with its replies under it, one without goes. So the list is read
+ * again rather than guessed.
+ */
+export async function deleteComment(postId: string, comment: Comment) {
+  try {
+    const result = await api<{ commentsCount: number }>(`/api/posts/${postId}/comments/${comment.id}`, { method: "DELETE" });
+    patchPost(postId, (p) => ({ ...p, commentsCount: result.commentsCount }));
+  } catch (error) {
+    // Already gone (another device, a moderator) is what was asked for.
+    if (!(error instanceof ApiError && error.status === 404)) throw error;
+  }
+  await queryClient.invalidateQueries({ queryKey: ["comments", postId] });
 }

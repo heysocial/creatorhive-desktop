@@ -4,8 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, queryClient } from "../../lib/api";
 import {
-  CATEGORIES, POST_REACTIONS, addComment, categoryOf, createPost, likeComment, patchPost, reactToPost, useComments, useFeed,
-  usePinnedPosts, usePost, useUnreadCategories, vote, type CategoryKey, type Comment, type Post,
+  CATEGORIES, POST_REACTIONS, addComment, categoryOf, createPost, deleteComment, editComment, editPost, likeComment, patchPost,
+  postHasFormatting, postHtmlToText, reactToPost, useComments, useFeed, usePinnedPosts, usePost, useUnreadCategories, vote,
+  type CategoryKey, type Comment, type Post,
 } from "../../lib/feed";
 import { ago, money } from "../../lib/format";
 import { RichText } from "../../lib/html";
@@ -15,6 +16,7 @@ import { Badge } from "../messages/MessageRow";
 import { TodayPanel } from "./Today";
 import { Modal, Monogram } from "../hub/parts";
 import { pastedFiles } from "../../lib/paste";
+import { ReportDialog, type ReportTarget } from "../../overlays/Report";
 
 /* ---------- Paid this month ---------- */
 
@@ -265,6 +267,29 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
   const category = categoryOf(post.filterTag);
   const own = post.author.id === user.id;
   const staff = user.role === "owner" || user.role === "team";
+  // Never your own: reporting yourself is noise for the team's queue, as on the website.
+  const canReport = !own && post.author.role !== "system";
+  const [editing, setEditing] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [reporting, setReporting] = useState(false);
+
+  async function saveEdit() {
+    if (editing === null || saving) return;
+    // Nothing changed: close without stamping "edited" on it.
+    if (editing.trim() === postHtmlToText(post.body)) { setEditing(null); return; }
+    if (!editing.trim() && post.mediaUrls.length === 0 && !post.poll) { setEditError("A post needs some words, a photo or a poll."); return; }
+    setSaving(true);
+    setEditError(null);
+    try {
+      await editPost(post, editing);
+      setEditing(null);
+    } catch {
+      setEditError("Couldn’t save your edit. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function more() {
     const choice = await ch.menu.popup([
@@ -272,8 +297,14 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
       { id: "copy", label: "Copy link" },
       { id: "share", label: "Share…" },
       ...(staff ? [{ id: "pin", label: post.pinned ? "Unpin from Home" : "Pin to Home" }] : []),
-      ...(own || staff ? [{ type: "separator" as const }, { id: "delete", label: "Delete post…" }] : []),
+      // Only the author edits: a moderator can remove a post but not rewrite it.
+      ...(own || staff || canReport ? [{ type: "separator" as const }] : []),
+      ...(own ? [{ id: "edit", label: "Edit post" }] : []),
+      ...(own || staff ? [{ id: "delete", label: "Delete post…" }] : []),
+      ...(canReport ? [{ id: "report", label: "Report post…" }] : []),
     ]);
+    if (choice === "edit") { setEditError(null); setEditing(postHtmlToText(post.body)); }
+    if (choice === "report") setReporting(true);
     if (choice === "comments") onOpen(post);
     if (choice === "copy") void navigator.clipboard.writeText(`${(await ch.info()).origin}/?post=${post.id}`);
     if (choice === "share") ch.app.share(`${(await ch.info()).origin}/?post=${post.id}`, `${post.author.name} on CreatorHive`);
@@ -281,7 +312,7 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
       await api(`/api/feed-v2/posts/${post.id}/pin`, { method: "POST", body: { pinned: !post.pinned } }).catch(() => null);
       void queryClient.invalidateQueries({ queryKey: ["posts"] });
     }
-    if (choice === "delete" && window.confirm("Delete this post? This can't be undone.")) {
+    if (choice === "delete" && window.confirm("Delete this post?\n\nThis removes the post and its comments for everyone.")) {
       try {
         await api(`/api/posts/${post.id}`, { method: "DELETE" });
         patchPost(post.id, () => null);
@@ -305,7 +336,21 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
           <button className="iconbtn" onClick={() => void more()} aria-label="More"><MoreHorizontal /></button>
         </div>
       </header>
-      <RichText html={post.body} />
+      {editing !== null ? (
+        <div className="inline-edit">
+          <textarea autoFocus value={editing} rows={4} maxLength={20000} disabled={saving} onChange={(e) => setEditing(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setEditing(null); }
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void saveEdit(); }
+            }} />
+          {postHasFormatting(post.body) ? <div className="hint">Bold, lists and mentions from the website become plain text when you save here.</div> : null}
+          {editError ? <div className="signin-error">{editError}</div> : null}
+          <div className="hint">Escape to cancel · ⌘↩ to save
+            <button className="btn" disabled={saving} onClick={() => setEditing(null)}>Cancel</button>
+            <button className="btn honey" disabled={saving} onClick={() => void saveEdit()}>{saving ? <Loader2 className="spin" /> : null}{saving ? "Saving…" : "Save changes"}</button>
+          </div>
+        </div>
+      ) : <RichText html={post.body} />}
       {post.mediaUrls.length ? (
         <div className={`imgs n${Math.min(post.mediaUrls.length, 4)}`}>
           {post.mediaUrls.map((url) => (
@@ -329,29 +374,116 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
           <MessageCircle />{post.commentsCount ? (post.commentsCount === 1 ? "1 comment" : `${post.commentsCount} comments`) : "Comment"}
         </button>
       </footer>
+      {reporting ? <ReportDialog target={{ type: "post", id: post.id, name: post.author.name }} onClose={() => setReporting(false)} /> : null}
     </article>
   );
 }
 
 /* ---------- Comments ---------- */
 
-function CommentRow({ comment, postId, onReply }: { comment: Comment; postId: string; onReply?: () => void }) {
+interface CommentActions {
+  onReply: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onReport?: () => void;
+}
+
+function CommentRow({ comment, postId, editing, actions, onSaveEdit, onCancelEdit }: {
+  comment: Comment;
+  postId: string;
+  editing: boolean;
+  actions: CommentActions;
+  onSaveEdit: (body: string) => Promise<boolean>;
+  onCancelEdit: () => void;
+}) {
+  const [draft, setDraft] = useState(comment.body);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (editing) setDraft(comment.body); }, [editing, comment.body]);
+
+  async function save() {
+    if (saving || !draft.trim()) return;
+    setSaving(true);
+    try { if (await onSaveEdit(draft.trim())) onCancelEdit(); } finally { setSaving(false); }
+  }
+
+  // The same actions on a right-click, as messages have.
+  async function menu() {
+    const choice = await ch.menu.popup([
+      { id: "copy", label: "Copy text" },
+      { id: "reply", label: "Reply" },
+      ...(actions.onEdit || actions.onDelete || actions.onReport ? [{ type: "separator" as const }] : []),
+      ...(actions.onEdit ? [{ id: "edit", label: "Edit comment" }] : []),
+      ...(actions.onDelete ? [{ id: "delete", label: "Delete comment…" }] : []),
+      ...(actions.onReport ? [{ id: "report", label: "Report comment…" }] : []),
+    ]);
+    if (choice === "copy") void navigator.clipboard.writeText(comment.body);
+    if (choice === "reply") actions.onReply();
+    if (choice === "edit") actions.onEdit?.();
+    if (choice === "delete") actions.onDelete?.();
+    if (choice === "report") actions.onReport?.();
+  }
+
   return (
-    <div className={`comment ${comment.parentCommentId ? "reply" : ""}`}>
+    <div className={`comment ${comment.parentCommentId ? "reply" : ""}`}
+      onContextMenu={(event) => {
+        if (comment.deleted || editing || (event.target as HTMLElement).closest("button, a, textarea")) return;
+        if (window.getSelection()?.toString()) return;
+        event.preventDefault();
+        void menu();
+      }}>
       <Avatar name={comment.author.name} src={comment.author.avatarUrl} seed={comment.author.id} size={30} />
       <div>
-        <div className="bubble">
-          <span className="who"><b>{comment.author.name}</b><Badge badge={comment.author.badge} role={comment.author.role} /></span>
-          <div className="selectable" style={{ whiteSpace: "pre-wrap" }}>{comment.deleted ? <i className="faint">This comment was deleted.</i> : comment.body}</div>
-        </div>
-        <div className="c-meta">
-          <span>{ago(comment.createdAt)}</span>
-          {!comment.deleted ? <button className={comment.likedByMe ? "on" : ""} onClick={() => void likeComment(postId, comment)}>Like{comment.likeCount ? ` · ${comment.likeCount}` : ""}</button> : null}
-          {onReply ? <button onClick={onReply}>Reply</button> : null}
-        </div>
+        {editing ? (
+          <div className="inline-edit">
+            <textarea autoFocus value={draft} maxLength={2000} disabled={saving} onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancelEdit(); }
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void save(); }
+              }} />
+            <div className="hint">Escape to cancel · Return to save
+              <button className="btn" disabled={saving} onClick={onCancelEdit}>Cancel</button>
+              <button className="btn honey" disabled={saving || !draft.trim()} onClick={() => void save()}>{saving ? <Loader2 className="spin" /> : null}Save</button>
+            </div>
+          </div>
+        ) : (
+          <div className="bubble">
+            <span className="who"><b>{comment.author.name}</b><Badge badge={comment.author.badge} role={comment.author.role} /></span>
+            <div className="selectable" style={{ whiteSpace: "pre-wrap" }}>{comment.deleted ? <i className="faint">Comment deleted</i> : comment.body}</div>
+          </div>
+        )}
+        {!comment.deleted && !editing ? (
+          <div className="c-meta">
+            <span>{ago(comment.createdAt)}{comment.editedAt ? " · edited" : ""}</span>
+            <button className={comment.likedByMe ? "on" : ""} onClick={() => void likeComment(postId, comment)}>Like{comment.likeCount ? ` · ${comment.likeCount}` : ""}</button>
+            <button onClick={actions.onReply}>Reply</button>
+            {actions.onEdit ? <button onClick={actions.onEdit}>Edit</button> : null}
+            {actions.onDelete ? <button onClick={actions.onDelete}>Delete</button> : null}
+            {actions.onReport ? <button onClick={actions.onReport}>Report</button> : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );
+}
+
+/**
+ * Each top-level comment followed by every reply under it (replies to replies
+ * included), oldest first, as the website groups them. A reply whose parent
+ * isn't in the list stands on its own.
+ */
+function groupComments(list: Comment[]) {
+  const byId = new Map(list.map((c) => [c.id, c]));
+  const rootOf = (comment: Comment) => {
+    let current = comment;
+    const seen = new Set<string>();
+    while (current.parentCommentId && byId.has(current.parentCommentId) && !seen.has(current.id)) {
+      seen.add(current.id);
+      current = byId.get(current.parentCommentId)!;
+    }
+    return current.id;
+  };
+  const roots = list.filter((c) => rootOf(c) === c.id);
+  return roots.map((comment) => ({ comment, replies: list.filter((r) => r.id !== comment.id && rootOf(r) === comment.id) }));
 }
 
 export function PostSheet({ postId, user, onClose }: { postId: string; user: SessionUser; onClose: () => void }) {
@@ -360,18 +492,59 @@ export function PostSheet({ postId, user, onClose }: { postId: string; user: Ses
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [sending, setSending] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [reporting, setReporting] = useState<ReportTarget | null>(null);
+  const staff = user.role === "owner" || user.role === "team";
   const box = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector(".emoji-pop") && onClose();
+    const key = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector(".emoji-pop, .scrim.center") && onClose();
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [onClose]);
 
-  const threads = useMemo(() => {
-    const list = comments.data ?? [];
-    return list.filter((c) => !c.parentCommentId).map((c) => ({ comment: c, replies: list.filter((r) => r.parentCommentId === c.id) }));
-  }, [comments.data]);
+  const threads = useMemo(() => groupComments(comments.data ?? []), [comments.data]);
+
+  // The website's rules: anyone replies, the author edits, the author or a moderator deletes, anyone else reports.
+  function actionsFor(comment: Comment): CommentActions {
+    const mine = comment.author.id === user.id;
+    return {
+      onReply: () => {
+        setReplyTo(comment);
+        // A reply to a reply names who it answers, as on the website.
+        if (comment.parentCommentId) setText((current) => current.trim() ? current : `@${comment.author.name} `);
+        box.current?.focus();
+      },
+      onEdit: mine ? () => setEditingId(comment.id) : undefined,
+      onDelete: mine || staff ? () => void remove(comment) : undefined,
+      onReport: !mine && comment.author.role !== "system" ? () => setReporting({ type: "comment", id: comment.id, name: comment.author.name }) : undefined,
+    };
+  }
+
+  async function remove(comment: Comment) {
+    const mine = comment.author.id === user.id;
+    const hasReplies = (comments.data ?? []).some((c) => c.parentCommentId === comment.id);
+    const detail = hasReplies ? "It will show as “Comment deleted”. The replies to it stay."
+      : mine ? "This removes your comment for everyone." : `This removes ${comment.author.name || "this member"}’s comment for everyone.`;
+    if (!window.confirm(`Delete this comment?\n\n${detail}`)) return;
+    try {
+      await deleteComment(postId, comment);
+      if (replyTo?.id === comment.id) setReplyTo(null);
+    } catch {
+      window.alert("Couldn’t delete that comment. Try again.");
+    }
+  }
+
+  async function saveEdit(comment: Comment, body: string) {
+    if (body === comment.body) return true;
+    try {
+      await editComment(postId, comment, body);
+      return true;
+    } catch {
+      window.alert("Couldn’t save your edit. Try again.");
+      return false;
+    }
+  }
 
   async function send() {
     if (!text.trim() || sending) return;
@@ -397,8 +570,10 @@ export function PostSheet({ postId, user, onClose }: { postId: string; user: Ses
             {comments.isLoading ? <div className="faint">Loading comments…</div> : null}
             {threads.map(({ comment, replies }) => (
               <div key={comment.id}>
-                <CommentRow comment={comment} postId={postId} onReply={() => { setReplyTo(comment); box.current?.focus(); }} />
-                {replies.map((r) => <CommentRow key={r.id} comment={r} postId={postId} />)}
+                {[comment, ...replies].map((c) => (
+                  <CommentRow key={c.id} comment={c} postId={postId} editing={editingId === c.id} actions={actionsFor(c)}
+                    onSaveEdit={(body) => saveEdit(c, body)} onCancelEdit={() => setEditingId(null)} />
+                ))}
               </div>
             ))}
             {comments.data?.length === 0 ? <div className="faint">No comments yet. Start the conversation.</div> : null}
@@ -413,6 +588,7 @@ export function PostSheet({ postId, user, onClose }: { postId: string; user: Ses
           </div>
         </div>
       </aside>
+      {reporting ? <ReportDialog target={reporting} onClose={() => setReporting(null)} /> : null}
     </div>
   );
 }
@@ -458,8 +634,8 @@ export function Home({ user, openPostId }: { user: SessionUser; openPostId?: str
         <div className="seg home-tabs">
           <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>All</button>
           {CATEGORIES.map((c) => (
-            <button key={c.key} className={filter === c.key ? "on" : ""} onClick={() => setFilter(c.key)}>
-              <span>{c.emoji}</span>{c.label}{unread[c.key] ? <i className="udot" /> : null}
+            <button key={c.key} className={filter === c.key ? "on" : ""} title={c.label} onClick={() => setFilter(c.key)}>
+              <span>{c.emoji}</span><span className="lbl">{c.label}</span>{unread[c.key] ? <i className="udot" /> : null}
             </button>
           ))}
         </div>
