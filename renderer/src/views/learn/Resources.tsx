@@ -186,6 +186,17 @@ export function Resources({ pageId }: { pageId?: string }) {
     enabled: access.data === true && q.trim().length >= 2,
     queryFn: async () => (await api<{ results: { id: string; title: string; icon: string | null; snippet: string }[] }>(`/api/resources/search?q=${encodeURIComponent(q.trim())}`)).results,
   });
+  // The guides search, as the website's Resources page has it.
+  const guideSearch = useQuery({
+    queryKey: ["wiki", "search", q],
+    enabled: access.data === false && q.trim().length >= 2,
+    queryFn: async () => {
+      const { results } = await api<{ results: { id: string; title: string; icon: string | null; snippet: string }[] }>(`/api/pages/search?q=${encodeURIComponent(q.trim())}`);
+      // The server can answer with every published guide for members: keep the ones that match.
+      const needle = q.trim().toLowerCase();
+      return results.filter((r) => `${r.title} ${r.snippet}`.toLowerCase().includes(needle));
+    },
+  });
   const open = (id: string) => nav.open({ kind: "resource", id }, "learn", "ch");
   const wikiPages = useMemo(() => (wiki.data ?? []).filter((p) => p.isPublished !== false), [wiki.data]);
 
@@ -224,7 +235,17 @@ export function Resources({ pageId }: { pageId?: string }) {
               {mine.data?.length === 0 ? <p className="faint" style={{ padding: 10 }}>No pages yet. Make your rate card, pitch tracker or hook ideas.</p> : null}
             </>
           ) : (
-            wikiPages.map((p) => <button key={p.id} className={`tree-row tl solo ${pageId === p.id ? "on" : ""}`} onClick={() => open(p.id)}><span>{p.icon ?? "📘"}</span>{p.title}</button>)
+            <>
+              <label className="search-inline" style={{ margin: "0 6px 8px" }}><Search /><input placeholder="Search guides" value={q} onChange={(e) => setQ(e.target.value)} /></label>
+              {q.trim().length >= 2 ? (
+                <>
+                  {(guideSearch.data ?? []).map((r) => (
+                    <button key={r.id} className="tree-hit" onClick={() => open(r.id)}><b>{r.icon ?? "📘"} {r.title}</b><small className="faint">{r.snippet}</small></button>
+                  ))}
+                  {guideSearch.data?.length === 0 ? <p className="faint" style={{ padding: 10 }}>No guides match.</p> : null}
+                </>
+              ) : wikiPages.map((p) => <button key={p.id} className={`tree-row tl solo ${pageId === p.id ? "on" : ""}`} onClick={() => open(p.id)}><span>{p.icon ?? "📘"}</span>{p.title}</button>)}
+            </>
           )}
         </aside>
         <div className="res-main">

@@ -20,7 +20,8 @@ function open(target, chrome) {
   if (!KINDS.has(kind) || typeof id !== "string" || !ID.test(id)) return;
   // One Settings window; its id names the tab to show ("main" keeps the last one).
   const tab = kind === "settings" && id !== "main" ? id : null;
-  const key = kind === "settings" ? "settings:main" : `${kind}:${id}`;
+  // A lesson's id ends with the time to start at: still one window per lesson.
+  const key = kind === "settings" ? "settings:main" : kind === "lesson" ? `lesson:${id.split(":").slice(0, 2).join(":")}` : `${kind}:${id}`;
   const existing = windows.get(key);
   if (existing && !existing.isDestroyed()) {
     if (tab) void existing.webContents.executeJavaScript(`location.hash = ${JSON.stringify(`popout/settings/main?tab=${tab}`)}`);

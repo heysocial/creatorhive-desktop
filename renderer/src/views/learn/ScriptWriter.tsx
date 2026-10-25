@@ -34,6 +34,8 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
   useEffect(() => {
     // The chat this window just started: its messages are already here, still streaming.
     if (chatId && chatId === startedHere.current) return;
+    // Anywhere else (a new chat, another chat), coming back to it later loads it like any other.
+    startedHere.current = null;
     activeChat.current = chatId;
     setError(null);
     if (!chatId) { setMessages([]); return; }
