@@ -424,6 +424,7 @@ function configureIpc() {
     if (!result.ok) {
       if (result.status === 0) return { ok: false, error: "offline" };
       if (result.status === 409) return { ok: false, error: "no_password" };
+      if (result.status === 429) return { ok: false, error: "too_many_attempts" };
       return { ok: false, error: "wrong" };
     }
     locked = false;

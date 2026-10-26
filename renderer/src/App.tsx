@@ -76,6 +76,7 @@ export function LockScreen() {
     setError(
       result.error === "offline" ? "Can't check your password while offline. Try Touch ID or check your connection."
       : result.error === "no_password" ? "Your account signs in with Google or Apple, so it has no password. Use Touch ID."
+      : result.error === "too_many_attempts" ? "Too many attempts. Try again in a few minutes or reset your password."
       : "That password isn't right. Try again.",
     );
   };

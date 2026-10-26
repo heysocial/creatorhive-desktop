@@ -3,6 +3,7 @@ import { ch, type SessionUser } from "../lib/bridge";
 
 const MESSAGES: Record<string, string> = {
   credentials: "That email and password don't match. Check them and try again.",
+  too_many_attempts: "Too many attempts. Try again in a few minutes or reset your password.",
   offline: "Can't reach CreatorHive. Check your internet connection and try again.",
   missing: "Enter your email and password.",
   "no-account": "No CreatorHive account uses that Google email. Sign in with your email and password.",

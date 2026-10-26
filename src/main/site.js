@@ -102,7 +102,8 @@ async function csrfToken() {
 /*
   The website's sign-in page calls next-auth's `signIn("credentials")`, which
   posts this same form. `X-Auth-Return-Redirect` asks for JSON instead of a
-  redirect; a failed sign-in comes back as a URL carrying `error=`.
+  redirect; a failed sign-in comes back as a URL carrying `error=`, and one
+  refused for too many wrong passwords also carries `code=too_many_attempts`.
 */
 async function signIn(email, password) {
   if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
@@ -122,6 +123,7 @@ async function signIn(email, password) {
     });
     const body = await response.json().catch(() => null);
     const url = body?.url ? new URL(body.url, ORIGIN) : null;
+    if (url?.searchParams.get("code") === "too_many_attempts") return { ok: false, error: "too_many_attempts" };
     if (!response.ok || !url || url.searchParams.get("error")) return { ok: false, error: "credentials" };
     const user = await getSession();
     return user ? { ok: true, user } : { ok: false, error: "credentials" };
