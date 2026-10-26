@@ -42,6 +42,8 @@ export function sitePathFor({ ws, view }: Location): string {
       return "/hey-social/threads";
     case "saved":
       return "/hey-social/saved";
+    case "hs-people":
+      return "/hey-social/people";
     case "mentions":
     case "activity":
       return ws === "hs" ? "/hey-social/activity" : "/";

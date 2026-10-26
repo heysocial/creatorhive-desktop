@@ -1,0 +1,77 @@
+/* Hey Social Inc. People and access, and channel admin (members, rename, new channel). */
+
+/* ---------- People and access: the website's hey-social.module.css People rules ---------- */
+.hsp-page { max-width: 880px; margin: 0 auto; display: grid; gap: 22px; }
+.hsp-header h2 { font-size: 22px; font-weight: 800; letter-spacing: -.01em; color: var(--ink); }
+.hsp-header p { margin-top: 4px; color: var(--ink-3); font-size: 13px; max-width: 60ch; user-select: text; }
+
+.hsp-card { border-radius: 14px; background: var(--card); box-shadow: inset 0 0 0 .5px var(--line-strong); overflow: hidden; }
+.hsp-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: .5px solid var(--line); }
+.hsp-card-head h3 { font-size: 15px; font-weight: 750; color: var(--ink); }
+.hsp-card-head small { color: var(--ink-3); font-size: 12.5px; }
+
+.hsp-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: .5px solid var(--line); }
+.hsp-row:last-child { border-bottom: 0; }
+.hsp-who { display: grid; min-width: 0; gap: 1px; }
+.hsp-who b { font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hsp-who small { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; user-select: text; }
+.hsp-actions { display: flex; align-items: center; gap: 8px; }
+
+.hsp-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.hsp-pill.member { background: var(--honey-soft); color: var(--honey-ink); }
+.hsp-pill.guest { background: var(--card-2); color: var(--ink-3); box-shadow: inset 0 0 0 .5px var(--line); }
+
+.hsp-select { height: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--card); box-shadow: inset 0 0 0 .5px var(--line-strong); color: var(--ink); font: inherit; font-size: 12.5px; }
+
+.hsp-switch { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; }
+.hsp-switch p { font-size: 13px; color: var(--ink-2); max-width: 56ch; }
+
+.hsp-search { display: grid; padding: 14px 16px; border-bottom: .5px solid var(--line); }
+.hsp-search .field, .hsp-invite .field { height: 38px; font-size: 13px; }
+.hsp-invite { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 14px 16px; border-top: .5px solid var(--line); }
+.hsp-invite .btn { height: 38px; }
+.hsp-note { padding: 12px 16px; color: var(--ink-3); font-size: 12.5px; }
+.hsp-empty { padding: 14px 16px; color: var(--ink-3); font-size: 13px; }
+.hsp-notice { padding: 10px 14px; border-radius: 10px; background: var(--honey-soft); color: var(--honey-ink); font-size: 13px; font-weight: 600; }
+.hsp-error { padding: 10px 14px; border-radius: 10px; background: rgba(217, 54, 54, .1); color: #C42B2B; font-size: 13px; font-weight: 600; }
+
+/* ---------- Channel members sheet: add and remove ---------- */
+.cm-sheet .cm-title { flex: none; white-space: nowrap; }
+.cm-sheet .sheet-head .faint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cm-sheet .palette-list { flex: 1; }
+.cm-row { display: flex; align-items: center; gap: 2px; border-radius: 9px; }
+.cm-row .palette-row { flex: 1; min-width: 0; }
+.cm-row .palette-row:hover, .cm-pick:not(:disabled):hover, .cm-add:hover { background: var(--sel); }
+.cm-remove { flex: none; color: var(--ink-3); opacity: 0; }
+.cm-row:hover .cm-remove, .cm-remove:focus-visible { opacity: 1; }
+.cm-remove:hover { color: #D93636; }
+.cm-add .glyph { background: var(--honey-soft); color: var(--honey-ink); }
+
+.cm-confirm { display: flex; align-items: center; gap: 10px; padding: 9px 10px; margin: 2px 0; border-radius: 10px; background: rgba(217, 54, 54, .08); box-shadow: inset 0 0 0 .5px rgba(217, 54, 54, .3); }
+.cm-confirm-copy { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.cm-confirm-copy b { font-size: 13px; }
+.cm-confirm-copy small { font-size: 12px; color: var(--ink-3); }
+.cm-confirm-acts { display: flex; gap: 6px; flex: none; }
+.cm-sheet .btn.danger, .hsp .btn.danger { background: #D93636; color: #fff; }
+.cm-sheet .btn.danger:hover { background: #C42B2B; }
+
+.cm-notice { margin: 8px 12px 0; padding: 8px 12px; border-radius: 9px; background: var(--honey-soft); color: var(--honey-ink); font-size: 12.5px; font-weight: 600; }
+.cm-error { margin: 8px 12px 0; padding: 8px 12px; border-radius: 9px; background: rgba(217, 54, 54, .1); color: #C42B2B; font-size: 12.5px; font-weight: 600; }
+
+.cm-back { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; margin: 10px 12px 0; padding: 4px 8px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.cm-back:hover { background: var(--sel); color: var(--ink); }
+.cm-back svg { width: 15px; height: 15px; }
+.cm-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px 0; }
+.cm-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 4px; border-radius: 999px; background: var(--card); box-shadow: inset 0 0 0 .5px var(--line-strong); font-size: 12.5px; font-weight: 600; }
+.cm-chip > svg { width: 13px; height: 13px; color: var(--ink-3); }
+.cm-sheet .palette-input > .spin { width: 16px; height: 16px; }
+.cm-pick:disabled { opacity: .6; }
+.cm-check { margin-left: auto; width: 20px; height: 20px; flex: none; border-radius: 6px; display: grid; place-items: center; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.cm-check.on { background: var(--honey); color: var(--on-honey); box-shadow: none; }
+.cm-check svg { width: 14px; height: 14px; }
+.cm-foot { padding: 10px 12px 12px; border-top: 1px solid var(--line-strong); }
+.cm-submit { width: 100%; height: 36px; }
+
+/* ---------- New channel and Rename channel ---------- */
+.hsc-lede { color: var(--ink-3); font-size: 13px; margin-bottom: 4px; }
+.hsc-field { width: 100%; }
