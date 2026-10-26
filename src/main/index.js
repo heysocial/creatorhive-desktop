@@ -33,7 +33,7 @@ const {
   shell,
 } = require("electron");
 const { autoUpdater } = require("electron-updater");
-const { ORIGIN, IS_PREVIEW, RENDERER_URL, debug } = require("./config");
+const { ORIGIN, IS_PREVIEW, RENDERER_URL, debug, devEnv } = require("./config");
 const site = require("./site");
 const google = require("./google");
 const realtime = require("./realtime");
@@ -51,7 +51,7 @@ const PAUSE_MS = 60 * 60 * 1000;
 const IS_MAC = process.platform === "darwin";
 
 // For testing against a local copy of the site without touching the real app's data.
-if (process.env.CREATORHIVE_USER_DATA) app.setPath("userData", process.env.CREATORHIVE_USER_DATA);
+if (devEnv("CREATORHIVE_USER_DATA")) app.setPath("userData", devEnv("CREATORHIVE_USER_DATA"));
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -770,7 +770,7 @@ ipcMain.handle("update:status", () => updateReady);
 function configureUpdates() {
   if (!app.isPackaged) {
     // Test only, never in the installed app: pretend an update has downloaded.
-    if (process.env.CREATORHIVE_FAKE_UPDATE) setTimeout(() => markUpdateReady(process.env.CREATORHIVE_FAKE_UPDATE), 3000);
+    if (devEnv("CREATORHIVE_FAKE_UPDATE")) setTimeout(() => markUpdateReady(devEnv("CREATORHIVE_FAKE_UPDATE")), 3000);
     return;
   }
   // The preview follows its own prerelease channel; the real app never sees it.
@@ -876,10 +876,50 @@ app.on("before-quit", () => {
 // Closing the window never quits; only Quit does.
 app.on("window-all-closed", () => {});
 
+/*
+  What a page may ask the Mac for. Electron grants every request unless told
+  otherwise, so an embedded page (a lesson's video, a link preview) could ask
+  for the microphone or the screen and get it with no prompt. Only the app's
+  own interface — the bundle on disk, or Vite's server when developing — gets
+  the camera, microphone, screen, clipboard and notifications; anything
+  embedded may only go fullscreen (lesson videos); the rest is refused.
+*/
+const OWN_PERMISSIONS = new Set([
+  "media", "display-capture", "clipboard-sanitized-write", "clipboard-read",
+  "notifications", "fullscreen", "speaker-selection",
+]);
+
+function isOwnInterface(url) {
+  if (!url) return false;
+  if (url.startsWith("file://")) return true;
+  if (!RENDERER_URL) return false;
+  try {
+    return new URL(url).origin === new URL(RENDERER_URL).origin;
+  } catch {
+    return false;
+  }
+}
+
+function permitted(permission, requestingUrl) {
+  if (isOwnInterface(requestingUrl)) return OWN_PERMISSIONS.has(permission);
+  return permission === "fullscreen";
+}
+
+function configurePermissions() {
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const allowed = permitted(permission, details?.requestingUrl ?? contents?.getURL());
+    if (!allowed) debug("permission refused", permission, details?.requestingUrl);
+    callback(allowed);
+  });
+  session.defaultSession.setPermissionCheckHandler((_contents, permission, requestingOrigin, details) =>
+    permitted(permission, details?.requestingUrl ?? requestingOrigin));
+}
+
 app.whenReady().then(async () => {
   loadSettings();
   applyLook();
   media.handle();
+  configurePermissions();
   // Huddle screen sharing: the Mac's own picker where it has one, else the main screen.
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
     desktopCapturer.getSources({ types: ["screen", "window"] }).then((sources) => {

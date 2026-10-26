@@ -46,13 +46,31 @@ function siteFetch(pathname, { method = "GET", headers = {}, body } = {}) {
 const METHODS = new Set(["GET", "POST", "PATCH", "PUT", "DELETE"]);
 
 /**
+ * Whether the interface may call this path. Read the way the server will read
+ * it: `/api/%2e%2e/sign-in` or `/api/x/..%2f..` must not slip past a check on
+ * the raw string, and nothing under `/api/auth/` (sign-in and sign-out have
+ * their own functions here).
+ */
+function allowedApiPath(path) {
+  if (typeof path !== "string" || !path.startsWith("/api/")) return false;
+  if (/%2e|%2f|%5c|\\|[\u0000-\u001f]/i.test(path) || path.includes("..")) return false;
+  let pathname;
+  try {
+    const url = new URL(path, ORIGIN);
+    if (url.origin !== ORIGIN) return false;
+    pathname = url.pathname;
+  } catch {
+    return false;
+  }
+  return pathname.startsWith("/api/") && !pathname.startsWith("/api/auth/") && pathname !== "/api/auth";
+}
+
+/**
  * A JSON API call on behalf of the interface. Only `/api/` paths, and never the
  * auth routes, which have their own functions below.
  */
 async function apiRequest({ method = "GET", path, body } = {}) {
-  if (typeof path !== "string" || !path.startsWith("/api/") || path.startsWith("/api/auth/") || path.includes("..")) {
-    return { ok: false, status: 400, data: null, error: "bad_path" };
-  }
+  if (!allowedApiPath(path)) return { ok: false, status: 400, data: null, error: "bad_path" };
   if (!METHODS.has(method)) return { ok: false, status: 400, data: null, error: "bad_method" };
   try {
     const response = await siteFetch(path, {
@@ -154,7 +172,7 @@ async function signOut() {
  * to onLine as it arrives; the promise settles when the stream ends.
  */
 async function apiStream({ path, body } = {}, onLine) {
-  if (typeof path !== "string" || !path.startsWith("/api/") || path.includes("..")) return { ok: false, status: 400, error: "bad_path" };
+  if (!allowedApiPath(path)) return { ok: false, status: 400, error: "bad_path" };
   try {
     const response = await siteFetch(path, {
       method: "POST",

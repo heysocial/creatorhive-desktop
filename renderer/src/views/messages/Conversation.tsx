@@ -475,9 +475,11 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
               if (!input.files.length) return true;
               input = { ...input, body: "" };
             }
-            const ok = await sendMessage(where, { ...input, replyToMessageId: replyTo?.id ?? null }, toAuthor(user));
-            if (ok) setReplyTo(null);
-            return ok;
+            // Cleared as it goes, not when it lands: the next quick message
+            // must not quote the same one again.
+            const replyToMessageId = replyTo?.id ?? null;
+            setReplyTo(null);
+            return sendMessage(where, { ...input, replyToMessageId }, toAuthor(user));
           }} />
         {dragging ? (
           <div className="drop-zone" onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => event.currentTarget === event.target && setDragging(false)}
