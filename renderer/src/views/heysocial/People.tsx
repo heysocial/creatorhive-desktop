@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { api, queryClient } from "../../lib/api";
+import { ApiError, api, queryClient } from "../../lib/api";
 import { useAdminAccess } from "../../lib/admin";
 import { refreshHs } from "../../lib/heysocial";
 import { Avatar } from "../../lib/ui";
@@ -42,6 +42,30 @@ function usePeople(enabled: boolean) {
   });
 }
 
+/** Every refusal POST /api/invites/create can give, in the website's words. */
+const GUEST_INVITE_ERRORS: Record<string, string> = {
+  invalid_email: "Enter a valid email address.",
+  account_exists: "This email already has a CreatorHive account. Search for them above and add them as a guest.",
+  invite_pending: "This email already has an invite waiting. Revoke it under Members → Pending invites, then send a guest invite.",
+  role_forbidden: "Only the owner can invite guests.",
+  forbidden: "Only the owner can invite guests.",
+  unauthorized: "You’re signed out. Sign in again, then send the invite.",
+  invalid_role: "This invite couldn’t be sent. Try again.",
+  invalid_access_level: "This invite couldn’t be sent. Try again.",
+  starter_requires_student: "This invite couldn’t be sent. Try again.",
+  "invalid json": "This invite couldn’t be sent. Try again.",
+};
+
+function guestInviteError(error: unknown) {
+  if (!(error instanceof ApiError)) return undefined;
+  // A guest invite already waiting is in the list on this page.
+  const invite = error.data?.invite as { accessLevel?: string } | undefined;
+  if (error.message === "invite_pending" && invite?.accessLevel === "guest") {
+    return "This email already has a guest invite waiting. It’s listed below.";
+  }
+  return GUEST_INVITE_ERRORS[error.message];
+}
+
 /** The server's words when it chose some, the website's fallback when not. */
 function message(error: unknown) {
   const text = error instanceof Error ? error.message : "";
@@ -74,7 +98,7 @@ export function HsPeople() {
   // The website answers 404 to anyone but the owner.
   if (!owner) return <div className="empty-state"><p>Nothing to show here.</p></div>;
 
-  async function send(key: string, path: string, init: { method: string; body?: unknown }, done: string) {
+  async function send(key: string, path: string, init: { method: string; body?: unknown }, done: string, describe?: (error: unknown) => string | undefined) {
     setBusy(key);
     setError(null);
     setNotice(null);
@@ -85,7 +109,7 @@ export function HsPeople() {
       void refreshHs();
       return true;
     } catch (e) {
-      setError(message(e));
+      setError(describe?.(e) ?? message(e));
       return false;
     } finally {
       setBusy(null);
@@ -109,7 +133,7 @@ export function HsPeople() {
     const email = inviteEmail.trim();
     if (!email) return;
     const ok = await send("invite", "/api/invites/create", { method: "POST", body: { email, role: "student", accessLevel: "guest" } },
-      `Guest invite sent to ${email}.`);
+      `Guest invite sent to ${email}.`, guestInviteError);
     if (ok) setInviteEmail("");
   }
 
