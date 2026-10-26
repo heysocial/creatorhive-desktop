@@ -53,7 +53,10 @@ const METHODS = new Set(["GET", "POST", "PATCH", "PUT", "DELETE"]);
  */
 function allowedApiPath(path) {
   if (typeof path !== "string" || !path.startsWith("/api/")) return false;
-  if (/%2e|%2f|%5c|\\|[\u0000-\u001f]/i.test(path) || path.includes("..")) return false;
+  // Only the path can climb out of /api/: the query string may carry an encoded
+  // "/" (?tz=America%2FToronto, which every Hub request sends).
+  const route = path.split(/[?#]/, 1)[0];
+  if (/%2e|%2f|%5c|\\|[\u0000-\u001f]/i.test(route) || route.includes("..") || /[\u0000-\u001f]/.test(path)) return false;
   let pathname;
   try {
     const url = new URL(path, ORIGIN);
