@@ -1,5 +1,5 @@
 import { memo, type MouseEvent } from "react";
-import { marked } from "marked";
+import { Marked } from "marked";
 import { ch } from "./bridge";
 import { openPath, ownSitePath } from "./links";
 
@@ -21,24 +21,47 @@ const ATTRS: Record<string, Set<string>> = {
   INPUT: new Set(["type", "checked", "disabled"]),
 };
 
-function clean(html: string) {
+/** Removed with everything inside them, words included. */
+const DROP = new Set([
+  "SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "TEMPLATE", "NOSCRIPT", "NOEMBED", "NOFRAMES", "TITLE", "FRAME", "FRAMESET",
+]);
+const HTML_NS = "http://www.w3.org/1999/xhtml";
+
+export function clean(html: string) {
   const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
   const root = doc.body.firstElementChild as HTMLElement;
+  /*
+    Walks each element's children as a live chain, not a snapshot. Unwrapping
+    an unknown element moves its children up into its place, and the walk
+    carries on from the first of them, so they're checked like any other —
+    with a snapshot, `<x><img onerror=…></x>` came out with every attribute.
+    SVG and MathML elements report lowercase names, hence the namespace check.
+  */
   const walk = (node: Element) => {
-    for (const child of [...node.children]) {
-      if (!TAGS.has(child.tagName)) {
-        // Keep the words of anything unknown, drop the element.
-        if (child.tagName === "SCRIPT" || child.tagName === "STYLE" || child.tagName === "IFRAME") child.remove();
-        else child.replaceWith(...child.childNodes);
+    let child = node.firstElementChild;
+    while (child) {
+      const next = child.nextElementSibling;
+      const tag = child.tagName.toUpperCase();
+      if (DROP.has(tag)) {
+        child.remove();
+        child = next;
         continue;
       }
-      const allowed = ATTRS[child.tagName] ?? new Set<string>();
+      if (!TAGS.has(tag) || child.namespaceURI !== HTML_NS || (tag === "INPUT" && child.getAttribute("type") !== "checkbox")) {
+        // Keep the words of anything unknown, drop the element, then check what it held.
+        const moved = [...child.childNodes];
+        child.replaceWith(...moved);
+        child = (moved.find((n) => n.nodeType === Node.ELEMENT_NODE) as Element | undefined) ?? next;
+        continue;
+      }
+      const allowed = ATTRS[tag] ?? new Set<string>();
       for (const attr of [...child.attributes]) if (!allowed.has(attr.name)) child.removeAttribute(attr.name);
-      if (child.tagName === "A") {
+      if (tag === "A") {
         const href = child.getAttribute("href") ?? "";
         if (!/^(https?:|mailto:|\/)/i.test(href)) child.removeAttribute("href");
       }
       walk(child);
+      child = next;
     }
   };
   walk(root);
@@ -82,8 +105,18 @@ export const RichText = memo(function RichText({ html, text, className = "rich" 
   return <div className={className} onClick={onBodyClick} dangerouslySetInnerHTML={{ __html: cleaned(source) }} />;
 });
 
+/*
+  The Script Writer's Markdown. Any raw HTML in a reply is shown as text, not
+  parsed: the reply is model output, and a prompt can steer what it says.
+*/
+const markdown = new Marked({
+  gfm: true,
+  breaks: true,
+  renderer: { html: ({ text }) => escape(text) },
+});
+
 /** Markdown (the Script Writer's replies) as safe HTML. */
 export function Markdown({ text, className = "rich md" }: { text: string; className?: string }) {
-  const html = marked.parse(text, { async: false, gfm: true, breaks: true }) as string;
+  const html = markdown.parse(text, { async: false }) as string;
   return <RichText html={html} className={className} />;
 }
