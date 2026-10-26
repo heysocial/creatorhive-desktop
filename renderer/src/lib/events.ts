@@ -17,6 +17,8 @@ export interface CommunityEvent {
   startsAt: string;
   endsAt: string;
   joinUrl: string | null;
+  /** Community events: the meeting link as typed, for Edit. */
+  locationUrl?: string | null;
   rsvpd?: boolean;
   rsvpCount?: number;
   organizer?: string | null;
@@ -42,7 +44,7 @@ export function useEvents() {
   const all = useMemo<CommunityEvent[]>(() => [
     ...(community.data ?? []).map((e) => ({
       id: e.id, source: "community" as const, title: e.title, description: e.description, startsAt: e.startsAt, endsAt: e.endsAt,
-      joinUrl: e.locationUrl, rsvpd: e.rsvpd, rsvpCount: e.rsvpCount,
+      joinUrl: normalizeMeetingUrl(e.locationUrl), locationUrl: e.locationUrl, rsvpd: e.rsvpd, rsvpCount: e.rsvpCount,
     })),
     ...(calendar.data ?? []).map((e) => ({
       id: `cal:${e.id}`, source: "calendar" as const, title: e.title, description: e.description, startsAt: e.startsAt, endsAt: e.endsAt,
@@ -50,6 +52,25 @@ export function useEvents() {
     })),
   ].sort((a, b) => a.startsAt.localeCompare(b.startsAt)), [community.data, calendar.data]);
   return { all, isLoading: community.isLoading, isError: community.isError && calendar.isError, calendarUnavailable: calendar.isError };
+}
+
+/**
+  An event's meeting link as something that opens, or null: the website's
+  lib/events/meeting-url.ts. "zoom.us/j/123" gets https://, and anything that
+  still isn't an http(s) address is dropped.
+*/
+export function normalizeMeetingUrl(raw: string | null | undefined): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(withScheme);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    if (!url.hostname.includes(".")) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 export async function toggleRsvp(event: CommunityEvent) {

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Bell, BellOff, ExternalLink, Hash, Info, Lock, Pin, Search, SquareArrowOutUpRight, Star, Upload, Users, X } from "lucide-react";
+import { Bell, BellOff, ExternalLink, Hash, Info, Lock, Pin, SquareArrowOutUpRight, Star, Upload, Users, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, keys, queryClient, useChannels, useConversations, type Workspace } from "../../lib/api";
 import {
-  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
+  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, patchMessage, useChannelMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
 } from "../../lib/community";
 import { dayLabel } from "../../lib/format";
@@ -13,10 +13,11 @@ import { nav } from "../../lib/nav";
 import { sitePathFor } from "../../lib/sitePaths";
 import { Avatar, channelName } from "../../lib/ui";
 import { Composer, type ComposerHandle, type ComposerSend, type MentionCandidate } from "./Composer";
-import { Badge, MessageRow, type RowActions } from "./MessageRow";
+import { MessageRow, type RowActions } from "./MessageRow";
 import { RichText } from "../../lib/html";
 import { HS_KEY, huddleFor, setPrefs, toggleSaved, useHsSidebar, useHuddles } from "../../lib/heysocial";
 import { HuddleButton } from "../heysocial/Huddle";
+import { ChannelMembersSheet } from "./ChannelMembersSheet";
 
 const GROUP_GAP_MS = 5 * 60_000;
 
@@ -286,7 +287,18 @@ function useRowActions(where: Thread, user: SessionUser, { inThread = false, onO
   }), [where.kind, where.id, user.id, isStaff, inThread, onOpenThread, onReply, heySocial, saved]);
 }
 
-function PinsPopover({ channelId, onClose, onJump }: { channelId: string; onClose: () => void; onJump: (id: string) => void }) {
+/** Unpin from the pinned list, as owner and team can on the website's pins panel. */
+async function unpin(where: Thread, messageId: string) {
+  try {
+    await api(`/api/messages/${messageId}/pin`, { method: "POST", body: { pinned: false } });
+    patchMessage(where, messageId, (m) => ({ ...m, pin: null }));
+    void queryClient.invalidateQueries({ queryKey: ["pins", where.id] });
+  } catch {
+    window.alert("Couldn't change the pin.");
+  }
+}
+
+function PinsPopover({ channelId, onClose, onJump, onUnpin }: { channelId: string; onClose: () => void; onJump: (id: string) => void; onUnpin?: (id: string) => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ["pins", channelId],
     queryFn: async () => (await api<{ pins: { messageId: string; body: string; bodyHtml: string | null; createdAt: string; author: { id: string; name: string; avatarUrl: string | null }; pin: { by: { name: string } | null } }[] }>(`/api/channels/${channelId}/pins`)).pins,
@@ -302,50 +314,14 @@ function PinsPopover({ channelId, onClose, onJump }: { channelId: string; onClos
       {isLoading ? <div className="pop-empty">Loading…</div> : null}
       {data?.length === 0 ? <div className="pop-empty">Nothing pinned yet. The team pins what matters most.</div> : null}
       {data?.map((pin) => (
-        <button key={pin.messageId} className="pin-row" onClick={() => onJump(pin.messageId)}>
-          <Avatar name={pin.author.name} src={pin.author.avatarUrl} seed={pin.author.id} size={26} radius="7px" />
-          <span><b>{pin.author.name}</b><RichText html={pin.bodyHtml} text={pin.body} className="rich clamp" /></span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** Who is in a channel, owner and team first, as the website's Members dialog lists them. */
-function ChannelMembers({ channelId, title, onClose, onProfile }: { channelId: string; title: string; onClose: () => void; onProfile: (id: string) => void }) {
-  const { data, isLoading, isError } = useChannelMembers(channelId);
-  const [q, setQ] = useState("");
-  useEffect(() => {
-    const key = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [onClose]);
-  const query = q.trim().toLowerCase();
-  const shown = (data?.members ?? []).filter((m) => !query || m.name.toLowerCase().includes(query));
-  const isStaff = (m: { role: string }) => m.role === "owner" || m.role === "team";
-  const staff = shown.filter(isStaff);
-  const others = shown.filter((m) => !isStaff(m));
-  const row = (m: (typeof shown)[number]) => (
-    <button key={m.id} className="palette-row" onClick={() => onProfile(m.id)}>
-      <Avatar name={m.name} src={m.avatarUrl} seed={m.id} size={28} radius="8px" presence={m.presence} />
-      <span className="t">{m.name}</span><Badge badge={m.badge} role={m.role} />
-    </button>
-  );
-  return (
-    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="sheet members-sheet" role="dialog" aria-label="Members">
-        <div className="sheet-head">Members<span className="faint">{title}</span><button className="iconbtn" onClick={onClose} aria-label="Close"><X /></button></div>
-        <div className="palette-input"><Search /><input autoFocus value={q} placeholder="Search members" aria-label="Search members" onChange={(e) => setQ(e.target.value)} /></div>
-        <div className="palette-list">
-          {isLoading ? <div className="palette-empty">Loading…</div> : null}
-          {isError ? <div className="palette-empty">Couldn't load the members.</div> : null}
-          {data && shown.length === 0 ? <div className="palette-empty">No one matches “{q.trim()}”.</div> : null}
-          {staff.length ? <div className="palette-group">Owner &amp; team</div> : null}
-          {staff.map(row)}
-          {others.length ? <div className="palette-group">Members · {others.length}</div> : null}
-          {others.map(row)}
+        <div key={pin.messageId} className="pinx-row">
+          <button className="pin-row" onClick={() => onJump(pin.messageId)}>
+            <Avatar name={pin.author.name} src={pin.author.avatarUrl} seed={pin.author.id} size={26} radius="7px" />
+            <span><b>{pin.author.name}</b><RichText html={pin.bodyHtml} text={pin.body} className="rich clamp" /></span>
+          </button>
+          {onUnpin ? <button className="pinx-unpin" onClick={() => onUnpin(pin.messageId)}>Unpin</button> : null}
         </div>
-      </div>
+      ))}
     </div>
   );
 }
@@ -455,7 +431,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
         {where.kind === "channel" ? (
           <span style={{ position: "relative" }}>
             <button className="iconbtn" title="Pinned messages" onClick={() => setPins(!pins)}><Pin /></button>
-            {pins ? <PinsPopover channelId={where.id} onClose={() => setPins(false)} onJump={(id) => {
+            {pins ? <PinsPopover channelId={where.id} onClose={() => setPins(false)} onUnpin={actions.onPin ? (id) => void unpin(where, id) : undefined} onJump={(id) => {
               setPins(false);
               document.querySelector(`[data-message-id="${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
             }} /> : null}
@@ -514,7 +490,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
           </div>
         ) : null}
         {members && where.kind === "channel" ? (
-          <ChannelMembers channelId={where.id} title={`#${title}`} onClose={() => setMembers(false)}
+          <ChannelMembersSheet channelId={where.id} title={`#${title}`} isPrivate={Boolean(channel?.isPrivate)} meId={user.id} workspace={workspace} onClose={() => setMembers(false)}
             onProfile={(id) => { setMembers(false); if (popout) ch.app.openMain(`profile:${id}`); else nav.open({ kind: "profile", id }); }} />
         ) : null}
       </div>

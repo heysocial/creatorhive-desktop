@@ -5,6 +5,7 @@ import { eventIcs, meetingName, toggleRsvp, useEvents, type CommunityEvent } fro
 import { clock, fullDate } from "../../lib/format";
 import { RichText } from "../../lib/html";
 import { nav } from "../../lib/nav";
+import { EventStaffActions, NewEventButton } from "./EventAdmin";
 
 type Mode = "day" | "week" | "month" | "list";
 const HOUR_PX = 64;
@@ -48,7 +49,7 @@ function startsLabel(event: CommunityEvent) {
   return start < now ? "Past" : `Starts ${start.toLocaleDateString([], { month: "short", day: "numeric" })}`;
 }
 
-function Detail({ event, past }: { event: CommunityEvent | undefined; past: CommunityEvent[] }) {
+function Detail({ event, past, onDeleted }: { event: CommunityEvent | undefined; past: CommunityEvent[]; onDeleted: () => void }) {
   const [busy, setBusy] = useState(false);
   const [added, setAdded] = useState(false);
   useEffect(() => setAdded(false), [event?.id]);
@@ -92,6 +93,7 @@ function Detail({ event, past }: { event: CommunityEvent | undefined; past: Comm
       {!ended ? (
         <div className="ev-note"><span className="t-ico honey"><Bell /></span><span><b>Reminder 10 min before</b><small>From Calendar once added, and a Mac notification from CreatorHive</small></span></div>
       ) : null}
+      <EventStaffActions key={event.id} event={event} onDeleted={onDeleted} />
       {event.summary ? <div className="ev-summary"><div className="section-label">Fathom summary</div><RichText text={event.summary} /></div> : null}
       {event.description ? <div className="ev-desc"><RichText text={event.description.replace(/<[^>]+>/g, " ")} /></div> : null}
       <PastList past={past} />
@@ -270,6 +272,7 @@ export function Events({ eventId }: { eventId?: string }) {
           <button className="btn" onClick={() => setAnchor(new Date())}>Today</button>
           <button className="iconbtn" aria-label="Previous" onClick={() => step(-1)}><ChevronLeft /></button>
           <button className="iconbtn" aria-label="Next" onClick={() => step(1)}><ChevronRight /></button>
+          <NewEventButton onCreated={(created) => { setSelected(created.id); setAnchor(new Date(created.startsAt)); }} />
         </div>
       </div>
       <div className="ev-body">
@@ -281,7 +284,7 @@ export function Events({ eventId }: { eventId?: string }) {
               : <TimeGrid days={days} events={all} selected={selected} onSelect={setSelected} />
           )}
         </div>
-        <Detail event={event} past={past} />
+        <Detail event={event} past={past} onDeleted={() => setSelected(undefined)} />
       </div>
     </div>
   );

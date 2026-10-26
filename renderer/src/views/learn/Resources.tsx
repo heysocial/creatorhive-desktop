@@ -7,6 +7,7 @@ import { api, ApiError, queryClient } from "../../lib/api";
 import { bytes, shortTime } from "../../lib/format";
 import { RichText, openLink } from "../../lib/html";
 import { nav } from "../../lib/nav";
+import { GuideEditor, GuidesTree, ResourcesAudienceSwitch, useCanEditGuides } from "./ResourcesAdmin";
 
 /*
   Resources: the member's own pages (the website's Notion-like workspace,
@@ -198,6 +199,7 @@ export function Resources({ pageId }: { pageId?: string }) {
     },
   });
   const open = (id: string) => nav.open({ kind: "resource", id }, "learn", "ch");
+  const canEditGuides = useCanEditGuides();
   const wikiPages = useMemo(() => (wiki.data ?? []).filter((p) => p.isPublished !== false), [wiki.data]);
 
   async function newPage(parentId: string | null = null) {
@@ -215,6 +217,7 @@ export function Resources({ pageId }: { pageId?: string }) {
       <div className="mhead">
         <h1>Resources</h1><span className="sub">{access.data ? "Your pages · Only you" : "CreatorHive guides"}</span>
         <div className="acts">
+          <ResourcesAudienceSwitch />
           {access.data ? <button className="btn honey" onClick={() => void newPage()}><Plus />New page</button> : null}
           {pageId && access.data ? <button className="btn" onClick={async () => {
             if (!window.confirm("Move this page to the trash?")) return;
@@ -244,12 +247,12 @@ export function Resources({ pageId }: { pageId?: string }) {
                   ))}
                   {guideSearch.data?.length === 0 ? <p className="faint" style={{ padding: 10 }}>No guides match.</p> : null}
                 </>
-              ) : wikiPages.map((p) => <button key={p.id} className={`tree-row tl solo ${pageId === p.id ? "on" : ""}`} onClick={() => open(p.id)}><span>{p.icon ?? "📘"}</span>{p.title}</button>)}
+              ) : canEditGuides ? <GuidesTree pages={wiki.data ?? []} current={pageId} /> : wikiPages.map((p) => <button key={p.id} className={`tree-row tl solo ${pageId === p.id ? "on" : ""}`} onClick={() => open(p.id)}><span>{p.icon ?? "📘"}</span>{p.title}</button>)}
             </>
           )}
         </aside>
         <div className="res-main">
-          {pageId ? (access.data ? <MyPage key={pageId} id={pageId} /> : <WikiPageView key={pageId} id={pageId} />)
+          {pageId ? (access.data ? <MyPage key={pageId} id={pageId} /> : canEditGuides ? <GuideEditor key={pageId} id={pageId} /> : <WikiPageView key={pageId} id={pageId} />)
             : <div className="empty-state">{access.isLoading ? "Loading…" : "Pick a page on the left."}</div>}
         </div>
       </div>

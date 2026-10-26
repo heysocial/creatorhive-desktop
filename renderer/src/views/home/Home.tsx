@@ -297,7 +297,7 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
       { id: "comments", label: "Open comments" },
       { id: "copy", label: "Copy link" },
       { id: "share", label: "Share…" },
-      ...(staff ? [{ id: "pin", label: post.pinned ? "Unpin from Home" : "Pin to Home" }] : []),
+      ...(staff ? [{ id: "pin", label: post.pinned ? "Unpin post" : "Pin post" }] : []),
       // Only the author edits: a moderator can remove a post but not rewrite it.
       ...(own || staff || canReport ? [{ type: "separator" as const }] : []),
       ...(own ? [{ id: "edit", label: "Edit post" }] : []),
@@ -310,7 +310,11 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
     if (choice === "copy") void navigator.clipboard.writeText(`${(await ch.info()).origin}/?post=${post.id}`);
     if (choice === "share") ch.app.share(`${(await ch.info()).origin}/?post=${post.id}`, `${post.author.name} on CreatorHive`);
     if (choice === "pin") {
-      await api(`/api/feed-v2/posts/${post.id}/pin`, { method: "POST", body: { pinned: !post.pinned } }).catch(() => null);
+      try {
+        await api(`/api/feed-v2/posts/${post.id}/pin`, { method: "POST", body: { pinned: !post.pinned } });
+      } catch {
+        window.alert("Could not update the pin. Please try again.");
+      }
       void queryClient.invalidateQueries({ queryKey: ["posts"] });
     }
     if (choice === "delete" && window.confirm("Delete this post?\n\nThis removes the post and its comments for everyone.")) {
