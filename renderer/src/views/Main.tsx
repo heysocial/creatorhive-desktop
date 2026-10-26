@@ -38,7 +38,7 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
     case "leaderboard":
       return <Leaderboard />;
     case "members":
-      return <Members />;
+      return <Members user={user} />;
     case "profile":
       return <ProfilePage key={view.id} id={view.id} user={user} />;
     case "channel":
