@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, keys, queryClient, useChannels, useConversations, type Workspace } from "../../lib/api";
 import {
-  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
+  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, patchMessage, useChannelMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
 } from "../../lib/community";
 import { dayLabel } from "../../lib/format";
@@ -287,7 +287,18 @@ function useRowActions(where: Thread, user: SessionUser, { inThread = false, onO
   }), [where.kind, where.id, user.id, isStaff, inThread, onOpenThread, onReply, heySocial, saved]);
 }
 
-function PinsPopover({ channelId, onClose, onJump }: { channelId: string; onClose: () => void; onJump: (id: string) => void }) {
+/** Unpin from the pinned list, as owner and team can on the website's pins panel. */
+async function unpin(where: Thread, messageId: string) {
+  try {
+    await api(`/api/messages/${messageId}/pin`, { method: "POST", body: { pinned: false } });
+    patchMessage(where, messageId, (m) => ({ ...m, pin: null }));
+    void queryClient.invalidateQueries({ queryKey: ["pins", where.id] });
+  } catch {
+    window.alert("Couldn't change the pin.");
+  }
+}
+
+function PinsPopover({ channelId, onClose, onJump, onUnpin }: { channelId: string; onClose: () => void; onJump: (id: string) => void; onUnpin?: (id: string) => void }) {
   const { data, isLoading } = useQuery({
     queryKey: ["pins", channelId],
     queryFn: async () => (await api<{ pins: { messageId: string; body: string; bodyHtml: string | null; createdAt: string; author: { id: string; name: string; avatarUrl: string | null }; pin: { by: { name: string } | null } }[] }>(`/api/channels/${channelId}/pins`)).pins,
@@ -303,10 +314,13 @@ function PinsPopover({ channelId, onClose, onJump }: { channelId: string; onClos
       {isLoading ? <div className="pop-empty">Loading…</div> : null}
       {data?.length === 0 ? <div className="pop-empty">Nothing pinned yet. The team pins what matters most.</div> : null}
       {data?.map((pin) => (
-        <button key={pin.messageId} className="pin-row" onClick={() => onJump(pin.messageId)}>
-          <Avatar name={pin.author.name} src={pin.author.avatarUrl} seed={pin.author.id} size={26} radius="7px" />
-          <span><b>{pin.author.name}</b><RichText html={pin.bodyHtml} text={pin.body} className="rich clamp" /></span>
-        </button>
+        <div key={pin.messageId} className="pinx-row">
+          <button className="pin-row" onClick={() => onJump(pin.messageId)}>
+            <Avatar name={pin.author.name} src={pin.author.avatarUrl} seed={pin.author.id} size={26} radius="7px" />
+            <span><b>{pin.author.name}</b><RichText html={pin.bodyHtml} text={pin.body} className="rich clamp" /></span>
+          </button>
+          {onUnpin ? <button className="pinx-unpin" onClick={() => onUnpin(pin.messageId)}>Unpin</button> : null}
+        </div>
       ))}
     </div>
   );
@@ -417,7 +431,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
         {where.kind === "channel" ? (
           <span style={{ position: "relative" }}>
             <button className="iconbtn" title="Pinned messages" onClick={() => setPins(!pins)}><Pin /></button>
-            {pins ? <PinsPopover channelId={where.id} onClose={() => setPins(false)} onJump={(id) => {
+            {pins ? <PinsPopover channelId={where.id} onClose={() => setPins(false)} onUnpin={actions.onPin ? (id) => void unpin(where, id) : undefined} onJump={(id) => {
               setPins(false);
               document.querySelector(`[data-message-id="${id}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
             }} /> : null}

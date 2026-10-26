@@ -1,0 +1,81 @@
+/* Owner and team controls outside Admin: events, the Resources switch, the guides editor, channel members. */
+
+/* ---------- Events: New event, Edit, Delete ---------- */
+
+.evx-form { display: flex; flex-direction: column; gap: 10px; }
+.evx-form .field { width: 100%; height: 36px; }
+.evx-form .field.area { height: auto; }
+.evx-times { display: flex; gap: 8px; }
+.evx-times > * { flex: 1; min-width: 0; }
+.evx-times label { display: flex; flex-direction: column; gap: 4px; }
+.evx-times label span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.evx-form > .btn.lg { width: 100%; margin-top: 4px; }
+.evx-error { font-size: 13px; color: #D93636; padding: 9px 12px; border-radius: 9px; background: rgba(217, 54, 54, .1); }
+
+.evx-staff { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.evx-staff-row { display: flex; align-items: center; gap: 8px; }
+.evx-staff-row .btn { height: 30px; }
+.evx-ask { font-size: 12.5px; color: var(--ink-3); }
+.btn.evx-danger { background: #D93636; color: #fff; }
+.btn.evx-danger:hover { background: #C22F2F; }
+.evx-inline .evx-times { flex-direction: column; }
+.evx-inline .evx-times > * { flex: none; }
+.evx-inline > .btn { align-self: flex-start; }
+
+/* ---------- Resources: who sees it (the owner's switch) ---------- */
+
+.resx-audience { display: inline-flex; align-items: center; gap: 8px; }
+.resx-audience > span { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+
+/* ---------- The CreatorHive guides, as owner and team edit them ---------- */
+
+.gdx-tree-row { position: relative; }
+.gdx-tree-row .gdx-add { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-3); opacity: 0; }
+.gdx-tree-row:hover .gdx-add, .gdx-tree-row:focus-within .gdx-add { opacity: 1; }
+.gdx-tree-row .gdx-add:hover { background: var(--card-3); color: var(--ink); }
+.gdx-tree-row .gdx-add svg { width: 12px; height: 12px; }
+.gdx-draft { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-4); margin-left: 6px; }
+.gdx-new { margin: 0 6px 8px; }
+.gdx-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.gdx-head .gdx-icon { width: 40px; font-size: 24px; text-align: center; background: none; border: 0; outline: none; padding: 0; }
+.gdx-head .gdx-tools { display: flex; align-items: center; gap: 6px; }
+.gdx-status { font-size: 12px; color: var(--ink-3); }
+.gdx-title { font-size: 30px; font-weight: 800; letter-spacing: -.02em; border: 0; outline: none; background: none; width: 100%; padding: 0; color: var(--ink); }
+.gdx-meta { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.gdx-star svg { width: 16px; height: 16px; }
+.gdx-star.on svg { fill: var(--honey); color: var(--honey); }
+.gdx-editor { margin-top: 8px; border-radius: 10px; box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--card); }
+.gdx-editor .gdx-bar { display: flex; flex-wrap: wrap; gap: 2px; padding: 6px; border-bottom: 1px solid var(--line); }
+.gdx-editor .gdx-bar button { width: 28px; height: 28px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-2); }
+.gdx-editor .gdx-bar button:hover { background: var(--card-2); }
+.gdx-editor .gdx-bar button.on { background: var(--honey-soft); color: var(--honey-ink); }
+.gdx-editor .gdx-bar svg { width: 15px; height: 15px; }
+.gdx-editor .ProseMirror { min-height: 320px; padding: 14px 16px; outline: none; font-size: 15px; line-height: 1.65; user-select: text; }
+.gdx-editor .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--ink-4); float: left; height: 0; pointer-events: none; }
+
+/* ---------- Channel members: add and remove (owner and team) ---------- */
+
+.chx-member { display: flex; align-items: center; gap: 4px; }
+.chx-member > .palette-row { flex: 1; min-width: 0; }
+.chx-remove { flex: none; color: var(--ink-3); }
+.chx-remove:hover { color: #D93636; }
+.chx-confirm { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 9px; background: var(--card-2); }
+.chx-confirm > span { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+.chx-confirm small { color: var(--ink-3); font-size: 12px; }
+.chx-add { margin: 10px 12px 4px; align-self: flex-start; }
+.chx-chips { padding: 6px 12px; }
+.chx-chips .chip svg { width: 12px; height: 12px; }
+.chx-pick:disabled { opacity: .6; }
+.chx-check { margin-left: auto; width: 15px; height: 15px; accent-color: var(--honey); pointer-events: none; }
+.chx-foot { display: flex; justify-content: flex-end; padding: 10px 12px; border-top: 1px solid var(--line); }
+.chx-note { font-size: 12.5px; color: var(--ink-3); padding: 8px 16px 0; }
+.chx-note.chx-err { color: #D93636; }
+
+/* ---------- Pinned messages: Unpin (owner and team) ---------- */
+
+.pinx-row { display: flex; align-items: flex-start; }
+.pinx-row > .pin-row { flex: 1; min-width: 0; }
+.pinx-unpin { flex: none; margin: 8px 4px 0 0; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.pinx-unpin:hover { background: var(--card-3); color: var(--ink); }
+.gdx-star-ico { width: 12px; height: 12px; flex: none; fill: var(--honey); color: var(--honey); }
+.res-tree .tree-row.gdx-starred { flex: none; }
