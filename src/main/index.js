@@ -410,21 +410,22 @@ function configureIpc() {
   /*
     The lock's fallback when Touch ID can't be used. Electron only offers the
     biometric prompt (not the Mac's login password), so it's the account's own
-    password: the website's account settings check it first and, given the
-    email the account already has, change nothing.
+    password, checked by the website's verify-password route, which writes
+    nothing. Google- and Apple-only accounts have no password to check.
   */
   ipcMain.handle("app:unlockWithPassword", async (_event, password) => {
     if (!locked) return { ok: true };
     if (typeof password !== "string" || !password || password.length > 200) return { ok: false, error: "wrong" };
-    const user = await site.getSession();
-    if (user === undefined) return { ok: false, error: "offline" };
-    if (!user?.email) return { ok: false, error: "wrong" };
     const result = await site.apiRequest({
-      method: "PATCH",
-      path: "/api/settings/account",
-      body: { action: "email", currentPassword: password, email: user.email },
+      method: "POST",
+      path: "/api/settings/account/verify-password",
+      body: { password },
     });
-    if (!result.ok) return { ok: false, error: result.status === 0 ? "offline" : "wrong" };
+    if (!result.ok) {
+      if (result.status === 0) return { ok: false, error: "offline" };
+      if (result.status === 409) return { ok: false, error: "no_password" };
+      return { ok: false, error: "wrong" };
+    }
     locked = false;
     broadcast("app:locked", false);
     return { ok: true };

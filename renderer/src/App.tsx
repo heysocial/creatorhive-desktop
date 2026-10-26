@@ -71,7 +71,11 @@ export function LockScreen() {
     setBusy(false);
     if (result.ok) return;
     setPassword("");
-    setError(result.error === "offline" ? "Can't check your password while offline. Try Touch ID or check your connection." : "That password isn't right. Try again.");
+    setError(
+      result.error === "offline" ? "Can't check your password while offline. Try Touch ID or check your connection."
+      : result.error === "no_password" ? "Your account signs in with Google or Apple, so it has no password. Use Touch ID."
+      : "That password isn't right. Try again.",
+    );
   };
   return (
     <div className="lock-screen">
