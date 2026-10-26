@@ -1,3 +1,4 @@
+import { createContext, useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, queryClient } from "./api";
 
@@ -104,8 +105,22 @@ export interface DealsResponse {
 export const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Toronto";
 export const withTz = (path: string) => `${path}${path.includes("?") ? "&" : "?"}tz=${encodeURIComponent(tz())}`;
 
+/*
+  Whose Hub the views read: the member's own (the default), or one student's
+  for Admin → Hubs, which shows it read-only (views/admin/Hubs.tsx). `tz`
+  pins the time zone, as the website's admin view does (America/Toronto).
+*/
+export interface HubSourceValue { base: string; key: readonly string[]; tz?: string }
+export const HubSource = createContext<HubSourceValue>({ base: "/api/hub", key: ["hub"] });
+export const useHubSource = () => useContext(HubSource);
+export const sourcePath = (src: HubSourceValue, path: string) => {
+  const full = `${src.base}${path}`;
+  return `${full}${full.includes("?") ? "&" : "?"}tz=${encodeURIComponent(src.tz ?? tz())}`;
+};
+
 export function useDeals() {
-  return useQuery({ queryKey: ["hub", "deals"], queryFn: () => api<DealsResponse>(withTz("/api/hub/deals")) });
+  const src = useHubSource();
+  return useQuery({ queryKey: [...src.key, "deals"], queryFn: () => api<DealsResponse>(sourcePath(src, "/deals")) });
 }
 
 export const allDeals = (data: DealsResponse | undefined) => (data ? [...data.outreach, ...data.campaigns, ...data.payment] : []);
@@ -138,7 +153,8 @@ export interface Cash {
 }
 
 export function useCash() {
-  return useQuery({ queryKey: ["hub", "cash"], queryFn: () => api<Cash>(withTz("/api/hub/cash?range=30")) });
+  const src = useHubSource();
+  return useQuery({ queryKey: [...src.key, "cash"], queryFn: () => api<Cash>(sourcePath(src, "/cash?range=30")) });
 }
 
 /* ---------- Money ---------- */

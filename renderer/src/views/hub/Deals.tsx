@@ -61,7 +61,7 @@ export function DealListDialog({ title, deals, onClose }: { title: string; deals
   );
 }
 
-function Overview({ deals }: { deals: Deal[] }) {
+export function Overview({ deals }: { deals: Deal[] }) {
   const cash = useCash().data;
   const [open, setOpen] = useState<null | "contracted" | "potential">(null);
   const inPlay = contracted(deals);
@@ -284,7 +284,7 @@ function SectionHead({ board, deals }: { board: Board; deals: Deal[] }) {
   );
 }
 
-function Kanban({ boards, data, shared }: { boards: Board[]; data: Record<Board, Deal[]>; shared: boolean }) {
+export function Kanban({ boards, data, shared }: { boards: Board[]; data: Record<Board, Deal[]>; shared: boolean }) {
   const { drag, start } = useDragDeals();
   return (
     <>
@@ -341,7 +341,7 @@ function TableSections({ boards, data, shared }: { boards: Board[]; data: Record
 }
 
 /* The website's "Needs attention": drafts due within a week (or late), and pending payments. */
-function NeedsAttention({ deals }: { deals: Deal[] }) {
+export function NeedsAttention({ deals }: { deals: Deal[] }) {
   const today = localToday();
   const due = (days: number) => (days < 0 ? `${-days} day${days === -1 ? "" : "s"} overdue` : days === 0 ? "due today" : `due in ${days} day${days === 1 ? "" : "s"}`);
   const items = deals.flatMap((d) => {
