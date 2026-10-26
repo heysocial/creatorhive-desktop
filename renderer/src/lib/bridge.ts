@@ -117,6 +117,11 @@ export interface Bridge {
     putVideo(url: string, type: string, bytes: ArrayBuffer): Promise<{ ok: boolean; status?: number; error?: string }>;
     uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer; fields?: Record<string, string> }): Promise<{ ok: boolean; status?: number; error?: string; data?: unknown }>;
   };
+  errors: {
+    /** An error for Admin → Bugs; the main process dedupes, caps and sends it (lib/errors.tsx). */
+    report(report: { kind: "render" | "error" | "unhandled-rejection"; message: string; stack?: string | null; componentStack?: string | null; route?: string | null }): void;
+    setScreen(screen: string): void;
+  };
   window: {
     popout(target: { kind: "dm" | "channel" | "thread" | "deal" | "lesson" | "settings" | "huddle"; id: string; title?: string }): void;
     onFullscreen: Listen<boolean>;

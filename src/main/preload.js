@@ -81,6 +81,12 @@ contextBridge.exposeInMainWorld("ch", {
     clipboardImage: () => ipcRenderer.invoke("clipboard:image"),
     putVideo: (url, type, bytes) => ipcRenderer.invoke("files:putVideo", { url, type, bytes }),
   },
+  errors: {
+    /** An error this window hit, for Admin → Bugs (sent by the main process; deduped and capped there). */
+    report: (report) => ipcRenderer.send("errors:report", report),
+    /** The screen this window shows ("Admin → Members"), for a crash report that can't ask. */
+    setScreen: (screen) => ipcRenderer.send("errors:screen", screen),
+  },
   window: {
     popout: (target) => ipcRenderer.send("window:popout", target),
     onFullscreen: listen("window:fullscreen"),

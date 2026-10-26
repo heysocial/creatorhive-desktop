@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { MessageCircle } from "lucide-react";
-import { type SessionUser } from "../lib/bridge";
+import { ch, type SessionUser } from "../lib/bridge";
+import { ErrorBoundary, screenFor } from "../lib/errors";
 import { type Workspace } from "../lib/api";
 import { useNav, type Location } from "../lib/nav";
 import { Conversation } from "./messages/Conversation";
@@ -79,7 +81,10 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
 
 export function Main({ user }: { user: SessionUser }) {
   const { current } = useNav();
+  const screen = screenFor(current);
+  useEffect(() => ch.errors?.setScreen(screen), [screen]);
   const built = Built({ location: current, user });
-  if (built) return <main className="main">{built}</main>;
+  // A screen that throws is reported and offers Try again; the rest of the window keeps working.
+  if (built) return <main className="main"><ErrorBoundary resetKey={JSON.stringify(current)}>{built}</ErrorBoundary></main>;
   return <main className="main"><div className="empty-state"><p>Nothing to show here.</p></div></main>;
 }

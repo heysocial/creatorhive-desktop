@@ -40,6 +40,7 @@ const realtime = require("./realtime");
 const media = require("./media");
 const popouts = require("./popouts");
 const files = require("./files");
+const errors = require("./errors");
 
 /* Must match DESKTOP_NOTIFICATION_EVENT in the web app's lib/realtime/channels.ts. */
 const DESKTOP_NOTIFICATION_EVENT = "notification:desktop";
@@ -57,6 +58,9 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
   process.exit(0);
 }
+
+// From here on, this process's errors and the windows' crashes go to Admin → Bugs (errors.js).
+errors.configure(ipcMain);
 
 media.registerScheme();
 
