@@ -404,7 +404,7 @@ function ChangePassword() {
   const set = (key: keyof typeof fields) => (e: React.ChangeEvent<HTMLInputElement>) => setFields({ ...fields, [key]: e.target.value });
   return (
     <div className="set-row set-form">
-      <span><b>Change password</b><small>Other devices stay signed in.</small></span>
+      <span><b>Change password</b><small>You'll be signed out on your other devices.</small></span>
       <form className="set-fields" onSubmit={async (e) => {
         e.preventDefault();
         if (fields.next !== fields.again) { setState({ error: "The new passwords don't match." }); return; }

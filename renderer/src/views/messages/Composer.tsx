@@ -128,7 +128,8 @@ export const Composer = forwardRef<ComposerHandle, {
   const [value, setValue] = useState(() => DRAFTS.get(draftKey) ?? "");
   const [picked, setPicked] = useState<MentionCandidate[]>([]);
   const [staged, setStaged] = useState<Staged[]>([]);
-  const [sending, setSending] = useState(false);
+  /** Sends still on their way; only for the spinner — typing and Return never wait for them. */
+  const [sending, setSending] = useState(0);
   const [emoji, setEmoji] = useState(false);
   const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -288,22 +289,35 @@ export const Composer = forwardRef<ComposerHandle, {
   const uploading = staged.some((s) => s.state === "uploading" && !s.video);
   const ready = staged.filter((s) => s.state === "done" && s.sent).map((s) => s.sent!);
   const videos = staged.filter((s) => s.video && s.state !== "failed").map((s) => s.video!.job);
-  const canSend = !sending && !uploading && (value.trim().length > 0 || ready.length > 0 || videos.length > 0);
+  const canSend = !uploading && (value.trim().length > 0 || ready.length > 0 || videos.length > 0);
 
-  async function send() {
+  /*
+    The box empties the moment Return is pressed, not when the server answers.
+    It used to wait: whatever was typed while a send was on its way was then
+    wiped by that send's clear, and Return did nothing until it answered — so
+    in a quick run a message could vanish without ever being sent (2.0.6).
+    A send that fails stays in the conversation as a failed message with Try
+    again (sendMessage's optimistic copy), so clearing early loses nothing.
+    Each message shows at once; sendMessage keeps their requests in order.
+  */
+  function send() {
     if (!canSend) return;
-    setSending(true);
-    const body = value;
-    const ok = await onSend({ body, mentions: mentionRanges(body), files: ready, videos });
-    setSending(false);
-    if (ok) {
-      setValue("");
-      setPicked([]);
-      staged.forEach((s) => s.preview && URL.revokeObjectURL(s.preview));
-      setStaged([]);
-      DRAFTS.delete(draftKey);
-    }
+    const message: ComposerSend = { body: value, mentions: mentionRanges(value), files: ready, videos };
+    const previews = staged.map((s) => s.preview).filter((preview): preview is string => Boolean(preview));
+    setValue("");
+    setPicked([]);
+    setStaged([]);
+    setMention(null);
+    DRAFTS.delete(draftKey);
     input.current?.focus();
+    setSending((n) => n + 1);
+    void Promise.resolve()
+      .then(() => onSend(message))
+      .catch(() => false)
+      .finally(() => {
+        setSending((n) => n - 1);
+        previews.forEach((preview) => URL.revokeObjectURL(preview));
+      });
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -320,7 +334,7 @@ export const Composer = forwardRef<ComposerHandle, {
     if (mod && event.shiftKey && event.key.toLowerCase() === "u") { event.preventDefault(); link(); return; }
     if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
-      void send();
+      send();
     }
   }
 
@@ -412,7 +426,7 @@ export const Composer = forwardRef<ComposerHandle, {
           if (at) trackMention(at.next, at.caret);
         }}><AtSign /></button> : null}
         {voice ? <button title="Record a voice memo" onClick={() => setRecording(true)}><Mic /></button> : null}
-        <button className={`send ${canSend ? "on" : ""}`} disabled={!canSend} title="Send (Return)" onClick={() => void send()}>
+        <button className={`send ${canSend ? "on" : ""}`} disabled={!canSend} title="Send (Return)" onClick={() => send()}>
           {sending ? <Loader2 className="spin" /> : <SendHorizontal />}
         </button>
       </div>

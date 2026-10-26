@@ -65,11 +65,27 @@ async function upload({ route, name, type, bytes, access, clientPayload } = {}) 
   }
 }
 
-/** A site path or a public https URL, fetched with the member's cookies when it's the site. */
+/*
+  Where a file the interface opens or saves may come from: the site itself, our
+  file storage, and the video and GIF hosts messages and posts point at. The
+  server only accepts attachments from these, so anything else is a link that
+  shouldn't be fetched from this Mac.
+*/
+const FILE_HOSTS = [
+  /\.blob\.vercel-storage\.com$/,
+  /(^|\.)mux\.com$/,
+  /(^|\.)videodelivery\.net$/,
+  /\.cloudflarestream\.com$/,
+  /^(media\d?|i)\.giphy\.com$/,
+];
+
+/** A site path or one of FILE_HOSTS over https, fetched with the member's cookies when it's the site. */
 async function download(url) {
   const target = url.startsWith("/") ? `${ORIGIN}${url}` : url;
-  const { protocol, origin } = new URL(target);
-  if (protocol !== "https:" && origin !== ORIGIN) throw new Error("bad url");
+  const { protocol, origin, hostname } = new URL(target);
+  if (origin !== ORIGIN && (protocol !== "https:" || !FILE_HOSTS.some((host) => host.test(hostname)))) {
+    throw new Error("bad url");
+  }
   const response = origin === ORIGIN
     ? await siteFetch(target.slice(ORIGIN.length), { headers: { Accept: "*/*" } })
     : await fetch(target);
@@ -77,8 +93,40 @@ async function download(url) {
   return Buffer.from(await response.arrayBuffer());
 }
 
-async function toTemp(url, name) {
+/*
+  Folders made for Quick Look and Add to Calendar. A private DM attachment
+  shouldn't stay readable in the temp folder, so each is removed a while after
+  it's made (Quick Look and Calendar have read it by then) and all of them when
+  the app quits.
+*/
+const TEMP_LIFETIME_MS = 10 * 60 * 1000;
+const tempDirs = new Map();
+
+function makeTempDir() {
+  const now = Date.now();
+  for (const [dir, madeAt] of tempDirs) {
+    if (now - madeAt > TEMP_LIFETIME_MS) removeTempDir(dir);
+  }
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "creatorhive-"));
+  tempDirs.set(dir, now);
+  return dir;
+}
+
+function removeTempDir(dir) {
+  tempDirs.delete(dir);
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch (error) {
+    debug("temp clean-up failed", error?.message);
+  }
+}
+
+app.on("will-quit", () => {
+  for (const dir of [...tempDirs.keys()]) removeTempDir(dir);
+});
+
+async function toTemp(url, name) {
+  const dir = makeTempDir();
   const file = path.join(dir, safeName(name));
   fs.writeFileSync(file, await download(url));
   return file;
@@ -128,7 +176,7 @@ function configure(ipcMain) {
   // The interface builds the .ics; Calendar opens it and asks where to add it.
   ipcMain.handle("files:addToCalendar", async (_event, { ics, name } = {}) => {
     if (typeof ics !== "string" || !ics.startsWith("BEGIN:VCALENDAR") || ics.length > 20_000) return { ok: false };
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "creatorhive-"));
+    const dir = makeTempDir();
     const file = path.join(dir, `${safeName(name).replace(/\.ics$/i, "")}.ics`);
     fs.writeFileSync(file, ics);
     const error = await shell.openPath(file);

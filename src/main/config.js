@@ -2,8 +2,21 @@
 
 const { app } = require("electron");
 
+/**
+ * A `CREATORHIVE_*` testing override, or undefined in a packaged app.
+ *
+ * They exist for running from the repo against a local copy of the site. In
+ * the shipped app they would let anything that can set an environment
+ * variable for the user (`launchctl setenv`) point the window at another
+ * server — the password typed at sign-in included — or load a remote page
+ * with the full bridge. The preview build recognises itself by its name.
+ */
+function devEnv(name) {
+  return app.isPackaged ? undefined : process.env[name];
+}
+
 /* Where the community lives. Point it at a local copy of the site for testing. */
-const HOME_URL = process.env.CREATORHIVE_URL || "https://community.creatorhiveacademy.com";
+const HOME_URL = devEnv("CREATORHIVE_URL") || "https://community.creatorhiveacademy.com";
 const ORIGIN = new URL(HOME_URL).origin;
 
 /*
@@ -14,7 +27,7 @@ const ORIGIN = new URL(HOME_URL).origin;
   address that isn't a preview.
 */
 const PREVIEW_BYPASS = new URL(ORIGIN).hostname.endsWith(".vercel.app")
-  ? process.env.CREATORHIVE_PREVIEW_BYPASS || ""
+  ? devEnv("CREATORHIVE_PREVIEW_BYPASS") || ""
   : "";
 
 /* The same cookie jar 1.x used, so an update from 1.x keeps people signed in. */
@@ -27,13 +40,13 @@ const PARTITION = "persist:creatorhive";
 */
 const IS_PREVIEW = app.getName().includes("Preview")
   || process.execPath.includes("CreatorHive Preview.app")
-  || process.env.CREATORHIVE_PREVIEW === "1";
+  || devEnv("CREATORHIVE_PREVIEW") === "1";
 
 /* In development the interface comes from Vite's dev server instead of the bundle. */
-const RENDERER_URL = process.env.CREATORHIVE_RENDERER_URL || null;
+const RENDERER_URL = devEnv("CREATORHIVE_RENDERER_URL") || null;
 
 const debug = (...args) => {
-  if (process.env.CREATORHIVE_DEBUG) console.log("[creatorhive]", ...args);
+  if (devEnv("CREATORHIVE_DEBUG")) console.log("[creatorhive]", ...args);
 };
 
-module.exports = { HOME_URL, ORIGIN, PREVIEW_BYPASS, PARTITION, IS_PREVIEW, RENDERER_URL, debug };
+module.exports = { HOME_URL, ORIGIN, PREVIEW_BYPASS, PARTITION, IS_PREVIEW, RENDERER_URL, debug, devEnv };

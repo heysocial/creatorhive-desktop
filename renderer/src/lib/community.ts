@@ -198,6 +198,21 @@ export function removeMessage(where: Thread, id: string) {
 
 /* ---------- Actions ---------- */
 
+/**
+ * Sends to one conversation go out one after another, in the order they were
+ * made, so a quick run of messages lands in the order it was typed. Each
+ * message still shows the moment it's sent (its optimistic copy); only the
+ * request waits for the one before it.
+ */
+const sendQueues = new Map<string, Promise<unknown>>();
+
+function inOrder<T>(where: Thread, request: () => Promise<T>): Promise<T> {
+  const key = `${where.kind}:${where.id}`;
+  const run = (sendQueues.get(key) ?? Promise.resolve()).then(request, request);
+  sendQueues.set(key, run.catch(() => undefined));
+  return run;
+}
+
 export async function sendMessage(where: Thread, input: {
   body: string;
   mentions?: { id: string; start: number; end: number }[];
@@ -223,7 +238,7 @@ export async function sendMessage(where: Thread, input: {
   };
   addMessage(where, optimistic);
   try {
-    const { message } = await api<{ message: Message }>(`${base(where)}/messages`, {
+    const { message } = await inOrder(where, () => api<{ message: Message }>(`${base(where)}/messages`, {
       method: "POST",
       body: {
         body: input.body,
@@ -234,7 +249,7 @@ export async function sendMessage(where: Thread, input: {
         ...(where.kind === "channel" ? { mentions: input.mentions ?? [] } : {}),
         ...(where.kind === "dm" && input.replyToMessageId ? { replyToMessageId: input.replyToMessageId } : {}),
       },
-    });
+    }));
     addMessage(where, { ...message, clientMutationId });
     return true;
   } catch (error) {

@@ -9,6 +9,19 @@ files:
   - assets/**
   - renderer/dist/**
   - package.json
+# Electron fuses, flipped in the binary at build time (security audit, Oct 2026).
+# Off: ELECTRON_RUN_AS_NODE, NODE_OPTIONS / NODE_EXTRA_CA_CERTS and --inspect,
+# each of which lets anything on this Mac run code as the notarized app (with
+# its microphone and camera permissions and its keychain item). On: the app
+# loads only from app.asar, and macOS checks app.asar against the hash signed
+# into the app. Cookie encryption is left as it was: turning it on is one-way,
+# and the sign-in cookie must keep working across the update.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
 mac:
   category: public.app-category.social-networking
   icon: build/icon.icns

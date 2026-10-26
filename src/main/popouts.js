@@ -8,7 +8,7 @@
 
 const path = require("node:path");
 const { BrowserWindow, shell } = require("electron");
-const { RENDERER_URL } = require("./config");
+const { RENDERER_URL, devEnv } = require("./config");
 
 const windows = new Map(); // "dm:<id>" -> BrowserWindow
 const KINDS = new Set(["dm", "channel", "thread", "deal", "lesson", "settings", "huddle"]);
@@ -58,7 +58,7 @@ function open(target, chrome) {
   win.on("closed", () => { windows.delete(key); onChange(); });
   onChange();
   win.once("ready-to-show", () => win.show());
-  if (process.env.CREATORHIVE_DEBUG) {
+  if (devEnv("CREATORHIVE_DEBUG")) {
     for (const event of ["did-start-loading", "did-navigate", "did-navigate-in-page", "render-process-gone", "destroyed"]) {
       win.webContents.on(event, (_e, ...args) => console.log("[popout]", key, event, JSON.stringify(args).slice(0, 200)));
     }
