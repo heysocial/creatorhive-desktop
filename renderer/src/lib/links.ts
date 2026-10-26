@@ -74,6 +74,8 @@ export function locationForPath(target: string): Location | null {
       return { ws: "hs", section: "home", view: { kind: "threads" } };
     case "/hey-social/saved":
       return { ws: "hs", section: "later", view: { kind: "saved" } };
+    case "/hey-social/people":
+      return { ws: "hs", section: "home", view: { kind: "hs-people" } };
     case "/hey-social/activity":
       return { ws: "hs", section: "activity", view: { kind: "activity" } };
     case "/hub":

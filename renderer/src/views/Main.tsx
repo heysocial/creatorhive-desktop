@@ -21,6 +21,7 @@ import { ScriptWriter } from "./learn/ScriptWriter";
 import { ImproveResource } from "./learn/ImproveResource";
 import { Activity } from "./activity/Activity";
 import { HsMentions, HsSaved, HsThreads } from "./heysocial/Lists";
+import { HsPeople } from "./heysocial/People";
 import { Admin } from "./admin/Admin";
 
 /** The screen for a place in the app. */
@@ -49,6 +50,8 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
       return <HsMentions />;
     case "saved":
       return <HsSaved />;
+    case "hs-people":
+      return <HsPeople />;
     case "hub": {
       const page = view.page === "dashboard" ? <Dashboard /> : view.page === "clients" ? <Clients /> : view.page === "invoices" ? <Invoices /> : <Deals board={view.board} smart={view.smart} />;
       return <>{page}{view.dealId ? <DealOverlay key={view.dealId} id={view.dealId} /> : null}</>;

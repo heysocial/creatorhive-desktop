@@ -30,6 +30,7 @@ export type View =
   | { kind: "threads" }
   | { kind: "mentions" }
   | { kind: "saved" }
+  | { kind: "hs-people" }
   | { kind: "admin"; page: AdminPage; id?: string };
 
 export interface Location {

@@ -8,6 +8,9 @@ import { Avatar, channelName } from "../lib/ui";
 import { promptText } from "../views/hub/DealPanel";
 import { HuddleBar } from "../views/heysocial/Huddle";
 import { HsPreferences } from "../views/heysocial/Preferences";
+import { leaveChannel, RenameChannel } from "../views/heysocial/ChannelAdmin";
+import { useAdminAccess } from "../lib/admin";
+import { nav } from "../lib/nav";
 import { SidebarItem, Skeleton } from "./parts";
 
 /*
@@ -49,6 +52,7 @@ function Row({ item, sections, live, isMember }: { item: Item; sections: Section
   const badge = item.kind === "channel" ? item.row.mentionCount : muted ? 0 : item.row.unreadCount;
   const bold = unread > 0 && (!muted || badge > 0);
   const view = { kind: item.kind, id: row.id } as const;
+  const [renaming, setRenaming] = useState(false);
 
   async function menu() {
     const moves = [
@@ -61,7 +65,8 @@ function Row({ item, sections, live, isMember }: { item: Item; sections: Section
       { id: "star", label: row.starred ? "Unstar" : "Star" },
       { id: "mute", label: muted ? "Unmute" : "Mute" },
       { id: "move", label: "Move to", submenu: moves },
-      ...(item.kind === "channel" && isMember ? [{ type: "separator" as const }, { id: "rename", label: "Rename channel…" }, { id: "leave", label: "Leave channel" }] : []),
+      // As on the website: Rename for full members, Leave for everyone.
+      ...(item.kind === "channel" ? [{ type: "separator" as const }, ...(isMember ? [{ id: "rename", label: "Rename channel…" }] : []), { id: "leave", label: "Leave channel" }] : []),
       { type: "separator" },
       { id: "window", label: "Open in new window" },
     ]);
@@ -74,13 +79,10 @@ function Row({ item, sections, live, isMember }: { item: Item; sections: Section
       const name = await promptText("New section");
       if (name) { const section = await addSection(name.slice(0, 40)); void setPrefs(item.kind, row.id, { sectionId: section.id, starred: false }); }
     }
-    if (choice === "rename" && item.kind === "channel") {
-      const name = await promptText("Rename channel", channelName(item.row.name));
-      if (name) { await api(`/api/channels/${row.id}`, { method: "PATCH", body: { name: name.slice(0, 50) } }).catch(() => window.alert("Couldn't rename the channel.")); void refreshHs(); }
-    }
-    if (choice === "leave" && window.confirm("Leave this channel?")) {
-      await api(`/api/channels/${row.id}/members`, { method: "DELETE" }).catch(() => null);
-      void refreshHs();
+    if (choice === "rename" && item.kind === "channel") setRenaming(true);
+    if (choice === "leave" && item.kind === "channel" && (await leaveChannel(item.row))) {
+      const here = nav.get().view;
+      if (here.kind === "channel" && here.id === row.id) nav.open({ kind: "threads" }, "home", "hs");
     }
     if (choice === "window") ch.window.popout({ kind: item.kind, id: row.id });
   }
@@ -90,6 +92,7 @@ function Row({ item, sections, live, isMember }: { item: Item; sections: Section
     : <Avatar name={item.row.displayName} src={item.row.isGroup ? null : item.row.other?.avatarUrl} seed={item.row.isGroup ? item.row.id : item.row.other?.id} size={20} radius="5px" presence={item.row.isGroup ? undefined : item.row.other?.presence} />;
   const label = item.kind === "channel" ? channelName(item.row.name) : item.row.displayName;
   return (
+    <>
     <div className={`hs-row ${muted ? "muted" : ""}`} onContextMenu={(e) => { e.preventDefault(); void menu(); }}>
       <SidebarItem icon={icon} label={label} view={view} count={badge || undefined} unread={bold} />
       <span className="hs-row-icons">
@@ -97,6 +100,8 @@ function Row({ item, sections, live, isMember }: { item: Item; sections: Section
         {muted && !badge ? <BellOff /> : null}
       </span>
     </div>
+    {renaming && item.kind === "channel" ? <RenameChannel channel={item.row} onClose={() => setRenaming(false)} /> : null}
+    </>
   );
 }
 
@@ -120,6 +125,7 @@ function SectionBlock({ id, title, items, collapsed, onToggle, sections, liveIds
 
 export function HeySocialSidebar() {
   const { data, isLoading } = useHsSidebar();
+  const isOwner = Boolean(useAdminAccess().data?.owner);
   const huddles = useHuddles().data;
   const [collapsed, toggleBuiltin] = useBuiltinCollapsed();
   const [prefsOpen, setPrefsOpen] = useState(false);
@@ -156,11 +162,14 @@ export function HeySocialSidebar() {
       { id: "section", label: "Create a section…" },
       { type: "separator" },
       { id: "prefs", label: "Preferences and themes…" },
+      // People and access is the owner's alone, as on the website.
+      ...(isOwner ? [{ id: "people", label: "People and access" }] : []),
     ]);
     if (choice === "create") window.dispatchEvent(new Event("ch:hs-create-channel"));
     if (choice === "browse") window.dispatchEvent(new Event("ch:hs-browse"));
     if (choice === "section") { const name = await promptText("New section"); if (name) await addSection(name.slice(0, 40)); }
     if (choice === "prefs") setPrefsOpen(true);
+    if (choice === "people") nav.open({ kind: "hs-people" }, "home", "hs");
   }
 
   async function sectionMenu(section: Section) {

@@ -6,6 +6,7 @@ import { shortTime } from "../../lib/format";
 import { messageView, placeView, refreshHs, useHsActivity, useHsSaved, useHsSidebar, useHsThreads, type SavedItem } from "../../lib/heysocial";
 import { nav } from "../../lib/nav";
 import { Avatar, channelName } from "../../lib/ui";
+import "../../styles/admin-heysocial.css";
 
 /* Hey Social Inc.'s Threads, Mentions & reactions and Saved for later, as on the website. */
 
@@ -162,24 +163,27 @@ export function CreateChannel({ onClose }: { onClose: () => void }) {
       onClose();
       nav.open({ kind: "channel", id: channel.id }, "home", "hs");
     } catch (e) {
-      const code = (e as { code?: string }).code;
-      setError(code === "NAME_TAKEN" ? "That name is taken." : "Couldn't create the channel.");
+      // The website's words: guests are refused, anything else is the server's own message.
+      const text = (e as Error).message;
+      setError((e as { status?: number }).status === 403 ? "Only Hey Social Inc. members can start channels."
+        : text && !text.startsWith("HTTP") ? text : "The channel couldn't be created. Try again.");
     } finally { setBusy(false); }
   }
   return (
     <div className="scrim center" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ width: 460 }}>
-        <div className="modal-head">Create a channel<button className="iconbtn" onClick={onClose}><X /></button></div>
+        <div className="modal-head">New channel<button className="iconbtn" onClick={onClose}><X /></button></div>
         <div className="modal-body">
+          <p className="hsc-lede">Channels in Hey Social Inc. are for the team only. Students never see them.</p>
           <label className="flabel">Name</label>
           <input className="field" autoFocus maxLength={50} placeholder="e.g. 📣 marketing" value={name} onChange={(e) => setName(e.target.value)} />
           <label className="flabel">Description · optional</label>
-          <input className="field" maxLength={200} value={description} onChange={(e) => setDescription(e.target.value)} />
+          <input className="field" maxLength={200} placeholder="What's this channel for?" value={description} onChange={(e) => setDescription(e.target.value)} />
           <label className="flabel">Who can join</label>
           <label className="radio-row"><input type="radio" checked={open} onChange={() => setOpen(true)} /><span>Open</span><span className="faint">Any Hey Social Inc. member can find and join it</span></label>
           <label className="radio-row"><input type="radio" checked={!open} onChange={() => setOpen(false)} /><span>Private</span><span className="faint">Only people you add</span></label>
         </div>
-        <div className="modal-foot">{error ? <span className="form-error">{error}</span> : null}<button className="btn" onClick={onClose}>Cancel</button><button className="btn honey" disabled={!name.trim() || busy} onClick={() => void create()}>Create</button></div>
+        <div className="modal-foot">{error ? <span className="form-error">{error}</span> : null}<button className="btn" onClick={onClose}>Cancel</button><button className="btn honey" disabled={!name.trim() || busy} onClick={() => void create()}>Create channel</button></div>
       </div>
     </div>
   );
