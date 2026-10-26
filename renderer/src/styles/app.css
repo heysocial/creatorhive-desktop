@@ -206,6 +206,20 @@ img { -webkit-user-drag: none; }
 
 .toast { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 40; background: var(--overlay); backdrop-filter: blur(30px); border-radius: 12px; padding: 10px 14px; display: flex; gap: 10px; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,.25), 0 0 0 .5px rgba(0,0,0,.25); font-size: 13px; }
 
+/* Update ready: at the foot of the sidebar, clear of the composer. */
+.update-banner {
+  position: absolute; left: 82px; bottom: 12px; z-index: 30; width: min(300px, max(240px, calc(var(--sidebar-w, 268px) - 18px)));
+  display: flex; align-items: center; gap: 10px; padding: 9px 8px 9px 12px; border-radius: 12px;
+  background: var(--overlay); backdrop-filter: blur(30px); box-shadow: 0 10px 30px rgba(0,0,0,.22), 0 0 0 .5px rgba(0,0,0,.2);
+}
+.update-banner .icon { width: 16px; height: 16px; color: var(--honey-ink); flex: none; }
+.update-banner .text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.update-banner .text b { font-size: 13px; }
+.update-banner .text small { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.update-banner .btn { height: 26px; padding: 0 10px; font-size: 12px; flex: none; }
+.update-banner .iconbtn { width: 24px; height: 24px; flex: none; }
+.update-banner .iconbtn svg { width: 14px; height: 14px; }
+
 /* ---------- Sign in ---------- */
 .signin { height: 100%; display: grid; place-items: center; position: relative; -webkit-app-region: drag; background: var(--tint); }
 .signin-card { width: 400px; display: flex; flex-direction: column; align-items: center; -webkit-app-region: no-drag; }

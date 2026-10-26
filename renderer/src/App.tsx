@@ -7,6 +7,7 @@ import { nav, useNav } from "./lib/nav";
 import { useRealtimeRefresh } from "./lib/realtime";
 import { SignIn } from "./signin/SignIn";
 import { TopBar } from "./shell/TopBar";
+import { UpdateBanner } from "./shell/UpdateBanner";
 import { Rail } from "./shell/Rail";
 import { SidebarResizer, useSidebarLayout } from "./shell/SidebarResizer";
 import { Sidebar } from "./sidebars/Sidebars";
@@ -167,7 +168,12 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
 
   useEffect(() => ch.app.setHeySocialAccess(heySocial), [heySocial]);
   useEffect(() => ch.window.onFullscreen(setFullscreen), []);
-  useEffect(() => ch.app.onUpdateReady(setUpdateReady), []);
+  // Downloaded before this window was showing the workspace? Ask, as well as listening.
+  useEffect(() => {
+    void ch.app.updateStatus().then((version) => { if (version) setUpdateReady(version); });
+    return ch.app.onUpdateReady(setUpdateReady);
+  }, []);
+  const [updateLater, setUpdateLater] = useState(false);
   useEffect(() => ch.app.onNavigate((path) => openPath(path)), []);
   // From a pop-out: "dm:<id>", "channel:<id>", "profile:<id>".
   useEffect(() => ch.app.onNavigateView((target) => {
@@ -252,7 +258,7 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
     <div className={`app ${sidebar.open ? "" : "no-sidebar"} ${sidebar.dragging ? "resizing" : ""} ${fullscreen ? "fullscreen" : ""}`}
       data-hs-theme={themed} style={{ "--sidebar-w": `${sidebar.open ? sidebar.width : 0}px` } as React.CSSProperties}>
       {themeStyle ? <style>{themeStyle}</style> : null}
-      <TopBar preview={info.preview} updateReady={updateReady} sidebarOpen={sidebar.open} />
+      <TopBar preview={info.preview} sidebarOpen={sidebar.open} />
       <Rail user={user} />
       <Sidebar user={user} />
       <SidebarResizer layout={sidebar} />
@@ -261,6 +267,7 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       {overlay === "shortcuts" ? <ShortcutsSheet onClose={close} /> : null}
       {overlay === "new-message" ? <NewMessage onClose={close} workspace={nav.get().ws === "hs" ? "heysocial" : "creatorhive"} /> : null}
       {toast ? <div className="toast" role="status">{toast}</div> : null}
+      {updateReady && !updateLater ? <UpdateBanner version={updateReady} onLater={() => setUpdateLater(true)} /> : null}
       {locked ? <LockScreen /> : null}
       <HubDialogs />
       <DealFormHost />

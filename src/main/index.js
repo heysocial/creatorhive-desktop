@@ -655,7 +655,7 @@ function updateTray() {
     },
     { type: "separator" },
     updateReady
-      ? { label: `Restart to update to ${updateReady}`, click: installUpdate }
+      ? { label: "Restart to Update", sublabel: `Version ${updateReady} is ready`, click: installUpdate }
       : { label: "Check for updates…", sublabel: `Version ${app.getVersion()}`, click: () => void checkForUpdates(true) },
     { label: `Quit ${appName}`, accelerator: "CommandOrControl+Q", click: () => app.quit() },
   ];
@@ -676,7 +676,9 @@ function createAppMenu() {
       label: app.name,
       submenu: [
         { role: "about" },
-        { label: "Check for Updates…", click: () => void checkForUpdates(true) },
+        updateReady
+          ? { label: "Restart to Update", click: installUpdate }
+          : { label: "Check for Updates…", click: () => void checkForUpdates(true) },
         { type: "separator" },
         { label: "Settings…", accelerator: "CommandOrControl+,", enabled: signedIn, click: () => command("settings") },
         { type: "separator" },
@@ -751,8 +753,25 @@ function createAppMenu() {
 
 /* ---------- Updates ---------- */
 
+/*
+  An update has finished downloading. Remembered here, not only announced:
+  a window that wasn't showing the workspace at that moment (sign-in, the
+  lock, a reload) asks for it when it loads, and the menus offer the restart.
+*/
+function markUpdateReady(version) {
+  updateReady = version;
+  updateTray();
+  createAppMenu();
+  send("update:ready", version);
+}
+ipcMain.handle("update:status", () => updateReady);
+
 function configureUpdates() {
-  if (!app.isPackaged) return;
+  if (!app.isPackaged) {
+    // Test only, never in the installed app: pretend an update has downloaded.
+    if (process.env.CREATORHIVE_FAKE_UPDATE) setTimeout(() => markUpdateReady(process.env.CREATORHIVE_FAKE_UPDATE), 3000);
+    return;
+  }
   // The preview follows its own prerelease channel; the real app never sees it.
   if (IS_PREVIEW) {
     autoUpdater.allowPrerelease = true;
@@ -762,9 +781,7 @@ function configureUpdates() {
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on("update-downloaded", (info) => {
     debug("update downloaded", info.version);
-    updateReady = info.version;
-    updateTray();
-    send("update:ready", info.version);
+    markUpdateReady(info.version);
   });
   autoUpdater.on("error", (error) => console.error("[update]", error?.message ?? error));
   setTimeout(() => void checkForUpdates(false), 30 * 1000);
@@ -798,6 +815,7 @@ async function checkForUpdates(fromMenu) {
 }
 
 function installUpdate() {
+  if (!app.isPackaged) return void console.log("[update] restart to update", updateReady);
   quitting = true;
   autoUpdater.quitAndInstall();
 }

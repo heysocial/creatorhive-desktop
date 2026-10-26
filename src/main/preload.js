@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld("ch", {
     openSite: (path) => ipcRenderer.send("app:openSite", path),
     refreshBadge: () => ipcRenderer.send("badge:refresh"),
     installUpdate: () => ipcRenderer.send("update:install"),
+    updateStatus: () => ipcRenderer.invoke("update:status"),
     checkUpdates: () => ipcRenderer.send("app:checkUpdates"),
     onCommand: listen("command"),
     onNavigate: listen("navigate"),

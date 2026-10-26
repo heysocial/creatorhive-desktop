@@ -89,6 +89,8 @@ export interface Bridge {
     openSite(path: string): void;
     refreshBadge(): void;
     installUpdate(): void;
+    /** The version that has downloaded and waits for a restart, if any. */
+    updateStatus(): Promise<string | null>;
     checkUpdates(): void;
     onCommand: Listen<string>;
     onNavigate: Listen<string>;

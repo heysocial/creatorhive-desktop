@@ -3,7 +3,7 @@ import { commands } from "../lib/commands";
 import { nav, useNav } from "../lib/nav";
 import { useConnectionState } from "../lib/realtime";
 
-export function TopBar({ preview, updateReady, sidebarOpen }: { preview: boolean; updateReady: string | null; sidebarOpen: boolean }) {
+export function TopBar({ preview, sidebarOpen }: { preview: boolean; sidebarOpen: boolean }) {
   useNav(); // re-render when history changes, for the back/forward buttons
   const connection = useConnectionState();
   const ws = nav.get().ws;
@@ -24,11 +24,6 @@ export function TopBar({ preview, updateReady, sidebarOpen }: { preview: boolean
       </button>
       <div className="topright">
         {reconnecting ? <span className="conn" title="Live updates are reconnecting"><i />Reconnecting…</span> : null}
-        {updateReady ? (
-          <button className="btn honey" style={{ height: 26, fontSize: 12 }} onClick={() => window.ch.app.installUpdate()}>
-            Restart to update
-          </button>
-        ) : null}
         {preview ? <span className="preview-tag" title="The team's preview of CreatorHive 2.0">PREVIEW</span> : null}
         <button className="iconbtn" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (⌘/)" onClick={() => commands.run("shortcuts")}><CircleHelp /></button>
       </div>
