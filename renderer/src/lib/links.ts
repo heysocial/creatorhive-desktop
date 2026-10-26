@@ -32,6 +32,9 @@ export function locationForPath(target: string): Location | null {
   if (course) return { ws: "ch", section: "learn", view: { kind: "course", id: decodeURIComponent(course), lessonId: params.get("lesson") ?? undefined } };
   const page = /^\/resources\/([0-9a-f-]{36})$/i.exec(url.pathname)?.[1] ?? (url.pathname === "/resources" ? params.get("page") : null);
   if (page) return { ws: "ch", section: "learn", view: { kind: "resource", id: page } };
+  // The website's Admin: /admin, /admin/<page>, /admin/hubs/<id>, /admin/courses/<id>.
+  const admin = /^\/admin(?:\/(metrics|hubs|roadmap|moderation|courses)(?:\/([^/]+))?)?\/?$/.exec(url.pathname);
+  if (admin) return { ws: "ch", section: "admin", view: { kind: "admin", page: (admin[1] ?? "metrics") as "metrics", id: admin[2] ? decodeURIComponent(admin[2]) : undefined } };
   const guide = /^\/library\/resources\/([\w-]+)$/.exec(url.pathname)?.[1];
   if (guide) return { ws: "ch", section: "learn", view: guide === "ai-script-writer" ? { kind: "script-writer" } : { kind: "improve-resource", slug: guide } };
 
@@ -109,9 +112,9 @@ export function locationForPath(target: string): Location | null {
 const SETTINGS_TABS: Record<string, Parameters<typeof openSettings>[0]> = { "/settings": "account", "/settings/invoice": "hub" };
 
 /**
- * Go to a website path in the app. Only the website's own admin, legal and
- * public pages (Admin, Terms, Privacy, Support, a client's invoice link) are
- * left to the browser: the app has no copy of them.
+ * Go to a website path in the app. Only the website's legal and public pages
+ * (Terms, Privacy, Support, a client's invoice link) are left to the browser:
+ * the app has no copy of them. Admin has its own section now.
  */
 export async function openPath(target: string) {
   const location = locationForPath(target);

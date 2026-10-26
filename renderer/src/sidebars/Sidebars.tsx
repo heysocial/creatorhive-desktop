@@ -21,6 +21,7 @@ import { percent, useCourses, useImprove } from "../lib/learn";
 import { useResourcePages, useResourcesAccess, useWikiPages } from "../views/learn/Resources";
 import { useActivityRows } from "../views/activity/Activity";
 import { HeySocialSidebar } from "./HeySocialSidebar";
+import { AdminSidebar } from "./AdminSidebar";
 
 const byRecent = (a: Conversation, b: Conversation) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? "");
 
@@ -251,6 +252,9 @@ export function Sidebar({ user }: { user: SessionUser }) {
       break;
     case "later":
       content = <HeySocialSidebar />;
+      break;
+    case "admin":
+      content = <AdminSidebar />;
       break;
     default:
       content = current.ws === "hs" ? <HeySocialSidebar /> : <CreatorHiveHome />;

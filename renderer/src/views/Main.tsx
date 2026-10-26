@@ -21,6 +21,7 @@ import { ScriptWriter } from "./learn/ScriptWriter";
 import { ImproveResource } from "./learn/ImproveResource";
 import { Activity } from "./activity/Activity";
 import { HsMentions, HsSaved, HsThreads } from "./heysocial/Lists";
+import { Admin } from "./admin/Admin";
 
 /** The screen for a place in the app. */
 function Built({ location, user }: { location: Location; user: SessionUser }) {
@@ -64,6 +65,8 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
       return <ImproveResource key={view.slug} slug={view.slug} />;
     case "activity":
       return location.ws === "ch" ? <Activity filter={view.filter} /> : <HsMentions />;
+    case "admin":
+      return <Admin page={view.page} id={view.id} />;
     case "dms-home":
       return <div className="empty-state"><div><MessageCircle style={{ width: 34, height: 34, color: "var(--ink-4)" }} /><p style={{ marginTop: 8 }}>Pick a conversation, or start a new one with ⌘N.</p></div></div>;
     default:

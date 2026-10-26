@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { AdminPage } from "./admin";
 
 /*
   Where the person is: a workspace, a rail section, and a view inside it.
@@ -7,7 +8,7 @@ import { useSyncExternalStore } from "react";
 */
 
 export type WorkspaceKey = "ch" | "hs";
-export type Section = "home" | "dms" | "hub" | "learn" | "activity" | "later";
+export type Section = "home" | "dms" | "hub" | "learn" | "activity" | "later" | "admin";
 
 export type View =
   | { kind: "feed"; postId?: string }
@@ -28,7 +29,8 @@ export type View =
   | { kind: "script-writer"; chatId?: string }
   | { kind: "threads" }
   | { kind: "mentions" }
-  | { kind: "saved" };
+  | { kind: "saved" }
+  | { kind: "admin"; page: AdminPage; id?: string };
 
 export interface Location {
   ws: WorkspaceKey;
@@ -37,7 +39,8 @@ export interface Location {
 }
 
 export const SECTIONS: Record<WorkspaceKey, Section[]> = {
-  ch: ["home", "dms", "hub", "learn", "activity"],
+  // Admin only shows on the rail for people the website lets in (Rail.tsx).
+  ch: ["home", "dms", "hub", "learn", "activity", "admin"],
   hs: ["home", "dms", "activity", "later"],
 };
 
@@ -48,6 +51,7 @@ const DEFAULT_VIEW: Record<WorkspaceKey, Partial<Record<Section, View>>> = {
     hub: { kind: "hub", page: "deals" },
     learn: { kind: "learn", page: "courses" },
     activity: { kind: "activity" },
+    admin: { kind: "admin", page: "metrics" },
   },
   hs: {
     home: { kind: "threads" },

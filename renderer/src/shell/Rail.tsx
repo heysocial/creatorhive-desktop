@@ -1,4 +1,4 @@
-import { Bell, Bookmark, GraduationCap, House, MessageCircle, Sparkles, type LucideIcon } from "lucide-react";
+import { Bell, Bookmark, GraduationCap, House, MessageCircle, Shield, Sparkles, type LucideIcon } from "lucide-react";
 import { ch, type SessionUser } from "../lib/bridge";
 import { useChannels, useConversations, useHeySocialAccess } from "../lib/api";
 import { commands } from "../lib/commands";
@@ -7,6 +7,7 @@ import { nav, useNav, type Section, SECTIONS } from "../lib/nav";
 import { Avatar, countLabel } from "../lib/ui";
 import { useActivityRows } from "../views/activity/Activity";
 import { useHsSidebar } from "../lib/heysocial";
+import { adminPages, useAdminAccess, useOpenReports } from "../lib/admin";
 
 const SECTION_META: Record<Section, { label: string; icon: LucideIcon; shortcut: string }> = {
   home: { label: "Home", icon: House, shortcut: "⌘1" },
@@ -15,6 +16,7 @@ const SECTION_META: Record<Section, { label: string; icon: LucideIcon; shortcut:
   learn: { label: "Learn", icon: GraduationCap, shortcut: "⌘4" },
   activity: { label: "Activity", icon: Bell, shortcut: "⌘5" },
   later: { label: "Later", icon: Bookmark, shortcut: "" },
+  admin: { label: "Admin", icon: Shield, shortcut: "" },
 };
 
 const sum = (values: number[]) => values.reduce((total, n) => total + n, 0);
@@ -37,6 +39,9 @@ export function Rail({ user }: { user: SessionUser }) {
   const other = current.ws === "hs" ? chUnread : hsUnread;
   const activity = useActivityRows().filter((r) => r.unread && r.kind !== "dm").length;
   const hsCounts = useHsSidebar(heySocial && current.ws === "hs").data?.counts;
+  const admin = useAdminAccess().data;
+  const canAdmin = adminPages(admin).length > 0;
+  const openReports = useOpenReports(Boolean(admin?.tabs.includes("moderation"))).data ?? 0;
 
   async function meMenu() {
     const choice = await ch.menu.popup([
@@ -65,10 +70,10 @@ export function Rail({ user }: { user: SessionUser }) {
         </button>
       ) : null}
       <div className="rdiv" />
-      {SECTIONS[current.ws].map((section) => {
+      {SECTIONS[current.ws].filter((section) => section !== "admin" || canAdmin).map((section) => {
         const meta = SECTION_META[section];
         const Icon = meta.icon;
-        const count = section === "dms" ? here.dms : section === "activity" ? (current.ws === "ch" ? activity : hsCounts?.activity ?? 0) : 0;
+        const count = section === "dms" ? here.dms : section === "activity" ? (current.ws === "ch" ? activity : hsCounts?.activity ?? 0) : section === "admin" ? openReports : 0;
         return (
           <button key={section} className={`ritem ${current.section === section ? "on" : ""}`}
             title={meta.shortcut ? `${meta.label} (${meta.shortcut})` : meta.label} onClick={() => nav.section(section)}>
