@@ -181,7 +181,7 @@ async function apiStream({ path, body } = {}, onLine) {
   }
 }
 
-const FORM_ROUTES = [/^\/api\/profile\/avatar$/, /^\/api\/(dms|channels)\/[0-9a-f-]{36}\/voice$/];
+const FORM_ROUTES = [/^\/api\/profile\/avatar$/, /^\/api\/courses\/[0-9a-f-]{36}\/cover$/, /^\/api\/(dms|channels)\/[0-9a-f-]{36}\/voice$/];
 
 /** A one-file multipart upload to a site route (the profile photo, a voice memo), with any extra text fields. */
 async function uploadForm({ path, field, name, type, bytes, fields } = {}) {
