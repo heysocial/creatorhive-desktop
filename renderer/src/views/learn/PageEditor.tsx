@@ -156,7 +156,7 @@ export function PageEditor({ pageId, userId, initialDoc, version: initialVersion
         } catch (e) {
           window.alert((e as ApiError).code === "UNSUPPORTED_TYPE" ? `${file.name} isn't a type pages take.` : (e as ApiError).code === "TOO_LARGE" ? `${file.name} is too big.` : `${file.name} couldn't be added.`);
         }
-      } else window.alert(`${file.name} couldn't be uploaded.`);
+      } else window.alert((up.error === "rate_limited" && up.message) || `${file.name} couldn't be uploaded.`);
       setUploading((n) => n - 1);
     }
   }

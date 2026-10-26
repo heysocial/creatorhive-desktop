@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
-import { api, keys, queryClient, type Conversation, type Workspace } from "../lib/api";
+import { api, keys, queryClient, rateLimitMessage, type Conversation, type Workspace } from "../lib/api";
 import { ch } from "../lib/bridge";
 import { useMembers, type Member } from "../lib/community";
 import { nav } from "../lib/nav";
@@ -41,8 +41,9 @@ export function NewMessage({ onClose, workspace }: { onClose: () => void; worksp
       onClose();
       const section = nav.get().section === "dms" ? "dms" : "home";
       nav.open({ kind: "dm", id: conversation.id }, section, workspace === "heysocial" ? "hs" : "ch");
-    } catch {
-      setError("You can't message them right now.");
+    } catch (error) {
+      // Started too many today: the website says so ("…Try again tomorrow.").
+      setError(rateLimitMessage(error) ?? "You can't message them right now.");
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, SendHorizontal, Square, Trash2 } from "lucide-react";
 import { ch } from "../../lib/bridge";
+import { rateLimitMessage } from "../../lib/api";
 import { VoicePlayer } from "./VoicePlayer";
 
 /*
@@ -116,7 +117,8 @@ export function VoiceRecorder({ path, body, parentMessageId, onSent, onCancel }:
         ...(body.trim() ? { body } : {}), ...(parentMessageId ? { parentMessageId } : {}),
       },
     });
-    if (!result.ok) { setState("error"); setError("Couldn't send the voice memo."); return; }
+    // Over a limit: the website's sentence ("You're sending too fast…"), not ours.
+    if (!result.ok) { setState("error"); setError(rateLimitMessage(result) ?? "Couldn't send the voice memo."); return; }
     onSent((result.data as { message?: unknown } | undefined)?.message);
   }
 

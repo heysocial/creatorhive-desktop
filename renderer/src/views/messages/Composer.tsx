@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Play, Mic, AtSign, Bold, Code, File as FileIcon, Italic, Link2, List, ListOrdered, Loader2, Plus, SendHorizontal, Smile, Strikethrough, X } from "lucide-react";
-import { ch } from "../../lib/bridge";
+import { ch, type UploadResult } from "../../lib/bridge";
 import { convertEmoticon } from "../../lib/emoji";
 import { bytes } from "../../lib/format";
 import { Avatar } from "../../lib/ui";
@@ -44,6 +44,8 @@ interface Staged {
   preview: string | null;
   state: "uploading" | "done" | "failed";
   sent?: SentFile;
+  /** Why it failed, when the website said (over the daily upload limit). */
+  failedReason?: string;
   video?: { progress: number; job: VideoJob; duration?: number };
 }
 
@@ -75,13 +77,19 @@ function videoThumbnail(file: File): Promise<{ url: string | null; duration: num
 const DRAFTS = new Map<string, string>();
 const MAX_FILES = 10;
 
-/** Uploads one file through the website's Blob route, the same one its composer uses. */
-async function uploadFile(file: File, folder?: string): Promise<SentFile | null> {
+/** The website's sentence for a refused upload (over the daily limit), or undefined. */
+const uploadRefusal = (result: UploadResult) => (!result.ok && result.error === "rate_limited" ? result.message : undefined);
+
+/**
+ * Uploads one file through the website's Blob route, the same one its composer
+ * uses. A failure carries the website's reason when it gave one.
+ */
+async function uploadFile(file: File, folder?: string): Promise<SentFile | { failedReason?: string }> {
   // Hey Social Inc. takes any file up to 1 GB into its own folder; pictures show inline only for these four types.
   if (folder) {
     const inline = /^image\/(jpeg|png|webp|gif)$/.test(file.type);
     const result = await ch.files.upload({ route: "/api/upload/hey-social", name: `hey-social-files/${folder}/${Date.now()}-${file.name}`, type: file.type || "application/octet-stream", bytes: await file.arrayBuffer() });
-    if (!result.ok) return null;
+    if (!result.ok) return { failedReason: uploadRefusal(result) };
     return { url: result.url, name: file.name, size: file.size, mimeType: file.type || "application/octet-stream", kind: inline ? "image" : "file" };
   }
   const image = file.type.startsWith("image/") && file.type !== "image/svg+xml";
@@ -91,7 +99,7 @@ async function uploadFile(file: File, folder?: string): Promise<SentFile | null>
     type: file.type || "application/octet-stream",
     bytes: await file.arrayBuffer(),
   });
-  if (!result.ok) return null;
+  if (!result.ok) return { failedReason: uploadRefusal(result) };
   return { url: result.url, name: file.name, size: file.size, mimeType: file.type || "application/octet-stream", kind: image ? "image" : "file" };
 }
 
@@ -177,11 +185,13 @@ export const Composer = forwardRef<ComposerHandle, {
         job.duration = duration;
         update((s) => ({ ...s, preview: url, video: { ...s.video!, duration } }));
       });
-      job.subscribe(() => update((s) => ({ ...s, state: job.failed ? "failed" : job.uploaded ? "done" : "uploading", video: { ...s.video!, progress: job.progress } })));
+      job.subscribe(() => update((s) => ({ ...s, state: job.failed ? "failed" : job.uploaded ? "done" : "uploading", failedReason: job.failedReason, video: { ...s.video!, progress: job.progress } })));
     }
     for (const item of next.filter((n) => !n.video)) {
-      void uploadFile(item.file, uploadFolder).then((sent) => {
-        setStaged((current) => current.map((s) => (s.key === item.key ? { ...s, state: sent ? "done" : "failed", sent: sent ?? undefined } : s)));
+      void uploadFile(item.file, uploadFolder).then((outcome) => {
+        const sent = "url" in outcome ? outcome : undefined;
+        const failedReason = sent ? undefined : (outcome as { failedReason?: string }).failedReason;
+        setStaged((current) => current.map((s) => (s.key === item.key ? { ...s, state: sent ? "done" : "failed", sent, failedReason } : s)));
       });
     }
     input.current?.focus();
@@ -340,7 +350,7 @@ export const Composer = forwardRef<ComposerHandle, {
               {s.video ? (
                 <span className="vthumb">{s.preview ? <img src={s.preview} alt="" /> : null}<Play /></span>
               ) : s.preview ? <img src={s.preview} alt="" /> : <span className={`ficon ${/pdf/i.test(s.file.type) ? "" : "generic"}`}><FileIcon /></span>}
-              <span className="fmeta"><b>{s.file.name}</b><span>{s.state === "failed" ? "Couldn't upload" : s.video ? (s.state === "done" ? `Ready to send${s.video.duration ? ` · ${Math.floor(s.video.duration / 60)}:${String(Math.round(s.video.duration % 60)).padStart(2, "0")}` : ""}` : `Uploading ${s.video.progress}% · you can send now`) : s.state === "uploading" ? "Uploading…" : bytes(s.file.size)}</span>
+              <span className="fmeta"><b>{s.file.name}</b><span>{s.state === "failed" ? (s.failedReason ?? "Couldn't upload") : s.video ? (s.state === "done" ? `Ready to send${s.video.duration ? ` · ${Math.floor(s.video.duration / 60)}:${String(Math.round(s.video.duration % 60)).padStart(2, "0")}` : ""}` : `Uploading ${s.video.progress}% · you can send now`) : s.state === "uploading" ? "Uploading…" : bytes(s.file.size)}</span>
                 {s.video && s.state === "uploading" ? <i className="vprog"><i style={{ width: `${s.video.progress}%` }} /></i> : null}
               </span>
               {s.state === "uploading" && !s.video ? <Loader2 className="spin" /> : null}

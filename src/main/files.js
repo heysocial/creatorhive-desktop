@@ -34,6 +34,10 @@ async function clientToken(route, pathname, clientPayload = null) {
   });
   if (signedOut(response)) throw Object.assign(new Error("signed out"), { code: "signed_out" });
   const body = await response.json().catch(() => null);
+  // Over the daily upload limit: keep the website's sentence for the interface.
+  if (response.status === 429 && body?.code === "rate_limited" && typeof body.error === "string") {
+    throw Object.assign(new Error(body.error), { code: "rate_limited", message: body.error });
+  }
   if (!response.ok || !body?.clientToken) throw Object.assign(new Error(body?.error || `token ${response.status}`), { code: "refused" });
   return body.clientToken;
 }
@@ -57,7 +61,7 @@ async function upload({ route, name, type, bytes, access, clientPayload } = {}) 
     return { ok: true, url: blob.url, pathname: blob.pathname, contentType: blob.contentType, size: buffer.length };
   } catch (error) {
     debug("upload failed", error?.message);
-    return { ok: false, error: error?.code ?? "failed" };
+    return { ok: false, error: error?.code ?? "failed", ...(error?.code === "rate_limited" ? { message: error.message } : {}) };
   }
 }
 

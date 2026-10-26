@@ -66,6 +66,21 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The website's own sentence when it refused an action for going over a
+ * per-member limit (429 `{ code: "rate_limited", error: "<sentence>" }`,
+ * creatorhive-app lib/rate-limit.ts) — "You're sending too fast. Try again in
+ * a minute." and the like — or null for any other failure. Takes an ApiError,
+ * or a raw `{ status, data }` result from the bridge.
+ */
+export function rateLimitMessage(failure: unknown): string | null {
+  const { status, data } = failure instanceof ApiError
+    ? failure
+    : ((failure ?? {}) as { status?: number; data?: Record<string, unknown> | null });
+  if (status !== 429 || data?.code !== "rate_limited") return null;
+  return typeof data.error === "string" && data.error.trim() ? data.error : null;
+}
+
 /** A JSON call through the main process. Throws on anything but success. */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const result = await ch.api<T & { ok?: boolean; error?: string }>({ path, ...init });

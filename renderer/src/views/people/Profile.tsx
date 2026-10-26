@@ -1,7 +1,7 @@
 import { CalendarDays, Camera, MapPin, MessageCircle, Pencil, Share } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
-import { api, ApiError, keys, queryClient, type Conversation } from "../../lib/api";
+import { api, ApiError, keys, queryClient, rateLimitMessage, type Conversation } from "../../lib/api";
 import { useMembers } from "../../lib/community";
 import { money } from "../../lib/format";
 import { openSettings } from "../../lib/links";
@@ -32,8 +32,8 @@ export async function messagePerson(userId: string) {
     const { conversation } = await api<{ conversation: Conversation }>("/api/dms", { method: "POST", body: { userId } });
     await queryClient.invalidateQueries({ queryKey: keys.conversations("creatorhive") });
     nav.open({ kind: "dm", id: conversation.id }, nav.get().section === "dms" ? "dms" : "home", "ch");
-  } catch {
-    window.alert("You can't message this person right now.");
+  } catch (error) {
+    window.alert(rateLimitMessage(error) ?? "You can't message this person right now.");
   }
 }
 

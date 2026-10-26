@@ -214,7 +214,7 @@ export const MessageRow = memo(function MessageRow({ message, grouped, actions, 
           ) : null}
           <Media message={message} />
           {message.failed ? (
-            <div className="failed"><TriangleAlert />Not sent.{actions.onRetry ? <button onClick={() => actions.onRetry?.(message)}>Try again</button> : null}</div>
+            <div className="failed"><TriangleAlert />{message.failedReason ?? "Not sent."}{actions.onRetry ? <button onClick={() => actions.onRetry?.(message)}>Try again</button> : null}</div>
           ) : null}
           <ReactionChips reactions={message.reactions} onToggle={(emoji) => actions.onReact(message, emoji)} />
           {!inThread && actions.onOpenThread ? <ThreadLine message={message} onOpen={() => actions.onOpenThread?.(message)} /> : null}

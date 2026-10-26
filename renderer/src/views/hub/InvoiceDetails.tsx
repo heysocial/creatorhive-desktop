@@ -72,7 +72,7 @@ export function InvoiceDetailsForm({ profile, onSaved, compact }: { profile: Inv
     const userId = (await ch.auth.session()).user?.id;
     const up = await ch.files.upload({ route: "/api/invoice-profile/logo/upload", name: `invoice-logos/${userId}/${file.name.replace(/[^\w.-]+/g, "-")}`, type: file.type, bytes: await file.arrayBuffer(), access: "private" });
     if (up.ok) await put({ logoBlobPathname: up.pathname });
-    else setStatus({ kind: "error", text: "That image didn't upload. Try again." });
+    else setStatus({ kind: "error", text: (up.error === "rate_limited" && up.message) || "That image didn't upload. Try again." });
     setLogoBusy(false);
   }
 

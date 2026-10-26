@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
-import { api, ApiError, queryClient } from "./api";
+import { api, ApiError, queryClient, rateLimitMessage } from "./api";
 import type { Author, Reactions } from "./community";
 
 export const CATEGORIES = [
@@ -105,8 +105,10 @@ export async function reactToPost(post: Post, emoji: string) {
   try {
     const { reactions } = await api<{ reactions: Reactions }>(`/api/posts/${post.id}/reactions`, { method: "POST", body: { emoji } });
     patchPost(post.id, (p) => ({ ...p, reactions }));
-  } catch {
+  } catch (error) {
     patchPost(post.id, (p) => ({ ...p, reactions: before }));
+    const limited = rateLimitMessage(error);
+    if (limited) window.alert(limited);
   }
 }
 

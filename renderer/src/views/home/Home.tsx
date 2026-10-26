@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Image as ImageIcon, Loader2, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
-import { api, queryClient } from "../../lib/api";
+import { api, queryClient, rateLimitMessage } from "../../lib/api";
 import {
   CATEGORIES, POST_REACTIONS, addComment, categoryOf, createPost, deleteComment, editComment, editPost, likeComment, patchPost,
   reactToPost, useComments, useFeed, usePinnedPosts, usePost, useUnreadCategories, vote,
@@ -157,7 +157,7 @@ function NewPost({ user, open, draft, onOpen, onClose }: { user: SessionUser; op
       const result = await ch.files.upload({ route: "/api/upload", name: file.name, type: file.type, bytes: await file.arrayBuffer() });
       setUploading((n) => n - 1);
       if (result.ok) setMedia((m) => [...m, { url: result.url, preview: URL.createObjectURL(file) }]);
-      else setError("A picture couldn't be uploaded.");
+      else setError((result.error === "rate_limited" && result.message) || "A picture couldn't be uploaded.");
     }
   }
 
@@ -174,8 +174,8 @@ function NewPost({ user, open, draft, onOpen, onClose }: { user: SessionUser; op
       setMedia([]);
       setPoll(null);
       onClose();
-    } catch {
-      setError("Couldn't post. Try again.");
+    } catch (error) {
+      setError(rateLimitMessage(error) ?? "Couldn't post. Try again.");
     } finally {
       setPosting(false);
     }
@@ -546,8 +546,8 @@ export function PostSheet({ postId, user, onClose }: { postId: string; user: Ses
       await addComment(postId, text.trim(), replyTo?.id ?? null);
       setText("");
       setReplyTo(null);
-    } catch {
-      window.alert("Couldn't add the comment.");
+    } catch (error) {
+      window.alert(rateLimitMessage(error) ?? "Couldn't add the comment.");
     } finally {
       setSending(false);
     }

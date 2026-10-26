@@ -49,7 +49,8 @@ export interface DesktopSettings {
 
 export type UploadResult =
   | { ok: true; url: string; pathname: string; contentType: string; size: number }
-  | { ok: false; error: string };
+  /** `message`: the website's sentence when `error` is "rate_limited". */
+  | { ok: false; error: string; message?: string };
 
 type Unsubscribe = () => void;
 type Listen<T> = (callback: (payload: T) => void) => Unsubscribe;
@@ -114,7 +115,7 @@ export interface Bridge {
     addToCalendar(ics: string, name: string): Promise<{ ok: boolean }>;
     clipboardImage(): Promise<Uint8Array | null>;
     putVideo(url: string, type: string, bytes: ArrayBuffer): Promise<{ ok: boolean; status?: number; error?: string }>;
-    uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer; fields?: Record<string, string> }): Promise<{ ok: boolean; error?: string; data?: unknown }>;
+    uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer; fields?: Record<string, string> }): Promise<{ ok: boolean; status?: number; error?: string; data?: unknown }>;
   };
   window: {
     popout(target: { kind: "dm" | "channel" | "thread" | "deal" | "lesson" | "settings" | "huddle"; id: string; title?: string }): void;

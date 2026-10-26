@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link2, Loader2, Plus, SendHorizontal, Sparkles, Square } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
-import { api, queryClient } from "../../lib/api";
+import { api, queryClient, rateLimitMessage } from "../../lib/api";
 import { shortTime } from "../../lib/format";
 import { Markdown } from "../../lib/html";
 import { nav } from "../../lib/nav";
@@ -69,7 +69,9 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
     });
     if (!result.ok) {
       const code = (result.data as { error?: string } | undefined)?.error ?? result.error;
-      setError(code === "BUSY" ? "Still writing the last reply." : code === "CHAT_LIMIT" ? "This chat is full. Start a new one." : code === "BAD_LINK" ? "That link doesn't look right." : "The Script Writer couldn't answer. Try again.");
+      // Over the daily limit: the website's own sentence ("…It resets tomorrow.").
+      const limited = rateLimitMessage(result);
+      setError(limited ?? (code === "BUSY" ? "Still writing the last reply." : code === "CHAT_LIMIT" ? "This chat is full. Start a new one." : code === "BAD_LINK" ? "That link doesn't look right." : "The Script Writer couldn't answer. Try again."));
       setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, status: "failed" } : x)));
     } else if (!gotDone) {
       setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, status: x.body ? "stopped" : "failed" } : x)));

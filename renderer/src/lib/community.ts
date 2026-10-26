@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
-import { api, ApiError, queryClient } from "./api";
+import { api, ApiError, queryClient, rateLimitMessage } from "./api";
 
 /* Phase 2 data: messages, the feed, events, the leaderboard and members. Shapes as the website's routes send them. */
 
@@ -78,6 +78,8 @@ export interface Message {
   /** Client-only: still on its way. */
   sending?: boolean;
   failed?: boolean;
+  /** Client-only: the website's sentence when it refused for going over a limit. */
+  failedReason?: string;
 }
 
 export interface Page {
@@ -235,8 +237,8 @@ export async function sendMessage(where: Thread, input: {
     });
     addMessage(where, { ...message, clientMutationId });
     return true;
-  } catch {
-    patchMessage(where, optimistic.id, (m) => ({ ...m, sending: false, failed: true }));
+  } catch (error) {
+    patchMessage(where, optimistic.id, (m) => ({ ...m, sending: false, failed: true, failedReason: rateLimitMessage(error) ?? undefined }));
     return false;
   }
 }
@@ -261,6 +263,8 @@ export interface VideoJob {
   done: Promise<UploadedVideo>;
   uploaded: UploadedVideo | null;
   failed: boolean;
+  /** The website's sentence when it refused the upload for going over a limit. */
+  failedReason?: string;
   subscribe(listener: () => void): () => void;
 }
 
@@ -274,7 +278,7 @@ export function startVideoJob(file: File, upload: (file: File, onProgress: (pct:
   };
   job.done = upload(file, (pct) => { job.progress = pct; emit(); })
     .then((uploaded) => { job.uploaded = uploaded; job.progress = 100; emit(); return uploaded; })
-    .catch((error) => { job.failed = true; emit(); throw error; });
+    .catch((error) => { job.failed = true; job.failedReason = rateLimitMessage(error) ?? undefined; emit(); throw error; });
   job.done.catch(() => {});
   return job;
 }
@@ -334,8 +338,9 @@ export async function sendVideoJobs(where: Thread, input: { jobs: VideoJob[]; bo
     removeMessage(where, localId);
     await sendVideos(where, { ...input, videos });
     return true;
-  } catch {
-    patchMessage(where, localId, (m) => ({ ...m, sending: false, failed: true }));
+  } catch (error) {
+    const failedReason = rateLimitMessage(error) ?? input.jobs.find((job) => job.failedReason)?.failedReason;
+    patchMessage(where, localId, (m) => ({ ...m, sending: false, failed: true, failedReason }));
     return false;
   } finally {
     offs.forEach((off) => off());
@@ -399,8 +404,11 @@ export async function toggleReaction(where: Thread, message: Message, emoji: str
   try {
     const { reactions } = await api<{ reactions: Reactions }>(`/api/messages/${message.id}/reactions`, { method: "POST", body: { emoji } });
     patchMessage(where, message.id, (m) => ({ ...m, reactions }));
-  } catch {
+  } catch (error) {
     patchMessage(where, message.id, (m) => ({ ...m, reactions: before }));
+    // Otherwise a failed reaction just quietly undoes itself, as before.
+    const limited = rateLimitMessage(error);
+    if (limited) window.alert(limited);
   }
 }
 
