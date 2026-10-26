@@ -4,6 +4,7 @@ import { AdminHubs } from "./Hubs";
 import { AdminRoadmap } from "./Roadmap";
 import { AdminModeration } from "./Moderation";
 import { AdminCoursesAdmin } from "./CoursesAdmin";
+import { AdminBugs } from "./Bugs";
 
 /* Admin: the website's /admin, for the people it lets in. A page they may not open shows their first one instead. */
 export function Admin({ page, id }: { page: AdminPage; id?: string }) {
@@ -18,6 +19,7 @@ export function Admin({ page, id }: { page: AdminPage; id?: string }) {
     case "hubs": return <AdminHubs key={key} id={id} />;
     case "roadmap": return <AdminRoadmap key={key} id={id} />;
     case "moderation": return <AdminModeration key={key} id={id} />;
+    case "bugs": return <AdminBugs key={key} id={id} />;
     case "courses": return <AdminCoursesAdmin key={key} id={id} />;
   }
 }

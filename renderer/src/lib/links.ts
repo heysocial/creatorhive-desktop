@@ -32,8 +32,8 @@ export function locationForPath(target: string): Location | null {
   if (course) return { ws: "ch", section: "learn", view: { kind: "course", id: decodeURIComponent(course), lessonId: params.get("lesson") ?? undefined } };
   const page = /^\/resources\/([0-9a-f-]{36})$/i.exec(url.pathname)?.[1] ?? (url.pathname === "/resources" ? params.get("page") : null);
   if (page) return { ws: "ch", section: "learn", view: { kind: "resource", id: page } };
-  // The website's Admin: /admin, /admin/<page>, /admin/hubs/<id>, /admin/courses/<id>.
-  const admin = /^\/admin(?:\/(metrics|hubs|roadmap|moderation|courses)(?:\/([^/]+))?)?\/?$/.exec(url.pathname);
+  // The website's Admin: /admin, /admin/<page>, /admin/hubs/<id>, /admin/courses/<id>, /admin/bugs/<fingerprint> (a bug alert).
+  const admin = /^\/admin(?:\/(metrics|hubs|roadmap|moderation|bugs|courses)(?:\/([^/]+))?)?\/?$/.exec(url.pathname);
   if (admin) return { ws: "ch", section: "admin", view: { kind: "admin", page: (admin[1] ?? "metrics") as "metrics", id: admin[2] ? decodeURIComponent(admin[2]) : undefined } };
   const guide = /^\/library\/resources\/([\w-]+)$/.exec(url.pathname)?.[1];
   if (guide) return { ws: "ch", section: "learn", view: guide === "ai-script-writer" ? { kind: "script-writer" } : { kind: "improve-resource", slug: guide } };
