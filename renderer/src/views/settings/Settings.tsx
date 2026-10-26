@@ -283,6 +283,7 @@ function deleteError(e: unknown) {
   if (status === 403 || code === "current_password_incorrect") return "That password doesn't match. Your account has not been deleted.";
   if (code === "current_password_required") return "Enter your password to delete your account.";
   if (status === 401) return "Your session has ended. Sign in again to delete your account.";
+  if (code === "too_many_attempts") return "Too many attempts. Try again in a few minutes or reset your password.";
   return "We couldn't delete your account. Check your connection and try again.";
 }
 
@@ -347,6 +348,9 @@ const ACCOUNT_ERRORS: Record<string, string> = {
   email_already_in_use: "Another account already uses that email.",
   invalid_new_password: "Your new password needs at least 8 characters.",
   password_unchanged: "That's your current password. Pick a new one.",
+  too_many_attempts: "Too many attempts. Try again in a few minutes or reset your password.",
+  too_many_email_changes: "You've asked to change your email several times this hour. Try again later.",
+  email_change_unavailable: "Email changes are unavailable right now. Try again later.",
 };
 const accountError = (e: unknown) => (e instanceof ApiError && ACCOUNT_ERRORS[e.code ?? ""]) || "Couldn't save. Try again.";
 
@@ -355,18 +359,29 @@ function ChangeEmail({ current }: { current: string }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [state, setState] = useState<{ busy?: boolean; error?: string; done?: string }>({});
+  /*
+    `pending`: the website now emails a link to the new address and switches
+    only once it's opened, so the email shown stays the current one. A server
+    that predates that sends no `pending` and has already switched it.
+  */
+  const [state, setState] = useState<{ busy?: boolean; error?: string; done?: string; pending?: string }>({});
   const [shown, setShown] = useState(current);
-  if (!open) return <Row title="Email" sub={state.done ? `Changed to ${state.done}` : shown}><button className="btn" onClick={() => { setOpen(true); setEmail(""); setPassword(""); setState({}); }}>Change email</button></Row>;
+  if (!open) return <Row title="Email" sub={state.pending ? `Check ${state.pending} to confirm. Your email stays ${shown} until you do.` : state.done ? `Changed to ${state.done}` : shown}><button className="btn" onClick={() => { setOpen(true); setEmail(""); setPassword(""); setState({}); }}>Change email</button></Row>;
   return (
     <div className="set-row set-form">
-      <span><b>Change email</b><small>You'll sign in with the new one from now on.</small></span>
+      <span><b>Change email</b><small>We'll email a link to the new address. It takes over once you open it.</small></span>
       <form className="set-fields" onSubmit={async (e) => {
         e.preventDefault();
         setState({ busy: true });
         try {
-          const result = await api<{ email: string }>("/api/settings/account", { method: "PATCH", body: { action: "email", email, currentPassword: password } });
-          setShown(result.email); setState({ done: result.email }); setOpen(false);
+          const result = await api<{ email: string; pending?: boolean; currentEmail?: string }>("/api/settings/account", { method: "PATCH", body: { action: "email", email, currentPassword: password } });
+          if (result.pending) {
+            if (result.currentEmail) setShown(result.currentEmail);
+            setState({ pending: result.email });
+          } else {
+            setShown(result.email); setState({ done: result.email });
+          }
+          setOpen(false);
         } catch (err) { setState({ error: accountError(err) }); }
       }}>
         <input className="field" type="email" placeholder="New email" autoFocus required maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} />
