@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, keys, queryClient, useChannels, useConversations, type Workspace } from "../../lib/api";
 import {
-  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, receiptFor, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
+  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, useChannelMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
 } from "../../lib/community";
 import { dayLabel } from "../../lib/format";
@@ -39,7 +39,7 @@ function toAuthor(user: SessionUser): Author {
 }
 
 /** The scrolling list: loads older pages at the top, sticks to the bottom while you're there. */
-function MessageList({ where, actions, header, empty, jumpTo, onJumped, receipts = false }: {
+function MessageList({ where, actions, header, empty, jumpTo, onJumped }: {
   where: Thread;
   actions: RowActions;
   header?: ReactNode;
@@ -47,20 +47,9 @@ function MessageList({ where, actions, header, empty, jumpTo, onJumped, receipts
   /** A message to show (from a link): older pages load until it's there. */
   jumpTo?: string | null;
   onJumped?: () => void;
-  /** 1:1 DMs: Sent, Delivered or Read under your newest message. */
-  receipts?: boolean;
 }) {
   const query = useMessages(where);
   const messages = useMemo(() => flatten(query.data), [query.data]);
-  const receipt = useMemo(() => {
-    if (!receipts) return null;
-    // The newest page carries the other person's watermarks.
-    const newest = query.data?.pages[0];
-    const mine = messages.findLast((m) => m.author.id === actions.meId);
-    if (!mine || mine.sending || mine.failed || mine.id.startsWith("local-")) return null;
-    const state = receiptFor(mine, newest?.receipts, newest?.receiptsSince);
-    return { id: mine.id, label: state === "read" ? "Read ✓✓" : state === "delivered" ? "Delivered" : "Sent" };
-  }, [receipts, messages, query.data, actions.meId]);
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const restore = useRef<number | null>(null);
@@ -136,7 +125,7 @@ function MessageList({ where, actions, header, empty, jumpTo, onJumped, receipts
           return (
             <div key={message.clientMutationId ?? message.id}>
               {newDay ? <div className="day"><span>{dayLabel(message.createdAt)}</span></div> : null}
-              <MessageRow message={message} grouped={!newDay && grouped(previous, message)} actions={actions} receipt={receipt?.id === message.id ? receipt.label : null} />
+              <MessageRow message={message} grouped={!newDay && grouped(previous, message)} actions={actions} />
             </div>
           );
         })}
@@ -493,7 +482,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
       onDragEnter={(event) => event.dataTransfer.types.includes("Files") && setDragging(true)}>
       <div className="convo-main">
         {head}
-        <MessageList where={where} actions={actions} header={intro} empty={null} receipts={where.kind === "dm" && conversation?.isGroup === false}
+        <MessageList where={where} actions={actions} header={intro} empty={null}
           jumpTo={threadId ? null : jump} onJumped={() => setJump(null)} />
         <div className="typing">{typingLine(typing)}</div>
         {replyTo ? (

@@ -83,37 +83,6 @@ export interface Message {
 export interface Page {
   messages: Message[];
   nextCursor: string | null;
-  receipts?: Receipts;
-  /** Messages from before receipts existed are only ever Sent. */
-  receiptsSince?: string | null;
-}
-
-/** How far the other person in a 1:1 DM has received and read, as two times. */
-export interface Receipts { deliveredThrough: string | null; readThrough: string | null }
-
-/** Your message's line, compared against the other person's watermarks (the website's receiptForDMMessage). */
-export function receiptFor(message: Pick<Message, "createdAt">, receipts: Receipts | undefined, since: string | null | undefined): "sent" | "delivered" | "read" {
-  // The server keeps the watermarks to the whole second (it stringifies the message's time), so compare at that grain.
-  const at = Math.floor(Date.parse(message.createdAt) / 1000) * 1000;
-  const cutoff = since ? Date.parse(since) : Number.NaN;
-  if (!Number.isFinite(at) || !Number.isFinite(cutoff) || at < cutoff) return "sent";
-  const read = receipts?.readThrough ? Date.parse(receipts.readThrough) : Number.NaN;
-  if (Number.isFinite(read) && at <= read) return "read";
-  const delivered = receipts?.deliveredThrough ? Date.parse(receipts.deliveredThrough) : Number.NaN;
-  if (Number.isFinite(delivered) && at <= delivered) return "delivered";
-  return "sent";
-}
-
-/** A live receipt: moves a watermark forward, never back. */
-export function advanceReceipt(where: Thread, field: keyof Receipts, through: string) {
-  queryClient.setQueryData<InfiniteData<Page>>(messageKeys.list(where), (data) => {
-    if (!data?.pages.length) return data;
-    const [newest, ...rest] = data.pages;
-    const prior = newest.receipts?.[field];
-    if (prior && Date.parse(prior) >= Date.parse(through)) return data;
-    const receipts: Receipts = { deliveredThrough: null, readThrough: null, ...newest.receipts, [field]: through };
-    return { ...data, pages: [{ ...newest, receipts }, ...rest] };
-  });
 }
 
 /** "channel" or "dm" plus its id: where a message list lives on the server. */

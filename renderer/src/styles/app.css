@@ -432,7 +432,6 @@ img { -webkit-user-drag: none; }
 }
 .msg.jump-target { animation: jump-target 1.8s ease-out; }
 @keyframes jump-target { 0%, 25% { background: var(--honey-soft); box-shadow: 0 0 0 2px var(--honey); } 100% { box-shadow: 0 0 0 0 transparent; } }
-.msg .receipt { margin-top: 3px; font-size: 11.5px; color: var(--ink-4); }
 .members-sheet { width: min(440px, 92vw); }
 .members-sheet .sheet-head .faint { margin-left: 8px; font-weight: 500; font-size: 13px; }
 .replies-rule { display: flex; align-items: center; gap: 10px; margin: 8px 0; color: var(--ink-3); font-size: 12px; font-weight: 600; }
