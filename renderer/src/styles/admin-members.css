@@ -1,0 +1,117 @@
+/*
+  Members admin (owner and team): pending invites, the invite dialog, Manage
+  access / badge, a member's briefs, and Settings → Member titles. Ported from
+  the website's invites.module.css and settings.module.css, in the app's tokens.
+*/
+
+/* ---------- The card's ⋯ ---------- */
+.mad-card { position: relative; display: flex; }
+.mad-card > .card.member { flex: 1; min-width: 0; padding-right: 40px; }
+.mad-card .mad-more { position: absolute; top: 8px; right: 8px; }
+
+/* ---------- Pending invites ---------- */
+.mad-pending { margin-bottom: 18px; overflow: hidden; }
+.mad-pending-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.mad-pending-head h2 { font-size: 14px; font-weight: 700; }
+.mad-pending-head p { margin-top: 2px; color: var(--ink-3); font-size: 12px; }
+.mad-count { min-width: 26px; padding: 3px 8px; border-radius: 99px; background: var(--card-3); color: var(--ink-3); text-align: center; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mad-line { display: flex; min-height: 42px; align-items: center; gap: 8px; padding: 8px 14px; color: var(--ink-3); font-size: 13px; }
+.mad-line svg { width: 16px; height: 16px; flex: none; }
+.mad-line .mad-ok { color: var(--honey-ink); }
+.mad-invite { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px; }
+.mad-invite + .mad-invite { border-top: 1px solid var(--line); }
+.mad-who { min-width: 0; display: grid; gap: 3px; }
+.mad-who b { overflow: hidden; font-size: 13.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.mad-who > span:not(.mad-delivery) { color: var(--ink-3); font-size: 12.5px; }
+.mad-acts { display: flex; align-items: center; gap: 6px; flex: none; }
+
+.mad-delivery { width: fit-content; padding: 1px 7px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.mad-delivery[data-status="sent"] { background: rgba(52, 199, 89, .14); color: #1F8A45; }
+.mad-delivery[data-status="failed"] { background: rgba(217, 54, 54, .12); color: #D93636; }
+.mad-delivery[data-status="pending"] { background: rgba(10, 132, 255, .12); color: var(--blue); }
+.mad-delivery[data-status="not_sent"] { background: var(--card-3); color: var(--ink-3); }
+
+.mad-error { margin: 10px 14px; padding: 8px 11px; border-radius: 8px; background: rgba(217, 54, 54, .1); box-shadow: inset 0 0 0 .5px rgba(217, 54, 54, .3); color: #D93636; font-size: 12.5px; }
+.mad-error .link { margin-left: 6px; font-size: 12.5px; }
+.mad-dialog .mad-error { margin: 0; }
+
+/* ---------- Dialogs ---------- */
+.mad-dialog { display: flex; flex-direction: column; gap: 14px; }
+.mad-dialog.roomy { gap: 16px; }
+.mad-desc { color: var(--ink-3); font-size: 13px; line-height: 1.45; }
+.mad-rule { padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; }
+.mad-loading { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
+.mad-loading svg { width: 14px; height: 14px; }
+.mad-wide { width: 100%; height: 36px; }
+.modal-foot .mad-wide { flex: 1; }
+
+.mad-form { display: flex; flex-direction: column; gap: 16px; }
+.mad-field { display: grid; gap: 6px; color: var(--ink-3); font-size: 12.5px; font-weight: 600; }
+.mad-field small { color: var(--ink-3); font-size: 11.5px; font-weight: 400; line-height: 1.4; }
+.mad-field .field { font-weight: 400; color: var(--ink); }
+.mad-field select.field { appearance: auto; padding: 0 8px; }
+.mad-field textarea.field { resize: none; min-height: 0; font-size: 12.5px; }
+.mad-form fieldset { min-width: 0; border: 0; }
+.mad-form legend { margin-bottom: 7px; color: var(--ink-3); font-size: 12.5px; font-weight: 600; }
+.mad-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mad-options label { position: relative; display: block; min-height: 76px; padding: 11px 12px; border-radius: 10px; background: var(--card-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.mad-options label.on { background: var(--honey-soft); box-shadow: inset 0 0 0 1.5px var(--honey); }
+.mad-options input { position: absolute; opacity: 0; pointer-events: none; }
+.mad-options label:has(input:focus-visible) { box-shadow: inset 0 0 0 1.5px var(--honey), var(--focus); }
+.mad-options span { display: grid; gap: 4px; }
+.mad-options b { font-size: 13.5px; font-weight: 600; }
+.mad-options small { color: var(--ink-3); font-size: 11.5px; line-height: 1.35; }
+
+.mad-created { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 600; font-size: 13.5px; }
+.mad-chips { display: flex; align-items: center; gap: 6px; flex: none; }
+.mad-role { padding: 2px 8px; border-radius: 99px; background: var(--honey-soft); color: var(--honey-ink); font-size: 11px; white-space: nowrap; }
+
+.mad-preview { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border-radius: 10px; background: var(--card-2); box-shadow: inset 0 0 0 .5px var(--line-strong); }
+.mad-preview > div { display: grid; gap: 3px; }
+.mad-preview small { color: var(--ink-3); font-size: 11px; font-weight: 600; }
+.mad-preview b { font-size: 13.5px; }
+
+/* A custom title's badge, in its colour. */
+.mad-title-badge { font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 5px; white-space: nowrap; letter-spacing: .01em;
+  background: color-mix(in srgb, var(--title-color) 15%, transparent); color: color-mix(in srgb, var(--title-color) 80%, var(--ink)); }
+
+.mad-brief-deal { display: grid; gap: 6px; }
+.mad-brief-deal h3 { font-size: 14px; font-weight: 700; }
+.mad-brief-deal h3 span { font-weight: 500; color: var(--ink-4); font-size: 12px; }
+.mad-brief { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--card-2); font-size: 13px; }
+.mad-brief .faint { flex: none; font-size: 12px; }
+.mad-brief-name { display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; text-align: left; }
+button.mad-brief-name:hover { color: var(--blue); }
+.mad-brief-name svg { width: 13px; height: 13px; flex: none; }
+
+/* ---------- Settings → Member titles ---------- */
+.mad-titles-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
+.mad-titles-bar > div { display: grid; gap: 2px; }
+.mad-titles-bar b { font-size: 14px; font-weight: 600; }
+.mad-titles-bar span { color: var(--ink-3); font-size: 12px; }
+.mad-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.mad-title-row > div:first-child { display: grid; gap: 4px; justify-items: start; min-width: 0; }
+.mad-title-row small { color: var(--ink-3); font-size: 12px; }
+.mad-title-acts { display: flex; gap: 2px; flex: none; }
+.mad-titles-empty { display: grid; justify-items: center; gap: 4px; padding: 26px 16px; border-top: 1px solid var(--line); color: var(--ink-3); text-align: center; font-size: 12.5px; }
+.mad-titles-empty svg { width: 22px; height: 22px; color: var(--honey-ink); }
+.mad-titles-empty b { color: var(--ink); font-size: 13.5px; font-weight: 600; }
+.mad-titles-wait { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12.5px; }
+.mad-titles-wait svg { width: 14px; height: 14px; }
+
+.mad-count-line { justify-self: end; color: var(--ink-4); font-size: 11.5px; font-weight: 400; }
+.mad-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; border-radius: 10px; background: var(--card-2); box-shadow: inset 0 0 0 .5px var(--line-strong); }
+.mad-toggle > span { display: grid; gap: 3px; }
+.mad-toggle b { font-size: 13.5px; font-weight: 600; }
+.mad-toggle small { color: var(--ink-3); font-size: 12px; }
+.mad-colours { border: 0; min-width: 0; display: grid; gap: 10px; }
+.mad-colours legend { margin-bottom: 8px; color: var(--ink-3); font-size: 12.5px; font-weight: 600; }
+.mad-colour-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.mad-colour-grid label { position: relative; display: grid; justify-items: center; gap: 4px; padding: 7px 4px; border-radius: 9px; font-size: 11px; color: var(--ink-3); }
+.mad-colour-grid label:hover { background: var(--sel); }
+.mad-colour-grid label.on { background: var(--sel); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.mad-colour-grid input { position: absolute; opacity: 0; pointer-events: none; }
+.mad-colour-grid label:has(input:focus-visible) { box-shadow: var(--focus); }
+.mad-colour-grid i { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+.mad-colour-grid label.on i { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px currentColor; }
+.mad-colour-preview { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 10px; background: var(--card-2); color: var(--ink-3); font-size: 12px; }

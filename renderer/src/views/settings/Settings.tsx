@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bell, CircleUser, Keyboard, Loader2, Paintbrush, Receipt, Settings as Cog, Shield } from "lucide-react";
+import { BadgeCheck, Bell, CircleUser, Keyboard, Loader2, Paintbrush, Receipt, Settings as Cog, Shield } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type DesktopSettings, type SessionUser } from "../../lib/bridge";
 import { api, ApiError, queryClient, useHeySocialAccess } from "../../lib/api";
@@ -7,10 +7,11 @@ import { Avatar } from "../../lib/ui";
 import { useShortcuts } from "../../overlays/Sheets";
 import { InvoiceDetailsForm, useInvoiceProfile } from "../hub/InvoiceDetails";
 import { ThemePicker } from "../heysocial/ThemePicker";
+import { MemberTitles } from "./MemberTitles";
 
 /* The Settings window (⌘,): what this Mac does, and your account on the server. */
 
-type Tab = "general" | "notifications" | "appearance" | "shortcuts" | "hub" | "privacy" | "account";
+type Tab = "general" | "notifications" | "appearance" | "shortcuts" | "hub" | "privacy" | "account" | "titles";
 const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   { id: "general", label: "General", icon: <Cog /> },
   { id: "notifications", label: "Notifications", icon: <Bell /> },
@@ -20,6 +21,8 @@ const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   { id: "privacy", label: "Privacy", icon: <Shield /> },
   { id: "account", label: "Account", icon: <CircleUser /> },
 ];
+// The owner's alone, as on the website's Settings page.
+const OWNER_TABS: typeof TABS = [{ id: "titles", label: "Member titles", icon: <BadgeCheck /> }];
 
 function Toggle({ on, onChange, disabled }: { on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return <button role="switch" aria-checked={on} disabled={disabled} className={`switch ${on ? "on" : ""}`} onClick={() => onChange(!on)}><i /></button>;
@@ -410,20 +413,21 @@ function ChangePassword() {
 }
 
 export function SettingsWindow({ user }: { user: SessionUser }) {
+  const tabs = user.role === "owner" ? [...TABS, ...OWNER_TABS] : TABS;
   const tabInHash = () => new URLSearchParams(location.hash.split("?")[1] ?? "").get("tab") as Tab | null;
-  const [tab, setTab] = useState<Tab>(() => tabInHash() || "general");
+  const [tab, setTab] = useState<Tab>(() => tabs.find((t) => t.id === tabInHash())?.id ?? "general");
   // Edit profile, invoice details and the like open this window on their tab.
   useEffect(() => {
-    const follow = () => { const next = tabInHash(); if (next && TABS.some((t) => t.id === next)) setTab(next); };
+    const follow = () => { const next = tabInHash(); if (next && tabs.some((t) => t.id === next)) setTab(next); };
     window.addEventListener("hashchange", follow);
     return () => window.removeEventListener("hashchange", follow);
   }, []);
-  const current = TABS.find((t) => t.id === tab)!;
+  const current = tabs.find((t) => t.id === tab)!;
   return (
     <div className="settings-window">
       <div className="set-head">
         <div className="set-title">{current.label}</div>
-        <div className="set-tabs">{TABS.map((t) => <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>{t.icon}<span>{t.label}</span></button>)}</div>
+        <div className="set-tabs">{tabs.map((t) => <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>{t.icon}<span>{t.label}</span></button>)}</div>
       </div>
       <div className="set-body scroll">
         {tab === "general" ? <General /> : null}
@@ -433,6 +437,7 @@ export function SettingsWindow({ user }: { user: SessionUser }) {
         {tab === "hub" ? <HubInvoices /> : null}
         {tab === "privacy" ? <Privacy /> : null}
         {tab === "account" ? <Account user={user} /> : null}
+        {tab === "titles" ? <MemberTitles /> : null}
       </div>
     </div>
   );
