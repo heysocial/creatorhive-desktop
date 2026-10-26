@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ChevronRight, Download, Hourglass, Plus, Wallet } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { DEAL_STATUSES, withTz, type DealStatus } from "../../lib/hub";
+import { DEAL_STATUSES, sourcePath, useHubSource, type DealStatus } from "../../lib/hub";
 import { money, plural } from "../../lib/format";
 import { Modal, Monogram, StagePill } from "./parts";
 import { openDeal } from "./Deals";
@@ -161,11 +161,14 @@ function topBrands(d: Dash) {
     .slice(0, 6);
 }
 
-export function Dashboard() {
-  const [range, setRange] = useState<Range>(() => (localStorage.getItem("ch.hub.range") as Range) || "30d");
+/** `fixedRange`: Admin → Hubs shows a student's last 30 days, as the website does. */
+export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
+  const src = useHubSource();
+  const [chosen, setRange] = useState<Range>(() => (localStorage.getItem("ch.hub.range") as Range) || "30d");
+  const range = fixedRange ?? chosen;
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["hub", "dashboard", range],
-    queryFn: async () => (await api<{ dashboard: Dash }>(withTz(`/api/hub/dashboard?range=${range}`))).dashboard,
+    queryKey: [...src.key, "dashboard", range],
+    queryFn: async () => (await api<{ dashboard: Dash }>(sourcePath(src, `/dashboard?range=${range}`))).dashboard,
   });
   const [drill, setDrill] = useState<Drill | null>(null);
   const pick = (r: Range) => { setRange(r); try { localStorage.setItem("ch.hub.range", r); } catch { /* fine */ } };

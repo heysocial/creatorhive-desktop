@@ -1,0 +1,184 @@
+/*
+  Admin → Hubs: the website's components/admin/hubs.module.css, rule for rule,
+  scoped under .ah (its classes prefixed ah-, so none meets the app's own
+  .card or .bar). The website's tokens (--text, --surface-1, --accent…) come
+  from .lb-web (views/people/leaderboard-web.css), which follows light and
+  dark. The website's breakpoints are on the window; here they're on the
+  page's own width, since the sidebar takes some of it.
+*/
+.ah-page { background: var(--card-2); }
+.ah-scroll { flex: 1; display: flex; flex-direction: column; gap: 16px; padding: 22px 26px 40px; }
+.ah { container: ah / inline-size; background: transparent; color: var(--text); font-family: var(--font-body); user-select: text; -webkit-font-smoothing: antialiased; }
+.ah-loading { padding: 40px 0; color: var(--ink-3); text-align: center; }
+.ah-missing { display: flex; flex-direction: column; gap: 6px; max-width: 560px; margin: 40px auto; padding: 18px 20px; border: 1px dashed var(--line-strong); border-radius: 14px; color: var(--ink-3); font-size: 13px; line-height: 1.45; }
+.ah-missing b { color: var(--ink); font-size: 14px; }
+.ah-missing code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+/* The ROI pop-up is portalled over the whole window, in its own .ah wrapper. */
+.ah.ah-portal { container: none; }
+.ah .ah-scrim { -webkit-app-region: no-drag; }
+/* Links on the website, buttons here. */
+.ah .ah-back, .ah .ah-openHub { border: 0; background: none; cursor: pointer; font: inherit; }
+.ah .ah-openHub { background: var(--text); font-size: 13px; font-weight: 700; }
+.ah .ah-back { padding: 0; font-size: 13px; font-weight: 600; }
+.ah .ah-bar .ui-chip[aria-pressed="true"] { border-color: var(--emphasis-fill); background: var(--emphasis-fill); color: var(--on-emphasis); }
+
+/* The student's own Hub views, read-only (inert), below the header. They lay out for a full window; here they flow with the page. */
+.ah-board { min-width: 0; }
+.ah-board .page { flex: none; min-height: 0; }
+.ah-board .dash-page .mhead { border-bottom: 0; padding: 0 2px 6px; height: auto; }
+.ah-board .dash-body { background: transparent; border: 1px solid var(--line); border-radius: 14px; overflow: visible; }
+.ah-board .dash-body > .dash-main, .ah-board .dash-body > .dash-side { overflow: visible; }
+.ah-board .ah-cash { display: flex; flex-direction: column; gap: 20px; }
+
+.ah .ah-hubs { display: flex; flex-direction: column; gap: 18px; color: var(--text); }
+.ah .ah-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.ah .ah-bar .ui-chip { text-decoration: none; }
+.ah .ah-muted { color: var(--text-muted); font-size: 13px; }
+.ah .ah-asof { margin-left: auto; color: var(--text-subtle); font-size: 12.5px; }
+.ah .ah-kpis { display: grid; grid-template-columns: 1.35fr repeat(5, minmax(0, 1fr)); gap: 12px; }
+.ah .ah-kpis article { display: flex; flex-direction: column; gap: 3px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-1); }
+.ah .ah-kpis span { color: var(--text-muted); font-size: 12.5px; font-weight: 600; }
+.ah .ah-kpis b { font-size: 28px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ah .ah-kpis b i { color: var(--text-muted); font-size: 18px; font-style: normal; font-weight: 600; }
+.ah .ah-kpis small { color: var(--text-muted); font-size: 12px; }
+.ah .ah-kpis small em { color: var(--color-danger); font-style: normal; font-weight: 700; }
+.ah .ah-kpis small em[data-up] { color: var(--color-success, #2f8a4c); }
+.ah .ah-kpis .ah-lead { background: color-mix(in oklab, var(--accent) 14%, var(--surface-1)); border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
+.ah .ah-kpis .ah-lead b { font-size: 32px; }
+.ah .ah-card { min-width: 0; padding: 16px 0 0; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-1); }
+.ah .ah-tableHead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; padding: 0 18px; }
+.ah .ah-tableHead h3 { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 15px; }
+.ah .ah-tableHead h3 span { color: var(--text-muted); font-size: 12.5px; font-weight: 500; }
+.ah .ah-search { display: flex; align-items: center; gap: 7px; width: 260px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text-muted); }
+.ah .ah-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 13.5px; }
+.ah .ah-search:focus-within { border-color: var(--text); }
+.ah .ah-tableScroll { overflow-x: auto; }
+.ah .ah-card table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ah .ah-card th { padding: 9px 10px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.ah .ah-card th:first-child, .ah .ah-card td:first-child { padding-left: 18px; }
+.ah .ah-card td { padding: 10px; border-bottom: 1px solid var(--border); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ah .ah-card tbody tr:hover td { background: color-mix(in oklab, var(--accent) 6%, transparent); }
+.ah .ah-card tfoot td { border-bottom: 0; background: var(--surface-2); color: var(--text); font-weight: 750; }
+.ah .ah-sortHead { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.ah .ah-sortHead svg { opacity: .6; }
+.ah .ah-sortHead[data-active] { color: var(--text); }
+.ah .ah-sortHead[data-active] svg { opacity: 1; }
+.ah .ah-r { text-align: right !important; }
+.ah .ah-money { font-weight: 750; }
+.ah .ah-zero { color: var(--text-subtle); font-weight: 400; }
+.ah .ah-sub { color: var(--text-muted); }
+.ah .ah-stale { color: var(--text-subtle); }
+.ah .ah-who { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
+.ah .ah-who:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; border-radius: 6px; }
+.ah .ah-who:hover b { text-decoration: underline; }
+.ah .ah-who b { font-size: 13.5px; }
+.ah .ah-avatars { display: flex; }
+.ah .ah-avatars > * + * { margin-left: -9px; box-shadow: 0 0 0 2px var(--surface-1); border-radius: 50%; }
+.ah .ah-shared { margin-left: 7px; padding: 1px 7px; border-radius: 99px; background: color-mix(in oklab, var(--accent) 18%, transparent); color: var(--accent-ink); font-size: 10.5px; font-style: normal; font-weight: 700; }
+.ah .ah-badges { display: flex; gap: 5px; }
+.ah .ah-whoText { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.ah .ah-whoText .ah-badges .member-badge { font-size: 10.5px; }
+.ah .ah-none { padding: 26px; color: var(--text-muted); text-align: center; }
+.ah .ah-more { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; padding: 11px 18px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12px; }
+.ah .ah-link { padding: 0; border: 0; background: none; color: var(--accent-ink); font: inherit; font-weight: 650; cursor: pointer; }
+.ah .ah-emptyList { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 16px; }
+.ah .ah-emptyList span { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 4px; border: 1px solid var(--border); border-radius: 99px; color: var(--text-muted); font-size: 12.5px; }
+.ah .ah-calc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); border: 1px solid var(--border); border-radius: 14px; background: var(--surface-1); overflow: hidden; }
+.ah .ah-calcIn { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border-right: 1px solid var(--border); }
+.ah .ah-calcIn h3 { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 15px; }
+.ah .ah-calcIn > .ui-segmented { align-self: flex-start; }
+.ah .ah-example { align-self: flex-start; padding: 2px 8px; border-radius: 6px; background: color-mix(in oklab, var(--accent) 22%, transparent); color: var(--accent-ink); font-size: 11px; font-weight: 700; }
+.ah .ah-calcFields { display: flex; flex-wrap: wrap; gap: 10px; }
+.ah .ah-calcFields label { display: flex; flex-direction: column; gap: 5px; color: var(--text-muted); font-size: 12px; font-weight: 650; }
+.ah .ah-calcMoney { display: flex; align-items: center; gap: 6px; width: 150px; padding: 8px 11px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface-2); }
+.ah .ah-calcMoney:focus-within { border-color: var(--text); }
+.ah .ah-calcMoney i { color: var(--text-muted); font-size: 14px; font-style: normal; font-weight: 600; }
+.ah .ah-calcMoney input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ah .ah-calcTotal { color: var(--text-muted); font-size: 12px; }
+.ah .ah-calcOut { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; }
+.ah .ah-calcAsk { color: var(--text-muted); font-size: 12.5px; font-weight: 650; }
+.ah .ah-calcResult { align-self: flex-start; min-width: 260px; display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; }
+.ah .ah-calcResult[data-lead] { background: color-mix(in oklab, var(--accent) 14%, var(--surface-1)); border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); }
+.ah .ah-calcResult span { color: var(--text-muted); font-size: 12px; font-weight: 650; }
+.ah .ah-calcResult b { font-size: 26px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ah .ah-calcResult small { color: var(--text-muted); font-size: 12px; }
+.ah .ah-calcMedian { margin: 0; color: var(--text-muted); font-size: 13px; }
+.ah .ah-calcMedian b { color: var(--text); font-variant-numeric: tabular-nums; }
+.ah .ah-calcNote { color: var(--text-subtle); font-size: 11.5px; line-height: 1.4; }
+.ah .ah-scrim { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 20px; background: color-mix(in oklab, #000 45%, transparent); }
+.ah .ah-popup { display: flex; flex-direction: column; gap: 12px; width: min(440px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 18px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface-1); color: var(--text); box-shadow: 0 24px 60px rgba(0, 0, 0, .28); }
+.ah .ah-popHead { display: flex; align-items: center; gap: 11px; }
+.ah .ah-popHead h3 { margin: 0; font-size: 16px; }
+.ah .ah-popHead small { color: var(--text-muted); font-size: 12px; }
+.ah .ah-popHead > div { flex: 1; min-width: 0; }
+.ah .ah-close { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: var(--surface-2); color: var(--text-muted); cursor: pointer; }
+.ah .ah-roiHero { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 14px; border-radius: 12px; background: var(--surface-2); }
+.ah .ah-roiHero[data-back] { background: color-mix(in oklab, var(--color-success, #2f8a4c) 14%, var(--surface-1)); }
+.ah .ah-roiHero span { display: block; color: var(--text-muted); font-size: 12px; font-weight: 650; }
+.ah .ah-roiHero b { display: block; font-size: 32px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.ah .ah-roiHero small { color: var(--text-muted); font-size: 12.5px; }
+.ah .ah-paidBack { padding: 4px 10px; border-radius: 99px; background: var(--color-success, #2f8a4c); color: var(--surface-1); font-size: 12.5px; font-style: normal; font-weight: 750; white-space: nowrap; }
+.ah .ah-notYet { padding: 4px 10px; border-radius: 99px; background: color-mix(in oklab, var(--accent) 22%, transparent); color: var(--accent-ink); font-size: 12.5px; font-style: normal; font-weight: 750; white-space: nowrap; }
+.ah .ah-popup .ah-track { height: 7px; overflow: hidden; border-radius: 99px; background: var(--surface-2); }
+.ah .ah-popup .ah-track i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
+.ah .ah-roiHero[data-back] + .ah-track i { background: var(--color-success, #2f8a4c); }
+.ah .ah-roiLine { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.ah .ah-roiLine span { color: var(--text-muted); }
+.ah .ah-roiLine b { font-variant-numeric: tabular-nums; }
+.ah .ah-roiNet { padding-top: 9px; border-top: 1px solid var(--border); }
+.ah .ah-roiNet span { color: var(--text); font-weight: 650; }
+.ah .ah-payList summary { color: var(--text-muted); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; }
+.ah .ah-payRow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.ah .ah-payRow:last-child { border-bottom: 0; }
+.ah .ah-payText { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ah .ah-payText b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ah .ah-payText small { color: var(--text-muted); font-size: 11.5px; }
+.ah .ah-src { flex: none; width: 66px; text-align: center; padding: 1px 0; border-radius: 6px; background: var(--surface-2); color: var(--text-muted); font-size: 10.5px; font-weight: 750; }
+.ah .ah-payEmails summary { color: var(--text-muted); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; }
+.ah .ah-payEmailsFor { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.ah .ah-payEmailsFor > b { font-size: 12.5px; }
+.ah .ah-payEmailsFor ul { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ah .ah-payEmailsFor li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 9px; border-radius: 8px; background: var(--surface-2); font-size: 12.5px; }
+.ah .ah-payEmailsFor li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ah .ah-payEmailsFor li em { color: var(--text-subtle); font-size: 11px; font-style: normal; }
+.ah .ah-payEmailsFor li button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--text-muted); cursor: pointer; }
+.ah .ah-payEmailsFor li button:hover { color: var(--color-danger); }
+.ah .ah-payEmailAdd { display: flex; gap: 6px; }
+.ah .ah-payEmailAdd input { flex: 1; min-width: 0; padding: 6px 9px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface-1); color: var(--text); font: inherit; font-size: 12.5px; }
+.ah .ah-payEmailAdd input:focus { outline: 2px solid var(--text); outline-offset: 0; }
+.ah .ah-payEmailAdd button { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border: 0; border-radius: 8px; background: var(--text); color: var(--surface-1); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.ah .ah-payEmailAdd button:disabled { opacity: .45; cursor: default; }
+.ah .ah-payEmailError { color: var(--color-danger); font-size: 12px; }
+.ah .ah-noPay { display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px dashed var(--border-strong); border-radius: 12px; }
+.ah .ah-noPay > span { color: var(--text-muted); font-size: 13px; }
+.ah .ah-noPay .ah-roiLine { margin-top: 6px; }
+.ah .ah-popFoot { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.ah .ah-popFoot > span { color: var(--text-subtle); font-size: 11px; line-height: 1.4; }
+.ah .ah-openHub { display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: 10px; background: var(--text); color: var(--surface-1); font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.ah .ah-view { display: flex; flex-direction: column; gap: 16px; }
+.ah .ah-back { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 13px; font-weight: 600; text-decoration: none; }
+.ah .ah-back:hover { color: var(--text); }
+.ah .ah-viewHead { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.ah .ah-viewHead h2 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+.ah .ah-readonly { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding: 6px 11px; border: 1px solid var(--border); border-radius: 99px; background: var(--surface-2); color: var(--text-muted); font-size: 12.5px; font-weight: 650; }
+.ah .ah-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.ah .ah-stats div { padding: 11px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); }
+.ah .ah-stats span { display: block; color: var(--text-muted); font-size: 12px; font-weight: 600; }
+.ah .ah-stats b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.ah .ah-viewTabs { display: flex; gap: 6px; }
+.ah .ah-viewTabs button { padding: 7px 14px; border: 1px solid var(--border); border-radius: 99px; background: var(--surface-1); color: var(--text-muted); font-size: 13.5px; font-weight: 650; text-decoration: none; }
+.ah .ah-viewTabs button[aria-current="page"] { border-color: var(--text); background: var(--text); color: var(--surface-1); }
+.ah .ah-viewTabs button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.ah .ah-board { min-width: 0; }
+@container ah (max-width: 940px) {
+.ah .ah-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ah .ah-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@container ah (max-width: 600px) {
+.ah .ah-calc { grid-template-columns: minmax(0, 1fr); }
+.ah .ah-calcIn { border-right: 0; border-bottom: 1px solid var(--border); }
+.ah .ah-kpis, .ah .ah-stats { grid-template-columns: minmax(0, 1fr); }
+.ah .ah-asof { margin-left: 0; }
+.ah .ah-search { width: 100%; }
+}
