@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Bell, CircleUser, Keyboard, Loader2, Paintbrush, Receipt, Settings as Cog, Shield } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type DesktopSettings, type SessionUser } from "../../lib/bridge";
-import { api, ApiError, queryClient } from "../../lib/api";
+import { api, ApiError, queryClient, useHeySocialAccess } from "../../lib/api";
 import { Avatar } from "../../lib/ui";
 import { useShortcuts } from "../../overlays/Sheets";
 import { InvoiceDetailsForm, useInvoiceProfile } from "../hub/InvoiceDetails";
+import { ThemePicker } from "../heysocial/ThemePicker";
 
 /* The Settings window (⌘,): what this Mac does, and your account on the server. */
 
@@ -107,7 +108,9 @@ function General() {
 
 function Appearance() {
   const { settings, update } = useDesktop();
+  const heySocial = useHeySocialAccess().data === true;
   return (
+    <>
     <Group>
       <Row title="Theme" sub="Light, dark, or match the Mac">
         <div className="seg">{(["system", "light", "dark"] as const).map((t) => <button key={t} className={(settings?.theme ?? "system") === t ? "on" : ""} onClick={() => void update({ theme: t })}>{t === "system" ? "Match Mac" : t[0].toUpperCase() + t.slice(1)}</button>)}</div>
@@ -116,6 +119,15 @@ function Appearance() {
         <div className="seg">{([0.9, 1, 1.1, 1.2] as const).map((z) => <button key={z} className={(settings?.zoom ?? 1) === z ? "on" : ""} onClick={() => void update({ zoom: z })}>{Math.round(z * 100)}%</button>)}</div>
       </Row>
     </Group>
+    {heySocial ? (
+      <Group title="Hey Social Inc. theme">
+        <div className="set-themes">
+          <p className="muted">Colours the sidebar, top bar and rail in Hey Social Inc. Light and dark follow the theme above. The same setting as on the website.</p>
+          <ThemePicker />
+        </div>
+      </Group>
+    ) : null}
+    </>
   );
 }
 

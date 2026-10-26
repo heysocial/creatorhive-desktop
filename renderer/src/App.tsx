@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ch, type SessionUser } from "./lib/bridge";
 import { queryClient, useHeySocialAccess } from "./lib/api";
 import { commands, type Command } from "./lib/commands";
@@ -20,6 +20,7 @@ import { ExportHost, openExport } from "./views/hub/Export";
 import { PromptHost } from "./views/hub/DealPanel";
 import { STATUS_LABELS, type DealStatus } from "./lib/hub";
 import { BrowseChannels, CreateChannel } from "./views/heysocial/Lists";
+import { DEFAULT_THEME, refreshHs, themeCss, useHsSidebar } from "./lib/heysocial";
 import { api } from "./lib/api";
 import { usePresence } from "./lib/realtime";
 
@@ -135,7 +136,7 @@ function Offline({ onSession }: { onSession: (user: SessionUser | null) => void 
 }
 
 function Workspace({ user, info }: { user: SessionUser; info: { version: string; preview: boolean; fullscreen: boolean } }) {
-  useNav();
+  const navState = useNav();
   useRealtimeRefresh(user.id);
   usePresence();
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -157,6 +158,12 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
     return () => { window.removeEventListener("ch:hs-create-channel", create); window.removeEventListener("ch:hs-browse", browse); };
   }, []);
   const heySocial = useHeySocialAccess().data === true;
+  // Your Hey Social Inc. theme colours the top bar, rail and sidebar while you're in it, as on the website.
+  const hsTheme = useHsSidebar(heySocial).data?.theme;
+  const themed = heySocial && navState.current.ws === "hs" && hsTheme && hsTheme !== DEFAULT_THEME ? hsTheme : undefined;
+  const themeStyle = useMemo(() => themeCss(themed), [themed]);
+  // Picked in the Settings window, which has its own cache.
+  useEffect(() => ch.app.onRelay((message) => { if (message.topic === "hey-social" && message.action === "settings") void refreshHs(); }), []);
 
   useEffect(() => ch.app.setHeySocialAccess(heySocial), [heySocial]);
   useEffect(() => ch.window.onFullscreen(setFullscreen), []);
@@ -243,7 +250,8 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
   const close = useCallback(() => setOverlay(null), []);
   return (
     <div className={`app ${sidebar.open ? "" : "no-sidebar"} ${sidebar.dragging ? "resizing" : ""} ${fullscreen ? "fullscreen" : ""}`}
-      style={{ "--sidebar-w": `${sidebar.open ? sidebar.width : 0}px` } as React.CSSProperties}>
+      data-hs-theme={themed} style={{ "--sidebar-w": `${sidebar.open ? sidebar.width : 0}px` } as React.CSSProperties}>
+      {themeStyle ? <style>{themeStyle}</style> : null}
       <TopBar preview={info.preview} updateReady={updateReady} sidebarOpen={sidebar.open} />
       <Rail user={user} />
       <Sidebar user={user} />
