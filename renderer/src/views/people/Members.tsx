@@ -6,7 +6,7 @@ import { nav } from "../../lib/nav";
 import { Avatar } from "../../lib/ui";
 import { Badge } from "../messages/MessageRow";
 import {
-  InviteDialog, ManageAccessDialog, ManageBadgeDialog, MemberBriefsDialog, PendingInvites,
+  FormerMembers, InviteDialog, ManageAccessDialog, ManageBadgeDialog, MemberBriefsDialog, PendingInvites,
   hasMemberActions, isStaff, memberActionsMenu, type AdminMember, type MemberDialog,
 } from "./MembersAdmin";
 
@@ -47,6 +47,7 @@ export function Members({ user }: { user: SessionUser }) {
       </div>
       <div className="scroll page-body">
         {staff ? <PendingInvites /> : null}
+        {user.role === "owner" ? <FormerMembers /> : null}
         {isLoading ? <div className="empty-state">Loading members…</div> : null}
         {isError ? <div className="empty-state">Couldn't load members.</div> : null}
         <div className="member-grid">

@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import { Check, Copy, Link2, Loader2, MailCheck, RefreshCw, Trash2 } from "lucide-react";
+import { Check, Copy, Link2, Loader2, MailCheck, RefreshCw, RotateCcw, Trash2, UserX } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
@@ -7,6 +7,7 @@ import type { Member, MemberBadge } from "../../lib/community";
 import { STATUS_LABELS, type DealStatus } from "../../lib/hub";
 import { openLink } from "../../lib/html";
 import { openSettings } from "../../lib/links";
+import { Avatar } from "../../lib/ui";
 import { Modal } from "../hub/parts";
 import "../../styles/admin-members.css";
 
@@ -15,8 +16,12 @@ import "../../styles/admin-members.css";
   the card's ⋯ menu and its dialogs), with the same rules:
   - Invite member and Pending invites (resend, copy link, revoke): owner and
     team; only the owner may invite to the team (/api/invites*).
+  - Invite several at once (/api/invites/bulk), under the same rules.
   - Manage badge and Manage access: the owner (/api/members/[id]/badge|access),
     access for students only.
+  - Make team member / Make student, and Remove member: the owner, on anyone
+    but the owner and themselves (/api/members/[id]/role|status). Former
+    members, with Reactivate: the owner (/api/members/former).
   - View briefs: owner and team, on anyone but themselves.
   Every route checks again for itself.
 */
@@ -181,8 +186,48 @@ const INVITE_ERRORS: Record<string, string> = {
   starter_requires_student: "UGC Starter is for students only.",
 };
 
+/** One line of a bulk invite's outcome — see `POST /api/invites/bulk`. */
+type BulkInviteResult =
+  | { email: string; status: "invited" | "invite_pending"; invite: Omit<InviteResult, "link">; link: string }
+  | { email: string; status: "already_member"; deactivated: boolean }
+  | { email: string; status: "invalid" | "failed" };
+
+const BULK_INVITE_MAX = 50;
+
+const BULK_ERRORS: Record<string, string> = {
+  no_emails: "Paste at least one email address.",
+  too_many: `Up to ${BULK_INVITE_MAX} emails at a time.`,
+  role_forbidden: "Only an owner can invite another team member.",
+  invalid_access_level: "Choose UGC Academy or UGC Starter.",
+  starter_requires_student: "UGC Starter is for students only.",
+};
+
+/** The pasted list as the server will read it: split, lower-cased, de-duplicated. */
+function countEmails(value: string) {
+  return new Set(value.split(/[\s,;]+/).map((item) => item.trim().toLowerCase()).filter(Boolean)).size;
+}
+
+function bulkResultLabel(result: BulkInviteResult): { label: string; tone: Delivery } {
+  switch (result.status) {
+    case "invited":
+      return result.invite.deliveryStatus === "sent"
+        ? { label: "Invited · email sent", tone: "sent" }
+        : { label: "Invited · email failed", tone: "failed" };
+    case "invite_pending": return { label: "Already has an invite", tone: "pending" };
+    case "already_member": return result.deactivated
+      ? { label: "Former member · reactivate instead", tone: "not_sent" }
+      : { label: "Already a member", tone: "not_sent" };
+    case "invalid": return { label: "Not a valid email", tone: "failed" };
+    default: return { label: "Failed", tone: "failed" };
+  }
+}
+
 export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClose: () => void }) {
   const [email, setEmail] = useState("");
+  // One person, or several pasted at once with one role and plan.
+  const [mode, setMode] = useState<"one" | "many">("one");
+  const [emails, setEmails] = useState("");
+  const [bulkResults, setBulkResults] = useState<BulkInviteResult[] | null>(null);
   const [inviteRole, setInviteRole] = useState<"student" | "team">("student");
   // The plan: the full UGC Academy, or UGC Starter for six months from when they join.
   const [inviteAccess, setInviteAccess] = useState<"academy" | "starter">("academy");
@@ -191,11 +236,32 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
   const [created, setCreated] = useState<InviteResult | null>(null);
   const [copied, setCopied] = useState(false);
 
+  async function submitBulk() {
+    try {
+      const data = await api<{ results: BulkInviteResult[] }>("/api/invites/bulk", {
+        method: "POST",
+        body: { emails, role: inviteRole, accessLevel: inviteRole === "student" ? inviteAccess : "academy" },
+      });
+      setBulkResults(data.results);
+      void queryClient.invalidateQueries({ queryKey: INVITES_KEY });
+    } catch (error) {
+      const data = error instanceof ApiError ? error.data : null;
+      setFormError(error instanceof ApiError && error.status > 0 && data
+        ? BULK_ERRORS[String(data.error)] ?? "Could not create these invites. Try again."
+        : "Could not create these invites. Check your connection and try again.");
+    }
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (submitting) return;
     setSubmitting(true);
     setFormError(null);
+    if (mode === "many") {
+      await submitBulk();
+      setSubmitting(false);
+      return;
+    }
     try {
       const data = await api<{ invite: Omit<InviteResult, "link">; link: string }>("/api/invites/create", {
         method: "POST",
@@ -230,7 +296,9 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
     }
   }
 
-  const description = created
+  const description = bulkResults
+    ? `${bulkResults.filter((result) => result.status === "invited").length} of ${bulkResults.length} invited. Each has seven days to create their account.`
+    : created
     ? created.deliveryStatus === "sent"
       ? "The invitation email was sent. Keep the private link as a fallback."
       : created.deliveryStatus === "pending"
@@ -240,14 +308,26 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
 
   return (
     <Modal
-      title={created ? "Invite ready" : "Invite a member"}
+      title={bulkResults ? "Invites" : created ? "Invite ready" : mode === "many" ? "Invite members" : "Invite a member"}
       onClose={() => !submitting && onClose()}
       width={440}
-      foot={created ? <button className="btn honey mad-wide" onClick={() => void copy()}>{copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy invite link"}</button> : undefined}
+      foot={bulkResults ? <button className="btn honey mad-wide" onClick={onClose}>Done</button> : created ? <button className="btn honey mad-wide" onClick={() => void copy()}>{copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy invite link"}</button> : undefined}
     >
       <div className="mad-dialog">
         <p className="mad-desc">{description}</p>
-        {created ? (
+        {bulkResults ? (
+          <ul className="mad-bulk-results" aria-label="Invite results">
+            {bulkResults.map((result) => {
+              const { label, tone } = bulkResultLabel(result);
+              return (
+                <li key={result.email}>
+                  <span className="selectable">{result.email}</span>
+                  <span className="mad-delivery" data-status={tone}>{label}</span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : created ? (
           <>
             <div className="mad-created">
               <span className="selectable">{created.email}</span>
@@ -265,11 +345,27 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
           </>
         ) : (
           <form className="mad-form" onSubmit={submit}>
-            <label className="mad-field">
-              <span>Email</span>
-              <input className="field" type="email" required maxLength={254} autoComplete="email" autoFocus placeholder="member@example.com"
-                value={email} onChange={(event) => setEmail(event.target.value)} disabled={submitting} />
-            </label>
+            <div className="seg mad-seg" role="group" aria-label="How many people">
+              <button type="button" className={mode === "one" ? "on" : ""} aria-pressed={mode === "one"} disabled={submitting} onClick={() => { setMode("one"); setFormError(null); }}>One person</button>
+              <button type="button" className={mode === "many" ? "on" : ""} aria-pressed={mode === "many"} disabled={submitting} onClick={() => { setMode("many"); setFormError(null); }}>Several</button>
+            </div>
+            {mode === "one" ? (
+              <label className="mad-field">
+                <span>Email</span>
+                <input className="field" type="email" required maxLength={254} autoComplete="email" autoFocus placeholder="member@example.com"
+                  value={email} onChange={(event) => setEmail(event.target.value)} disabled={submitting} />
+              </label>
+            ) : (
+              <label className="mad-field">
+                <span>Emails</span>
+                <textarea className="field area mad-bulk-input" required rows={5} autoFocus placeholder={"ava@example.com\nben@example.com, cara@example.com"}
+                  value={emails} onChange={(event) => setEmails(event.target.value)} disabled={submitting} />
+                <small>
+                  One per line, or separated by commas or spaces. Up to {BULK_INVITE_MAX}.
+                  {emails.trim() ? ` ${countEmails(emails)} ${countEmails(emails) === 1 ? "email" : "emails"}.` : ""}
+                </small>
+              </label>
+            )}
             <fieldset>
               <legend>Role</legend>
               <div className="mad-options">
@@ -301,7 +397,10 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
               </fieldset>
             ) : null}
             {formError ? <div className="mad-error" role="alert">{formError}</div> : null}
-            <button type="submit" className="btn honey mad-wide" disabled={submitting}>{submitting ? <Loader2 className="spin" /> : null}Create invite</button>
+            <button type="submit" className="btn honey mad-wide" disabled={submitting}>
+              {submitting ? <Loader2 className="spin" /> : null}
+              {mode === "many" ? (countEmails(emails) > 1 ? `Create ${countEmails(emails)} invites` : "Create invites") : "Create invite"}
+            </button>
           </form>
         )}
       </div>
@@ -312,6 +411,10 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
 /* ---------- The card's ⋯ menu ---------- */
 
 export type MemberDialog = { kind: "badge" | "access" | "briefs"; member: AdminMember } | null;
+
+/** Owner only, and never the owner or yourself: role and Remove member. */
+const manageable = (member: AdminMember, viewer: { id: string; role?: string }) =>
+  viewer.role === "owner" && member.id !== viewer.id && (member.role === "student" || member.role === "team");
 
 /** Whether this card gets a ⋯ at all, as on the website. */
 export function hasMemberActions(member: AdminMember, viewer: { id: string; role?: string }) {
@@ -326,12 +429,116 @@ export async function memberActionsMenu(member: AdminMember, viewer: { id: strin
     ...(owner ? [{ id: "badge", label: "Manage badge" }] : []),
     ...(owner && member.accessAdmin && member.role === "student" ? [{ id: "access", label: "Manage access" }] : []),
     ...(self ? [{ id: "edit", label: "Edit profile" }] : []),
+    ...(manageable(member, viewer) ? [{ id: "role", label: member.role === "team" ? "Make student" : "Make team member" }] : []),
     ...(isStaff(viewer.role) && !self ? [{ id: "briefs", label: "View briefs" }] : []),
+    ...(manageable(member, viewer) ? [{ type: "separator" as const }, { id: "remove", label: "Remove member…" }] : []),
   ];
   if (!items.length) return;
   const choice = await ch.menu.popup(items);
   if (choice === "edit") openSettings("account");
   else if (choice === "badge" || choice === "access" || choice === "briefs") open({ kind: choice, member });
+  else if (choice === "role") await changeRole(member);
+  else if (choice === "remove") await removeMember(member);
+}
+
+/**
+ * Make team member / Make student. Owner only. A new team member gets the
+ * full UGC Academy; someone made a student again is signed out everywhere.
+ */
+async function changeRole(member: AdminMember) {
+  const toTeam = member.role === "student";
+  const ok = window.confirm(toTeam
+    ? `Make ${member.name} a team member?\n\nThey get team access: course admin, removing anyone’s posts and messages, inviting students, and Hey Social Inc. Their plan becomes the full UGC Academy.`
+    : `Make ${member.name} a student?\n\nThey lose team access and are signed out everywhere. They sign back in as a student, on the full UGC Academy.`);
+  if (!ok) return;
+  try {
+    await api(`/api/members/${member.id}/role`, { method: "PATCH", body: { role: toTeam ? "team" : "student" } });
+    await queryClient.invalidateQueries({ queryKey: ["members"] });
+    void queryClient.invalidateQueries({ queryKey: ["profile", member.id] });
+  } catch {
+    window.alert(`Could not change ${member.name}’s role. Try again.`);
+  }
+}
+
+/**
+ * Remove member: they can no longer sign in, and what they wrote stays,
+ * shown to everyone as Former member. Undone from Former members.
+ */
+async function removeMember(member: AdminMember) {
+  if (!window.confirm(`Remove ${member.name}?\n\nThey won’t be able to sign in. Their posts and messages stay, shown as Former member. You can reactivate them later.`)) return;
+  try {
+    await api(`/api/members/${member.id}/status`, { method: "PATCH", body: { status: "deactivated" } });
+    queryClient.setQueryData<AdminMember[]>(["members"], (current) => current?.filter((m) => m.id !== member.id));
+    void queryClient.invalidateQueries({ queryKey: ["members"] });
+    void queryClient.invalidateQueries({ queryKey: FORMER_KEY });
+    void queryClient.invalidateQueries({ queryKey: ["profile", member.id] });
+  } catch {
+    window.alert(`Could not remove ${member.name}. Try again.`);
+  }
+}
+
+/* ---------- Former members ---------- */
+
+interface FormerMember { id: string; name: string; email: string; role: string; avatarUrl: string | null; deactivatedAt: string | null }
+
+const FORMER_KEY = ["members", "former"] as const;
+
+/**
+ * The website's Former members card, under Pending invites. Owner only: the
+ * one place a removed member's real name shows. Hidden while there are none.
+ */
+export function FormerMembers() {
+  const former = useQuery({ queryKey: FORMER_KEY, queryFn: async () => (await api<{ members: FormerMember[] }>("/api/members/former")).members });
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const list = former.data ?? [];
+
+  async function reactivate(member: FormerMember) {
+    if (!window.confirm(`Reactivate ${member.name}?\n\nThey can sign in again, and their name and photo come back everywhere.`)) return;
+    setBusyId(member.id);
+    setError(null);
+    try {
+      await api(`/api/members/${member.id}/status`, { method: "PATCH", body: { status: "active" } });
+      queryClient.setQueryData<FormerMember[]>(FORMER_KEY, (current) => current?.filter((m) => m.id !== member.id));
+      void queryClient.invalidateQueries({ queryKey: ["members"] });
+      void queryClient.invalidateQueries({ queryKey: ["profile", member.id] });
+    } catch {
+      setError(`Could not reactivate ${member.name}. Try again.`);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (list.length === 0 && !error) return null;
+  return (
+    <section className="mad-pending card" aria-label="Former members">
+      <div className="mad-pending-head">
+        <div>
+          <h2>Former members</h2>
+          <p>They can’t sign in. Everyone else sees their posts and messages as Former member.</p>
+        </div>
+        <span className="mad-count">{list.length}</span>
+      </div>
+      {error ? <div className="mad-error" role="alert">{error}</div> : null}
+      {list.length === 0 ? <div className="mad-line"><UserX /><span>No former members</span></div> : null}
+      {list.map((member) => (
+        <div className="mad-invite" key={member.id}>
+          <div className="mad-former">
+            <Avatar name={member.name} src={member.avatarUrl} seed={member.id} size={32} />
+            <div className="mad-who">
+              <b className="selectable">{member.name}</b>
+              <span>{member.email} · {member.role === "team" ? "Team" : "Student"} · {member.deactivatedAt ? `Removed ${fmtDay(member.deactivatedAt)}` : "Removed"}</span>
+            </div>
+          </div>
+          <div className="mad-acts">
+            <button className="btn" disabled={Boolean(busyId)} onClick={() => void reactivate(member)}>
+              {busyId === member.id ? <Loader2 className="spin" /> : <RotateCcw />}Reactivate
+            </button>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
 }
 
 /** Put a saved member back into the directory, and drop their cached profile. */

@@ -1,7 +1,7 @@
 import { CalendarDays, Camera, MapPin, MessageCircle, Pencil, Share } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
-import { api, keys, queryClient, type Conversation } from "../../lib/api";
+import { api, ApiError, keys, queryClient, type Conversation } from "../../lib/api";
 import { useMembers } from "../../lib/community";
 import { money } from "../../lib/format";
 import { openSettings } from "../../lib/links";
@@ -45,6 +45,23 @@ export function ProfilePage({ id, user }: { id: string; user: SessionUser }) {
   const points = usePoints().data;
   const p = profile.data;
 
+  // A removed member: the route answers `former_member`, and the profile is just that name.
+  if (profile.error instanceof ApiError && profile.error.data?.error === "former_member") {
+    return (
+      <div className="page profile">
+        <div className="scroll page-body flush">
+          <div className="cover" />
+          <div className="profile-cols">
+            <div className="profile-main">
+              <Avatar name="Former member" src={null} seed={id} size={128} />
+              <h1>Former member</h1>
+              <p className="headline">No longer a member</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (profile.isError) return <div className="page"><div className="empty-state">This profile isn't available.</div></div>;
 
   return (
