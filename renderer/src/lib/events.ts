@@ -27,7 +27,7 @@ export interface CommunityEvent {
   tier?: string | null;
 }
 
-interface ApiEvent { id: string; title: string; description: string | null; locationUrl: string | null; startsAt: string; endsAt: string; rsvpd: boolean; rsvpCount: number }
+interface ApiEvent { id: string; title: string; description: string | null; locationUrl: string | null; startsAt: string; endsAt: string; rsvpd: boolean; rsvpCount: number; host?: string | null }
 interface CalendarEvent { id: string; title: string; description: string | null; startsAt: string; endsAt: string; joinUrl: string | null; recordingUrl: string | null; summary: string | null; organizer: string; tier: string }
 
 /** `live`: also refresh every minute (coaching calls every five), for a screen that stays open, such as Home's This week. */
@@ -47,7 +47,7 @@ export function useEvents({ live = false }: { live?: boolean } = {}) {
   const all = useMemo<CommunityEvent[]>(() => [
     ...(community.data ?? []).map((e) => ({
       id: e.id, source: "community" as const, title: e.title, description: e.description, startsAt: e.startsAt, endsAt: e.endsAt,
-      joinUrl: normalizeMeetingUrl(e.locationUrl), locationUrl: e.locationUrl, rsvpd: e.rsvpd, rsvpCount: e.rsvpCount,
+      joinUrl: normalizeMeetingUrl(e.locationUrl), locationUrl: e.locationUrl, rsvpd: e.rsvpd, rsvpCount: e.rsvpCount, organizer: e.host ?? null,
     })),
     ...(calendar.data ?? []).map((e) => ({
       id: `cal:${e.id}`, source: "calendar" as const, title: e.title, description: e.description, startsAt: e.startsAt, endsAt: e.endsAt,
