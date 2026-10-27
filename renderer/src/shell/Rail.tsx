@@ -8,6 +8,7 @@ import { Avatar, countLabel } from "../lib/ui";
 import { useActivityRows } from "../views/activity/Activity";
 import { useHsSidebar } from "../lib/heysocial";
 import { adminPages, useAdminAccess, useOpenReports } from "../lib/admin";
+import { useSupportUnread } from "../lib/support";
 
 const SECTION_META: Record<Section, { label: string; icon: LucideIcon; shortcut: string }> = {
   home: { label: "Home", icon: House, shortcut: "⌘1" },
@@ -42,6 +43,7 @@ export function Rail({ user }: { user: SessionUser }) {
   const admin = useAdminAccess().data;
   const canAdmin = adminPages(admin).length > 0;
   const openReports = useOpenReports(Boolean(admin?.tabs.includes("moderation"))).data ?? 0;
+  const supportUnread = useSupportUnread(Boolean(admin?.tabs.includes("support"))).data ?? 0;
 
   async function meMenu() {
     const choice = await ch.menu.popup([
@@ -73,7 +75,7 @@ export function Rail({ user }: { user: SessionUser }) {
       {SECTIONS[current.ws].filter((section) => section !== "admin" || canAdmin).map((section) => {
         const meta = SECTION_META[section];
         const Icon = meta.icon;
-        const count = section === "dms" ? here.dms : section === "activity" ? (current.ws === "ch" ? activity : hsCounts?.activity ?? 0) : section === "admin" ? openReports : 0;
+        const count = section === "dms" ? here.dms : section === "activity" ? (current.ws === "ch" ? activity : hsCounts?.activity ?? 0) : section === "admin" ? openReports + supportUnread : 0;
         return (
           <button key={section} className={`ritem ${current.section === section ? "on" : ""}`}
             title={meta.shortcut ? `${meta.label} (${meta.shortcut})` : meta.label} onClick={() => nav.section(section)}>

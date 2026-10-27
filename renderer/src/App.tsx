@@ -24,6 +24,7 @@ import { BrowseChannels, CreateChannel } from "./views/heysocial/Lists";
 import { DEFAULT_THEME, refreshHs, themeCss, useHsSidebar } from "./lib/heysocial";
 import { api } from "./lib/api";
 import { usePresence } from "./lib/realtime";
+import { SupportWidget } from "./shell/Support";
 
 type Auth = { state: "loading" } | { state: "offline" } | { state: "signedOut" } | { state: "signedIn"; user: SessionUser };
 type Overlay = null | "quick-open" | "shortcuts" | "new-message";
@@ -178,6 +179,8 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
   useEffect(() => ch.app.onNavigate((path) => openPath(path)), []);
   // From a pop-out: "dm:<id>", "channel:<id>", "profile:<id>".
   useEffect(() => ch.app.onNavigateView((target) => {
+    // Settings → Help → Open chat.
+    if (target === "support") return void window.dispatchEvent(new Event("ch:support-open"));
     const [kind, id] = target.split(":");
     if (!id) return;
     if (kind === "profile") nav.open({ kind: "profile", id });
@@ -267,6 +270,7 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       {overlay === "quick-open" ? <QuickSwitcher onClose={close} /> : null}
       {overlay === "shortcuts" ? <ShortcutsSheet onClose={close} /> : null}
       {overlay === "new-message" ? <NewMessage onClose={close} workspace={nav.get().ws === "hs" ? "heysocial" : "creatorhive"} /> : null}
+      <SupportWidget />
       {toast ? <div className="toast" role="status">{toast}</div> : null}
       {updateReady && !updateLater ? <UpdateBanner version={updateReady} onLater={() => setUpdateLater(true)} /> : null}
       {locked ? <LockScreen /> : null}

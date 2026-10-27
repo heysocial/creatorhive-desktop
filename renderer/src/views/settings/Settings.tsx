@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BadgeCheck, Bell, CircleUser, Keyboard, Loader2, Paintbrush, Receipt, Settings as Cog, Shield } from "lucide-react";
+import { BadgeCheck, Bell, CircleHelp, CircleUser, Keyboard, Loader2, Paintbrush, Receipt, Settings as Cog, Shield } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type DesktopSettings, type SessionUser } from "../../lib/bridge";
 import { api, ApiError, queryClient, useHeySocialAccess } from "../../lib/api";
@@ -8,10 +8,11 @@ import { useShortcuts } from "../../overlays/Sheets";
 import { InvoiceDetailsForm, useInvoiceProfile } from "../hub/InvoiceDetails";
 import { ThemePicker } from "../heysocial/ThemePicker";
 import { MemberTitles } from "./MemberTitles";
+import { setHelpButtonHidden, useSupport } from "../../lib/support";
 
 /* The Settings window (⌘,): what this Mac does, and your account on the server. */
 
-type Tab = "general" | "notifications" | "appearance" | "shortcuts" | "hub" | "privacy" | "account" | "titles";
+type Tab = "general" | "notifications" | "appearance" | "shortcuts" | "hub" | "privacy" | "account" | "help" | "titles";
 const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   { id: "general", label: "General", icon: <Cog /> },
   { id: "notifications", label: "Notifications", icon: <Bell /> },
@@ -20,6 +21,7 @@ const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
   { id: "hub", label: "Hub & invoices", icon: <Receipt /> },
   { id: "privacy", label: "Privacy", icon: <Shield /> },
   { id: "account", label: "Account", icon: <CircleUser /> },
+  { id: "help", label: "Help", icon: <CircleHelp /> },
 ];
 // The owner's alone, as on the website's Settings page.
 const OWNER_TABS: typeof TABS = [{ id: "titles", label: "Member titles", icon: <BadgeCheck /> }];
@@ -177,6 +179,22 @@ function Privacy() {
         )) : <div className="set-row muted">{blocks.isLoading ? "Loading…" : "You haven't blocked anyone."}</div>}
       </Group>
     </>
+  );
+}
+
+/* Live chat with support: the "?" bottom right, hidden from its × or the chat, and shown again here (on every device). */
+function Help() {
+  const support = useSupport();
+  const shown = support.data ? !support.data.helpButtonHidden : true;
+  return (
+    <Group title="Help">
+      <Row title="Show the help button" sub="The ? bottom right opens a live chat with CreatorHive Support">
+        <Toggle on={shown} disabled={!support.data} onChange={(v) => void setHelpButtonHidden(!v)} />
+      </Row>
+      <Row title="Live chat with support" sub="Ask us anything, or send a screenshot of what's wrong">
+        <button className="btn" onClick={() => ch.app.openMain("support")}>Open chat</button>
+      </Row>
+    </Group>
   );
 }
 
@@ -452,6 +470,7 @@ export function SettingsWindow({ user }: { user: SessionUser }) {
         {tab === "hub" ? <HubInvoices /> : null}
         {tab === "privacy" ? <Privacy /> : null}
         {tab === "account" ? <Account user={user} /> : null}
+        {tab === "help" ? <Help /> : null}
         {tab === "titles" ? <MemberTitles /> : null}
       </div>
     </div>

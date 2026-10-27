@@ -1,0 +1,106 @@
+/*
+  Live chat with support (shell/Support.tsx): the approved mockup
+  (claude.ai/artifact/FXYfgJUzsA4nW1LYfdtZzG) on the app's own tokens. The "?"
+  is dark with a yellow mark in both appearances, as the mockup draws it.
+*/
+.sp-fabw { position: fixed; right: 18px; bottom: 18px; z-index: 45; }
+/* Above a message box, so it never sits on the Send button. */
+.app:has(.main .composer) .sp-fabw:not(.open) { bottom: 112px; }
+.sp-fab { position: relative; width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; background: #1B1B1E; color: var(--honey);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.09), 0 6px 18px rgba(0,0,0,.22); font-size: 18px; font-weight: 800; opacity: .85; transition: opacity .15s, transform .15s; }
+.sp-fab:hover, .sp-fabw.open .sp-fab { opacity: 1; transform: scale(1.06); }
+.sp-lbl { position: absolute; right: 52px; top: 50%; transform: translateY(-50%); white-space: nowrap; background: var(--overlay); backdrop-filter: blur(20px); color: var(--ink);
+  font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 8px; box-shadow: 0 0 0 .5px var(--line-strong), 0 4px 12px rgba(0,0,0,.12); opacity: 0; pointer-events: none; transition: opacity .15s; }
+.sp-fabw:hover .sp-lbl { opacity: 1; }
+.sp-hidex { position: absolute; top: -8px; left: -8px; z-index: 1; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: #3A3A3E; color: #F5F5F7; opacity: 0; transition: opacity .15s; }
+.sp-fabw:hover .sp-hidex, .sp-hidex:focus-visible { opacity: 1; }
+.sp-unread { position: absolute; top: -3px; right: -3px; width: 14px; height: 14px; border-radius: 50%; background: var(--red); box-shadow: 0 0 0 2px var(--card-2); }
+
+.sp-chat { position: fixed; right: 18px; bottom: 72px; z-index: 46; width: 380px; height: 560px; max-height: calc(100vh - 110px); display: flex; flex-direction: column; overflow: hidden;
+  background: var(--card); border-radius: 20px; box-shadow: 0 0 0 1px var(--line), 0 30px 80px rgba(0,0,0,.35); animation: sp-pop .2s ease; }
+.sp-chat.drop { box-shadow: 0 0 0 2px var(--honey), 0 30px 80px rgba(0,0,0,.35); }
+@keyframes sp-pop { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+.sp-head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; border-bottom: 1px solid var(--line); }
+.sp-head b { display: block; font-size: 15px; }
+.sp-head small { display: flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: 12px; }
+/* The app's logo tile: the yellow mark on dark, round. */
+.sp-logo { flex: none; width: 38px; height: 38px; border-radius: 50%; background: #1B1B1E; display: grid; place-items: center; box-shadow: 0 0 0 1px var(--line); }
+.sp-logo img { width: 30px; height: 30px; }
+.sp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
+.sp-dot.away { background: #8E8E93; }
+.sp-x { margin-left: auto; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: var(--ink-3); }
+.sp-x:hover { background: var(--sel); color: var(--ink); }
+.sp-msgs { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; user-select: text; }
+.sp-row { display: flex; flex-direction: column; gap: 6px; max-width: 82%; }
+.sp-row.me { align-self: flex-end; align-items: flex-end; }
+.sp-msg { padding: 10px 13px; border-radius: 16px; font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sp-msg.them { background: var(--card-3); border-top-left-radius: 6px; }
+.sp-msg.me { background: var(--honey); color: var(--on-honey); border-top-right-radius: 6px; }
+.sp-pic { display: block; max-width: 220px; border-radius: 14px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+.sp-pic img { display: block; max-width: 220px; max-height: 260px; object-fit: cover; }
+.sp-meta { font-size: 11px; color: var(--ink-4); }
+.sp-meta.r { text-align: right; }
+.sp-failed { color: var(--red); }
+.sp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sp-chip { border: 1px solid color-mix(in oklab, var(--honey) 55%, transparent); color: var(--honey-ink); font-size: 13px; padding: 7px 12px; border-radius: 99px; }
+.sp-chip:hover:not(:disabled) { background: var(--honey-soft); }
+.sp-error { margin: 0 12px 6px; color: var(--red); font-size: 12.5px; }
+.sp-staged { display: flex; gap: 8px; padding: 8px 12px 0; flex-wrap: wrap; }
+.sp-thumb { position: relative; width: 52px; height: 52px; border-radius: 10px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+.sp-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.sp-thumb button { position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,.6); color: #fff; }
+.sp-comp { display: flex; align-items: flex-end; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
+.sp-comp textarea { flex: 1; min-height: 42px; max-height: 120px; resize: none; border: 0; outline: none; border-radius: 12px; background: var(--card-2); box-shadow: inset 0 0 0 1px var(--line-strong);
+  padding: 11px 14px; font: inherit; font-size: 14.5px; line-height: 1.35; field-sizing: content; }
+.sp-comp textarea:focus { box-shadow: inset 0 0 0 1px var(--ink-4); }
+.sp-attach { width: 36px; height: 42px; display: grid; place-items: center; border-radius: 10px; color: var(--ink-3); }
+.sp-attach:hover { background: var(--sel); color: var(--ink); }
+.sp-send { width: 44px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: var(--honey); color: var(--on-honey); }
+.sp-send:disabled { opacity: .45; }
+.sp-hide { border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12px; padding: 10px; }
+.sp-hide:hover { color: var(--ink); }
+.sp-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 47; display: flex; gap: 12px; align-items: center; padding: 11px 14px; border-radius: 12px;
+  background: var(--overlay); backdrop-filter: blur(30px); box-shadow: 0 10px 30px rgba(0,0,0,.25), 0 0 0 .5px rgba(0,0,0,.25); font-size: 13px; color: var(--ink-2); }
+.sp-toast button { color: var(--honey-ink); font-weight: 700; }
+
+/* ---------- Admin → Support ---------- */
+.su { flex: 1; min-height: 0; display: grid; grid-template-columns: 320px minmax(0, 1fr) 260px; }
+.su-list { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.su-lh { padding: 18px 16px 10px; display: flex; flex-direction: column; gap: 12px; }
+.su-lh h2 { margin: 0; font-size: 20px; display: flex; align-items: center; justify-content: space-between; }
+.su-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.su-filters button { border: 1px solid var(--line-strong); color: var(--ink-3); font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 99px; }
+.su-filters button.on { background: var(--honey); border-color: var(--honey); color: var(--on-honey); }
+.su-rows { flex: 1; overflow: auto; }
+.su-row { width: 100%; display: flex; gap: 12px; padding: 13px 16px; border-top: 1px solid var(--line); text-align: left; }
+.su-row:hover { background: var(--card-2); }
+.su-row.on { background: var(--sel); }
+.su-row .t { flex: 1; min-width: 0; }
+.su-row .top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.su-row b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.su-row b.unread::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); margin-right: 6px; vertical-align: 2px; }
+.su-row p { margin: 3px 0 0; font-size: 13px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.su-pill { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 99px; white-space: nowrap; flex: none; }
+.su-pill.open { background: rgba(255,69,58,.15); color: #E0443A; }
+.su-pill.waiting { background: var(--honey-soft); color: var(--honey-ink); }
+.su-pill.closed { background: rgba(52,199,89,.15); color: #248A3D; }
+.su-conv { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.su-cvh { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.su-cvh small { display: block; font-size: 12px; color: var(--ink-3); }
+.su-acts { margin-left: auto; display: flex; gap: 8px; }
+.su-msgs { flex: 1; overflow: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; user-select: text; }
+.su-msgs .sp-row.support { align-self: flex-end; align-items: flex-end; }
+.su-auto { align-self: flex-start; max-width: 82%; padding: 10px 13px; border-radius: 14px; border: 1px dashed var(--line-strong); color: var(--ink-3); font-size: 13px; }
+.su-info { border-left: 1px solid var(--line); padding: 18px; font-size: 13px; color: var(--ink-3); display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.su-info b { color: var(--ink); }
+.su-info .past { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.su-info .past button { text-align: left; color: var(--ink-2); font-size: 12.5px; }
+.su-info .past button:hover { text-decoration: underline; }
+.su-empty { flex: 1; display: grid; place-items: center; color: var(--ink-3); font-size: 13.5px; padding: 30px; text-align: center; }
+.su-settings { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-top: 1px solid var(--line); font-size: 13px; }
+.su-settings .days { display: flex; gap: 4px; flex-wrap: wrap; }
+.su-settings .days button { width: 34px; height: 28px; border-radius: 8px; border: 1px solid var(--line-strong); font-size: 12px; color: var(--ink-3); }
+.su-settings .days button.on { background: var(--honey); border-color: var(--honey); color: var(--on-honey); font-weight: 700; }
+.su-settings label { display: flex; align-items: center; gap: 8px; }
+.su-settings input[type="time"], .su-settings select { height: 30px; border-radius: 8px; border: 0; box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--card); padding: 0 8px; font: inherit; font-size: 13px; color: var(--ink); }
+@media (max-width: 1180px) { .su { grid-template-columns: 300px minmax(0, 1fr); } .su-info { display: none; } }

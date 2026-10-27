@@ -39,6 +39,11 @@ export function useRealtimeRefresh(userId: string, { sidebar = true }: { sidebar
           case "huddles:changed":
             soon(["hey-social", "huddles"], 150);
             break;
+          case "support:changed":
+            // Support answered (a student), or a student wrote (owner and team).
+            soon(["support"], 150);
+            soon(["admin", "support"], 150);
+            break;
           default:
             soon(["channels"]);
             soon(["conversations"]);

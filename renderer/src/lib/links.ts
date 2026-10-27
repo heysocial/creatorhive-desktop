@@ -33,8 +33,10 @@ export function locationForPath(target: string): Location | null {
   const page = /^\/resources\/([0-9a-f-]{36})$/i.exec(url.pathname)?.[1] ?? (url.pathname === "/resources" ? params.get("page") : null);
   if (page) return { ws: "ch", section: "learn", view: { kind: "resource", id: page } };
   // The website's Admin: /admin, /admin/<page>, /admin/hubs/<id>, /admin/courses/<id>, /admin/bugs/<fingerprint> (a bug alert).
-  const admin = /^\/admin(?:\/(metrics|hubs|roadmap|moderation|bugs|courses)(?:\/([^/]+))?)?\/?$/.exec(url.pathname);
-  if (admin) return { ws: "ch", section: "admin", view: { kind: "admin", page: (admin[1] ?? "metrics") as "metrics", id: admin[2] ? decodeURIComponent(admin[2]) : undefined } };
+  const admin = /^\/admin(?:\/(support|metrics|hubs|roadmap|moderation|bugs|courses)(?:\/([^/]+))?)?\/?$/.exec(url.pathname);
+  // A support alert names its ticket in the query: /admin/support?ticket=<id>.
+  const ticket = admin?.[1] === "support" ? url.searchParams.get("ticket") : null;
+  if (admin) return { ws: "ch", section: "admin", view: { kind: "admin", page: (admin[1] ?? "metrics") as "metrics", id: ticket ?? (admin[2] ? decodeURIComponent(admin[2]) : undefined) } };
   const guide = /^\/library\/resources\/([\w-]+)$/.exec(url.pathname)?.[1];
   if (guide) return { ws: "ch", section: "learn", view: guide === "ai-script-writer" ? { kind: "script-writer" } : { kind: "improve-resource", slug: guide } };
 
@@ -119,6 +121,8 @@ const SETTINGS_TABS: Record<string, Parameters<typeof openSettings>[0]> = { "/se
  * the app has no copy of them. Admin has its own section now.
  */
 export async function openPath(target: string) {
+  // A reply from support (/?support=open): the chat opens over whatever is showing.
+  if (/^\/?\?(?:.*&)?support=open(?:&|$)/.test(target)) { window.dispatchEvent(new Event("ch:support-open")); return; }
   const location = locationForPath(target);
   if (location) {
     // The same place again (a second click on a notification after closing its thread): the open conversation shows it again.
