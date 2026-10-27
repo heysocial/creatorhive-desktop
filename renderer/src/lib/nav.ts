@@ -11,7 +11,7 @@ export type WorkspaceKey = "ch" | "hs";
 export type Section = "home" | "dms" | "hub" | "learn" | "activity" | "later" | "admin";
 
 export type View =
-  | { kind: "feed"; postId?: string }
+  | { kind: "feed"; postId?: string; commentId?: string }
   | { kind: "today" }
   | { kind: "events"; eventId?: string }
   | { kind: "profile"; id: string }
@@ -22,7 +22,7 @@ export type View =
   | { kind: "dms-home" }
   | { kind: "hub"; page: "deals" | "dashboard" | "clients" | "invoices"; dealId?: string; board?: "outreach" | "campaigns" | "payment"; smart?: "due" | "awaiting" | "paid" | "retainers" }
   | { kind: "learn"; page: "courses" | "improve" | "resources" }
-  | { kind: "activity"; filter?: "all" | "mentions" | "comments" | "reactions" | "hub" | "announcements" }
+  | { kind: "activity"; tab?: "activity" | "threads"; filter?: "all" | "mentions" | "threads" | "reactions" }
   | { kind: "course"; id: string; lessonId?: string }
   | { kind: "resource"; id: string }
   | { kind: "improve-resource"; slug: string }
@@ -77,7 +77,10 @@ function initial(): State {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
     if (saved?.current?.ws && saved?.current?.view) {
       // An open deal doesn't come back on the next launch; its page does. Nor does a jump to one message.
-      const clean = (v: View): View => (v.kind === "hub" ? { ...v, dealId: undefined } : v.kind === "channel" || v.kind === "dm" ? { ...v, messageId: undefined } : v);
+      // Activity's filters before the server list (comments, hub, announcements) are All now.
+      const clean = (v: View): View => (v.kind === "hub" ? { ...v, dealId: undefined } : v.kind === "channel" || v.kind === "dm" ? { ...v, messageId: undefined }
+        : v.kind === "feed" ? { ...v, commentId: undefined }
+        : v.kind === "activity" && v.filter && !["all", "mentions", "threads", "reactions"].includes(v.filter) ? { ...v, filter: undefined } : v);
       const remembered = Object.fromEntries(Object.entries(saved.remembered ?? {}).map(([k, v]) => [k, clean(v as View)]));
       return { ...saved, current: { ...saved.current, view: clean(saved.current.view) }, remembered, back: [], forward: [] };
     }

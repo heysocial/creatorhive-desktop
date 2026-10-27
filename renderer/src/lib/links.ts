@@ -42,7 +42,8 @@ export function locationForPath(target: string): Location | null {
 
   switch (url.pathname) {
     case "/":
-      return { ws: "ch", section: "home", view: params.get("post") ? { kind: "feed", postId: params.get("post")! } : { kind: "feed" } };
+      // A comment on it (an Activity item, a comment @mention push): the post opens at that comment.
+      return { ws: "ch", section: "home", view: params.get("post") ? { kind: "feed", postId: params.get("post")!, commentId: params.get("comment") ?? undefined } : { kind: "feed" } };
     case "/messages": {
       const id = params.get("convo");
       if (!id) return { ws: here.ws, section: "dms", view: { kind: "dms-home" } };
@@ -112,6 +113,12 @@ export function locationForPath(target: string): Location | null {
   }
 }
 
+/** Go to a place in the app; the same place again (a second click on a notification after closing its thread) shows it again. */
+export function openLocation(location: Location) {
+  if (JSON.stringify(location) === JSON.stringify(nav.get())) window.dispatchEvent(new CustomEvent("ch:reopen", { detail: location.view }));
+  nav.open(location.view, location.section, location.ws);
+}
+
 /* Website pages that are a window or a dialog in the app rather than a place. */
 const SETTINGS_TABS: Record<string, Parameters<typeof openSettings>[0]> = { "/settings": "account", "/settings/invoice": "hub" };
 
@@ -125,9 +132,7 @@ export async function openPath(target: string) {
   if (/^\/?\?(?:.*&)?support=open(?:&|$)/.test(target)) { window.dispatchEvent(new Event("ch:support-open")); return; }
   const location = locationForPath(target);
   if (location) {
-    // The same place again (a second click on a notification after closing its thread): the open conversation shows it again.
-    if (JSON.stringify(location) === JSON.stringify(nav.get())) window.dispatchEvent(new CustomEvent("ch:reopen", { detail: location.view }));
-    nav.open(location.view, location.section, location.ws);
+    openLocation(location);
     return;
   }
   const pathname = new URL(target, "https://app.invalid").pathname;

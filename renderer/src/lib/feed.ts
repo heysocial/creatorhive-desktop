@@ -46,6 +46,8 @@ export interface Comment {
   createdAt: string;
   editedAt: string | null;
   author: Author;
+  /** The people @mentioned in it (picked from the list), for highlighting "@Name". */
+  mentions?: { id: string; name: string }[];
 }
 
 interface Page {
@@ -134,10 +136,10 @@ export async function createPost(input: { text: string; category: CategoryKey; m
   return post;
 }
 
-export async function addComment(postId: string, body: string, parentCommentId: string | null) {
+export async function addComment(postId: string, body: string, parentCommentId: string | null, mentionIds: string[] = []) {
   const result = await api<{ comment: Comment; commentsCount: number | null }>(`/api/posts/${postId}/comments`, {
     method: "POST",
-    body: { body, parentCommentId, clientMutationId: crypto.randomUUID() },
+    body: { body, parentCommentId, mentionIds, clientMutationId: crypto.randomUUID() },
   });
   queryClient.setQueryData<Comment[]>(["comments", postId], (list) => (list ? [...list, result.comment] : list));
   if (result.commentsCount !== null) patchPost(postId, (p) => ({ ...p, commentsCount: result.commentsCount! }));

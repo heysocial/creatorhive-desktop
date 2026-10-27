@@ -34,7 +34,9 @@ export function useRealtimeRefresh(userId: string, { sidebar = true }: { sidebar
             soon(["hub"]);
             break;
           case "notifications:changed":
+            // A mention, reply or reaction aimed at me, or something read on another device: the bell and Activity.
             soon(["notifications"]);
+            soon(["activity"], 250);
             break;
           case "huddles:changed":
             soon(["hey-social", "huddles"], 150);

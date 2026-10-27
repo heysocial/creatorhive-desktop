@@ -16,10 +16,10 @@ import { smartDeals } from "../views/hub/Deals";
 import { openDealForm } from "../views/hub/DealForm";
 import { openExport } from "../views/hub/Export";
 import { money } from "../lib/format";
-import { Clock3, Hourglass, Repeat, Heart, Megaphone, MessageCircle as Bubble, PlayCircle, Sparkles as Spark, FileText } from "lucide-react";
+import { Clock3, Hourglass, Repeat, Heart, MessagesSquare, MessageCircle as Bubble, PlayCircle, Sparkles as Spark, FileText } from "lucide-react";
 import { percent, useCourses, useImprove } from "../lib/learn";
 import { useResourcePages, useResourcesAccess, useWikiPages } from "../views/learn/Resources";
-import { useActivityRows } from "../views/activity/Activity";
+import { useActivity, useActivityThreads } from "../lib/activity";
 import { HeySocialSidebar } from "./HeySocialSidebar";
 import { AdminSidebar } from "./AdminSidebar";
 
@@ -215,18 +215,21 @@ function Learn() {
 }
 
 function Activity({ title }: { title: string }) {
-  const rows = useActivityRows();
-  const count = (kind?: string) => rows.filter((r) => r.unread && (!kind || r.kind === kind)).length || undefined;
+  const all = useActivity("all").data;
+  const items = all?.items ?? [];
+  const count = (kind: string) => items.filter((i) => i.unread && i.kind === kind).length || undefined;
+  const threads = (useActivityThreads().data ?? []).filter((t) => t.unread).length || undefined;
   return (
     <>
       <SidebarHead title={title} />
       <div className="sb-scroll">
-        <SidebarItem icon={<Bell />} label="All" view={{ kind: "activity" }} count={count()} />
-        <SidebarItem icon={<AtSign />} label="Mentions" view={{ kind: "activity", filter: "mentions" }} count={count("mentions")} />
-        <SidebarItem icon={<Bubble />} label="Comments and replies" view={{ kind: "activity", filter: "comments" }} quietCount={count("comments")} />
-        <SidebarItem icon={<Heart />} label="Reactions" view={{ kind: "activity", filter: "reactions" }} quietCount={count("reactions")} />
-        <SidebarItem icon={<Spark />} label="Hub reminders" view={{ kind: "activity", filter: "hub" }} quietCount={count("hub")} />
-        <SidebarItem icon={<Megaphone />} label="Announcements" view={{ kind: "activity", filter: "announcements" }} quietCount={count("announcements")} />
+        <SidebarItem icon={<Bell />} label="All activity" view={{ kind: "activity" }} count={all?.unread || undefined} />
+        <SidebarItem icon={<AtSign />} label="Mentions" view={{ kind: "activity", filter: "mentions" }} count={count("mention")} />
+        <SidebarItem icon={<Bubble />} label="Thread replies" view={{ kind: "activity", filter: "threads" }} quietCount={count("thread")} />
+        <SidebarItem icon={<Heart />} label="Reactions" view={{ kind: "activity", filter: "reactions" }} quietCount={count("reaction")} />
+        <SidebarSection id="activity-threads" title="Threads">
+          <SidebarItem icon={<MessagesSquare />} label="Threads" view={{ kind: "activity", tab: "threads" }} count={threads} />
+        </SidebarSection>
       </div>
     </>
   );

@@ -32,7 +32,7 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
   const { view } = location;
   switch (view.kind) {
     case "feed":
-      return <Home user={user} openPostId={view.postId ?? null} />;
+      return <Home user={user} openPostId={view.postId ?? null} commentId={view.commentId} />;
     case "today":
       return <TodayPage />;
     case "events":
@@ -69,7 +69,7 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
     case "improve-resource":
       return <ImproveResource key={view.slug} slug={view.slug} />;
     case "activity":
-      return location.ws === "ch" ? <Activity filter={view.filter} /> : <HsMentions />;
+      return location.ws === "ch" ? <Activity tab={view.tab} filter={view.filter} /> : <HsMentions />;
     case "admin":
       return <Admin page={view.page} id={view.id} />;
     case "dms-home":

@@ -1,12 +1,16 @@
-import { ArrowLeft, ArrowRight, PanelLeft, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bell, PanelLeft, Search } from "lucide-react";
+import { useActivityRefresh, useActivityUnread } from "../lib/activity";
 import { commands } from "../lib/commands";
 import { nav, useNav } from "../lib/nav";
 import { useConnectionState } from "../lib/realtime";
+import { countLabel } from "../lib/ui";
 
 export function TopBar({ preview, sidebarOpen }: { preview: boolean; sidebarOpen: boolean }) {
-  useNav(); // re-render when history changes, for the back/forward buttons
   const connection = useConnectionState();
   const ws = nav.get().ws;
+  const { current } = useNav();
+  const unread = useActivityUnread();
+  useActivityRefresh();
   const reconnecting = connection === "disconnected" || connection === "suspended" || connection === "connecting";
 
   return (
@@ -25,6 +29,14 @@ export function TopBar({ preview, sidebarOpen }: { preview: boolean; sidebarOpen
       <div className="topright">
         {reconnecting ? <span className="conn" title="Live updates are reconnecting"><i />Reconnecting…</span> : null}
         {preview ? <span className="preview-tag" title="The team's preview of CreatorHive 2.0">PREVIEW</span> : null}
+        {ws === "ch" ? (
+          // CreatorHive's Activity: mentions (old threads too), replies in my threads, reactions, comments.
+          <button className={`iconbtn bell ${current.section === "activity" ? "on" : ""}`} aria-label={unread ? `Activity, ${unread} unread` : "Activity"}
+            title={`Activity (⌘5)${unread ? ` · ${unread} unread` : ""}`} onClick={() => nav.section("activity", "ch")}>
+            <Bell />
+            {unread > 0 ? <span className="badge">{countLabel(unread)}</span> : null}
+          </button>
+        ) : null}
       </div>
     </header>
   );

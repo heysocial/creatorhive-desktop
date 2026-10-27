@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { ChevronRight, Download, FileText, Image as ImageIcon, Loader2, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
@@ -13,6 +13,8 @@ import { RichText } from "../../lib/html";
 import { nav } from "../../lib/nav";
 import { Avatar } from "../../lib/ui";
 import { Badge } from "../messages/MessageRow";
+import { useMentionPicker } from "../messages/MentionPicker";
+import { useMembers } from "../../lib/community";
 import { WeekPanel } from "./Week";
 import { PostEditor } from "./PostEditor";
 import { Modal, Monogram } from "../hub/parts";
@@ -439,7 +441,25 @@ interface CommentActions {
   onReport?: () => void;
 }
 
-function CommentRow({ comment, postId, editing, actions, onSaveEdit, onCancelEdit }: {
+/** The comment's text with each picked "@Name" highlighted, as channel messages show mentions. */
+function CommentText({ comment, meId }: { comment: Comment; meId: string }) {
+  const people = (comment.mentions ?? []).filter((m) => m.name);
+  if (!people.length) return <>{comment.body}</>;
+  const escaped = people.map((m) => `@${m.name}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).sort((a, b) => b.length - a.length);
+  const parts: ReactNode[] = [];
+  let last = 0;
+  for (const match of comment.body.matchAll(new RegExp(escaped.join("|"), "g"))) {
+    const person = people.find((m) => `@${m.name}` === match[0])!;
+    parts.push(comment.body.slice(last, match.index));
+    parts.push(<span key={match.index} className={`mention ${person.id === meId ? "self" : ""}`} data-user-id={person.id}>{match[0]}</span>);
+    last = match.index + match[0].length;
+  }
+  parts.push(comment.body.slice(last));
+  return <>{parts}</>;
+}
+
+function CommentRow({ comment, postId, meId, editing, actions, onSaveEdit, onCancelEdit }: {
+  meId: string;
   comment: Comment;
   postId: string;
   editing: boolean;
@@ -475,7 +495,7 @@ function CommentRow({ comment, postId, editing, actions, onSaveEdit, onCancelEdi
   }
 
   return (
-    <div className={`comment ${comment.parentCommentId ? "reply" : ""}`}
+    <div className={`comment ${comment.parentCommentId ? "reply" : ""}`} data-comment-id={comment.id}
       onContextMenu={(event) => {
         if (comment.deleted || editing || (event.target as HTMLElement).closest("button, a, textarea")) return;
         if (window.getSelection()?.toString()) return;
@@ -499,7 +519,7 @@ function CommentRow({ comment, postId, editing, actions, onSaveEdit, onCancelEdi
         ) : (
           <div className="bubble">
             <span className="who"><b>{comment.author.name}</b><Badge badge={comment.author.badge} role={comment.author.role} /></span>
-            <div className="selectable" style={{ whiteSpace: "pre-wrap" }}>{comment.deleted ? <i className="faint">Comment deleted</i> : comment.body}</div>
+            <div className="selectable" style={{ whiteSpace: "pre-wrap" }}>{comment.deleted ? <i className="faint">Comment deleted</i> : <CommentText comment={comment} meId={meId} />}</div>
           </div>
         )}
         {!comment.deleted && !editing ? (
@@ -537,7 +557,7 @@ function groupComments(list: Comment[]) {
   return roots.map((comment) => ({ comment, replies: list.filter((r) => r.id !== comment.id && rootOf(r) === comment.id) }));
 }
 
-export function PostSheet({ postId, user, onClose }: { postId: string; user: SessionUser; onClose: () => void }) {
+export function PostSheet({ postId, commentId, user, onClose }: { postId: string; commentId?: string; user: SessionUser; onClose: () => void }) {
   const post = usePost(postId);
   const comments = useComments(postId);
   const [text, setText] = useState("");
@@ -547,6 +567,33 @@ export function PostSheet({ postId, user, onClose }: { postId: string; user: Ses
   const [reporting, setReporting] = useState<ReportTarget | null>(null);
   const staff = user.role === "owner" || user.role === "team";
   const box = useRef<HTMLTextAreaElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+
+  // The @ list: everyone in CreatorHive but me, as channels offer.
+  const members = useMembers().data;
+  const searchPeople = useCallback((query: string) => {
+    const q = query.toLowerCase();
+    return (members ?? [])
+      .filter((m) => m.id !== user.id && (!q || m.name.toLowerCase().startsWith(q) || m.name.toLowerCase().split(/\s+/).some((part) => part.startsWith(q))))
+      .map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatarUrl, sub: m.badge?.label ?? null }));
+  }, [members, user.id]);
+  const picker = useMentionPicker({ value: text, setValue: setText, input: box, searchPeople });
+
+  // Opened at a comment (Activity, a comment @mention): scrolled to it and lit up once it has loaded.
+  const shown = useRef<string | null>(null);
+  useEffect(() => {
+    // After the post itself has loaded above the comments, so the comment stays where it was scrolled to.
+    if (!commentId || shown.current === commentId || !comments.data || (!post.data && !post.isError)) return;
+    const el = body.current?.querySelector<HTMLElement>(`[data-comment-id="${CSS.escape(commentId)}"]`);
+    if (!el) {
+      if (!comments.isFetching) shown.current = commentId; // gone (deleted): the post shows anyway
+      return;
+    }
+    shown.current = commentId;
+    el.scrollIntoView({ block: "center" });
+    el.classList.add("jump-target");
+    setTimeout(() => el.classList.remove("jump-target"), 1800);
+  }, [commentId, comments.data, comments.isFetching, post.data, post.isError]);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector(".emoji-pop, .scrim.center") && onClose();
@@ -601,9 +648,10 @@ export function PostSheet({ postId, user, onClose }: { postId: string; user: Ses
     if (!text.trim() || sending) return;
     setSending(true);
     try {
-      await addComment(postId, text.trim(), replyTo?.id ?? null);
+      await addComment(postId, text.trim(), replyTo?.id ?? null, picker.mentionIds(text));
       setText("");
       setReplyTo(null);
+      picker.reset();
     } catch (error) {
       window.alert(rateLimitMessage(error) ?? "Couldn't add the comment.");
     } finally {
@@ -615,14 +663,14 @@ export function PostSheet({ postId, user, onClose }: { postId: string; user: Ses
     <div className="scrim side" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <aside className="side-sheet wide" role="dialog" aria-label="Post">
         <div className="sheet-head">Post<button className="iconbtn" onClick={onClose} aria-label="Close"><X /></button></div>
-        <div className="side-body scroll">
+        <div className="side-body scroll" ref={body}>
           {post.data ? <PostCard post={post.data} user={user} onOpen={() => box.current?.focus()} /> : post.isError ? <div className="err-state">This post isn't available.</div> : <div className="msgs-skel"><div /><div /></div>}
           <div className="comments">
             {comments.isLoading ? <div className="faint">Loading comments…</div> : null}
             {threads.map(({ comment, replies }) => (
               <div key={comment.id}>
                 {[comment, ...replies].map((c) => (
-                  <CommentRow key={c.id} comment={c} postId={postId} editing={editingId === c.id} actions={actionsFor(c)}
+                  <CommentRow key={c.id} comment={c} postId={postId} meId={user.id} editing={editingId === c.id} actions={actionsFor(c)}
                     onSaveEdit={(body) => saveEdit(c, body)} onCancelEdit={() => setEditingId(null)} />
                 ))}
               </div>
@@ -633,8 +681,13 @@ export function PostSheet({ postId, user, onClose }: { postId: string; user: Ses
         <div className="comment-box">
           {replyTo ? <div className="replying"><span>Replying to <b>{replyTo.author.name}</b></span><button className="iconbtn" onClick={() => setReplyTo(null)}><X /></button></div> : null}
           <div className="composer compact" style={{ margin: 0 }}>
-            <textarea ref={box} rows={1} value={text} maxLength={2000} placeholder="Write a comment…" onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} />
+            <textarea ref={box} rows={1} value={text} maxLength={2000} placeholder="Write a comment… (@ to mention)"
+              onChange={(e) => { setText(e.target.value); picker.track(e.target.value, e.target.selectionStart); }}
+              onKeyDown={(e) => {
+                if (picker.onKeyDown(e)) return;
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
+              }} />
+            {picker.list}
             <div className="tools"><button className={`send ${text.trim() ? "on" : ""}`} disabled={!text.trim() || sending} onClick={() => void send()}>{sending ? <Loader2 className="spin" /> : <SquarePen />}</button></div>
           </div>
         </div>
@@ -646,7 +699,7 @@ export function PostSheet({ postId, user, onClose }: { postId: string; user: Ses
 
 /* ---------- Home ---------- */
 
-export function Home({ user, openPostId }: { user: SessionUser; openPostId?: string | null }) {
+export function Home({ user, openPostId, commentId }: { user: SessionUser; openPostId?: string | null; commentId?: string }) {
   const [filter, setFilter] = useState<string>("all");
   const [writing, setWriting] = useState(false);
   const [openPost, setOpenPost] = useState<string | null>(openPostId ?? null);
@@ -710,7 +763,7 @@ export function Home({ user, openPostId }: { user: SessionUser; openPostId?: str
         </div>
         <WeekPanel />
       </div>
-      {openPost ? <PostSheet postId={openPost} user={user} onClose={() => { setOpenPost(null); if (openPostId) nav.open({ kind: "feed" }); }} /> : null}
+      {openPost ? <PostSheet postId={openPost} commentId={openPost === openPostId ? commentId : undefined} user={user} onClose={() => { setOpenPost(null); if (openPostId) nav.open({ kind: "feed" }); }} /> : null}
     </div>
   );
 }

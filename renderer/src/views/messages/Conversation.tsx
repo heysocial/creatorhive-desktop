@@ -164,9 +164,11 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
   useEffect(() => {
     if (!jumpTo || !query.isFetched) return;
     const el = scroller.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(jumpTo)}"]`);
+    // A reply newer than the cached thread (from Activity, a notification): wait for the fresh copy.
+    if (!el && query.isFetching) return;
     if (el) showMessage(el);
     onJumped?.();
-  }, [jumpTo, query.isFetched]);
+  }, [jumpTo, query.isFetched, query.isFetching]);
 
   // A thread in its own window is named after it in the Window menu and Mission Control.
   useEffect(() => {

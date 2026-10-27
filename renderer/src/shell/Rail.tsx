@@ -5,7 +5,7 @@ import { commands } from "../lib/commands";
 import { openSettings } from "../lib/links";
 import { nav, useNav, type Section, SECTIONS } from "../lib/nav";
 import { Avatar, countLabel } from "../lib/ui";
-import { useActivityRows } from "../views/activity/Activity";
+import { useActivityUnread } from "../lib/activity";
 import { useHsSidebar } from "../lib/heysocial";
 import { adminPages, useAdminAccess, useOpenReports } from "../lib/admin";
 import { useSupportUnread } from "../lib/support";
@@ -38,7 +38,7 @@ export function Rail({ user }: { user: SessionUser }) {
   const hsUnread = useWorkspaceUnread("heysocial", heySocial);
   const here = current.ws === "hs" ? hsUnread : chUnread;
   const other = current.ws === "hs" ? chUnread : hsUnread;
-  const activity = useActivityRows().filter((r) => r.unread && r.kind !== "dm").length;
+  const activity = useActivityUnread();
   const hsCounts = useHsSidebar(heySocial && current.ws === "hs").data?.counts;
   const admin = useAdminAccess().data;
   const canAdmin = adminPages(admin).length > 0;
