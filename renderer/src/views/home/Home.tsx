@@ -13,7 +13,7 @@ import { RichText } from "../../lib/html";
 import { nav } from "../../lib/nav";
 import { Avatar } from "../../lib/ui";
 import { Badge } from "../messages/MessageRow";
-import { TodayPanel } from "./Today";
+import { WeekPanel } from "./Week";
 import { PostEditor } from "./PostEditor";
 import { Modal, Monogram } from "../hub/parts";
 import { pastedFiles } from "../../lib/paste";
@@ -708,7 +708,7 @@ export function Home({ user, openPostId }: { user: SessionUser; openPostId?: str
             {feed.isFetchingNextPage ? <div className="faint" style={{ textAlign: "center", padding: 12 }}>Loading…</div> : null}
           </div>
         </div>
-        <TodayPanel />
+        <WeekPanel />
       </div>
       {openPost ? <PostSheet postId={openPost} user={user} onClose={() => { setOpenPost(null); if (openPostId) nav.open({ kind: "feed" }); }} /> : null}
     </div>

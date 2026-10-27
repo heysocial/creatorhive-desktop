@@ -20,7 +20,7 @@ export type View =
   | { kind: "channel"; id: string; threadId?: string; messageId?: string }
   | { kind: "dm"; id: string; threadId?: string; messageId?: string }
   | { kind: "dms-home" }
-  | { kind: "hub"; page: "deals" | "dashboard" | "clients" | "invoices"; dealId?: string; board?: "outreach" | "campaigns" | "payment"; smart?: "due" | "awaiting" | "retainers" }
+  | { kind: "hub"; page: "deals" | "dashboard" | "clients" | "invoices"; dealId?: string; board?: "outreach" | "campaigns" | "payment"; smart?: "due" | "awaiting" | "paid" | "retainers" }
   | { kind: "learn"; page: "courses" | "improve" | "resources" }
   | { kind: "activity"; filter?: "all" | "mentions" | "comments" | "reactions" | "hub" | "announcements" }
   | { kind: "course"; id: string; lessonId?: string }

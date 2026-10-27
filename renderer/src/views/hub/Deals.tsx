@@ -3,7 +3,7 @@ import { ArrowUpRight, CalendarClock, ChartNoAxesColumn, ChartNoAxesCombined, Ch
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import {
-  BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, active, allDeals, contracted, daysBetween, dealTypeLabel, isDraftPending, localToday,
+  BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, active, addDaysIso, allDeals, contracted, dayOf, daysBetween, dealTypeLabel, isDraftPending, localToday,
   monDay, monDayYear, potential, total, useCash, useDeals, type Board, type Cash, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { money, plural } from "../../lib/format";
@@ -13,7 +13,7 @@ import { openDealForm } from "./DealForm";
 import { openExport } from "./Export";
 import { ShareHubButton } from "./ShareHub";
 
-export type SmartView = "due" | "awaiting" | "retainers";
+export type SmartView = "due" | "awaiting" | "paid" | "retainers";
 
 /* ---------- The overview band ---------- */
 
@@ -381,11 +381,25 @@ export function smartDeals(view: SmartView, deals: Deal[]) {
   if (view === "due") return deals.filter((d) => isDraftPending(d.status) && d.draft_due_at && d.draft_due_at <= inAWeek).sort((a, b) => a.draft_due_at!.localeCompare(b.draft_due_at!));
   // As the Dashboard and the website count it: deals in Pending Payment.
   if (view === "awaiting") return deals.filter((d) => d.status === "pending_payment");
+  if (view === "paid") return paidThisWeek(deals);
   return deals.filter((d) => d.deal_type === "retainer" && d.status !== "completed");
+}
+/*
+  Paid this week: Completed with a paid date in the last 7 days, today
+  included, as days in the member's own zone. The Hub's "closed this week"
+  (lib/hub/dashboard.ts) is the same rolling week; its paid date is the
+  website's (completed with paid_at, as the bee tier and Paid this month count it).
+*/
+export function paidThisWeek(deals: Deal[]) {
+  const from = addDaysIso(localToday(), -6);
+  return deals
+    .filter((d) => d.status === "completed" && d.paid_at && dayOf(d.paid_at) >= from)
+    .sort((a, b) => new Date(b.paid_at!).getTime() - new Date(a.paid_at!).getTime());
 }
 export const SMART_LABELS: Record<SmartView, { title: string; sub: string }> = {
   due: { title: "Due this week", sub: "Drafts due in the next 7 days, and any overdue" },
   awaiting: { title: "Awaiting payment", sub: "Deals in Pending payment: delivered, and the money hasn't come in yet" },
+  paid: { title: "Paid this week", sub: "Deals marked Completed with a paid date in the last 7 days" },
   retainers: { title: "Retainers", sub: "Your ongoing retainer deals" },
 };
 

@@ -154,16 +154,6 @@ export function TodayItems() {
   );
 }
 
-/** The right-hand panel on Home: your day across the community and the Hub. */
-export function TodayPanel() {
-  return (
-    <aside className="today-panel scroll">
-      <div className="t-head"><Sun /><b>Today</b><span className="faint">{new Date().toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}</span></div>
-      <TodayItems />
-    </aside>
-  );
-}
-
 /** Today as its own page (sidebar → Today). */
 export function TodayPage() {
   return (

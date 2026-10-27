@@ -30,15 +30,18 @@ export interface CommunityEvent {
 interface ApiEvent { id: string; title: string; description: string | null; locationUrl: string | null; startsAt: string; endsAt: string; rsvpd: boolean; rsvpCount: number }
 interface CalendarEvent { id: string; title: string; description: string | null; startsAt: string; endsAt: string; joinUrl: string | null; recordingUrl: string | null; summary: string | null; organizer: string; tier: string }
 
-export function useEvents() {
+/** `live`: also refresh every minute (coaching calls every five), for a screen that stays open, such as Home's This week. */
+export function useEvents({ live = false }: { live?: boolean } = {}) {
   const community = useQuery({
     queryKey: ["events", "community"],
+    refetchInterval: live ? 60_000 : false,
     queryFn: async () => (await api<{ events: ApiEvent[] }>("/api/events?scope=all")).events,
   });
   // A failure stays a failure (not an empty list), so Events can say coaching calls are unavailable, as the website does.
   const calendar = useQuery({
     queryKey: ["events", "calendar"],
     retry: false,
+    refetchInterval: live ? 5 * 60_000 : false,
     queryFn: async () => (await api<{ events: CalendarEvent[] }>("/api/events/calendar")).events,
   });
   const all = useMemo<CommunityEvent[]>(() => [
@@ -73,10 +76,20 @@ export function normalizeMeetingUrl(raw: string | null | undefined): string | nu
   }
 }
 
+/** Going / not going. Shows the change at once, then the server's count; put back if the server says no. */
 export async function toggleRsvp(event: CommunityEvent) {
-  const result = await api<{ rsvpd: boolean; rsvpCount: number }>(`/api/events/${event.id}/rsvp`, { method: "POST" });
-  queryClient.setQueryData<ApiEvent[]>(["events", "community"], (list) => list?.map((e) => (e.id === event.id ? { ...e, ...result } : e)));
-  return result;
+  const key = ["events", "community"];
+  const patch = (fields: Partial<ApiEvent>) => queryClient.setQueryData<ApiEvent[]>(key, (list) => list?.map((e) => (e.id === event.id ? { ...e, ...fields } : e)));
+  const before = queryClient.getQueryData<ApiEvent[]>(key)?.find((e) => e.id === event.id);
+  if (before) patch({ rsvpd: !before.rsvpd, rsvpCount: Math.max(0, before.rsvpCount + (before.rsvpd ? -1 : 1)) });
+  try {
+    const result = await api<{ rsvpd: boolean; rsvpCount: number }>(`/api/events/${event.id}/rsvp`, { method: "POST" });
+    patch(result);
+    return result;
+  } catch (error) {
+    if (before) patch({ rsvpd: before.rsvpd, rsvpCount: before.rsvpCount });
+    throw error;
+  }
 }
 
 const icsDate = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");

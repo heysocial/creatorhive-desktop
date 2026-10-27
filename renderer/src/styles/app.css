@@ -497,6 +497,51 @@ html.is-popout body { background: var(--card); }
 .t-ico svg { width: 17px; height: 17px; }
 .t-ico.honey { background: var(--honey-soft); color: var(--honey-ink); }
 .t-ico.flame { background: rgba(255, 90, 50, .12); color: #E5532D; }
+
+/* Home's right side: This week (views/home/Week.tsx). Honey on the app's own neutrals, light and dark. */
+.week-panel { gap: 12px; }
+.wk-banner { display: flex; align-items: center; gap: 8px; padding: 9px 10px 9px 12px; border-radius: 12px; background: rgba(255, 204, 4, .12); box-shadow: inset 0 0 0 1px rgba(255, 204, 4, .35); color: var(--honey-ink); }
+.wk-banner-text { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left; color: inherit; font-size: 13px; }
+.wk-banner-text > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-banner-text b { font-weight: 700; }
+.wk-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--honey); flex: none; }
+.wk-banner.live .wk-dot { background: var(--red); animation: wk-pulse 1.6s ease-in-out infinite; }
+@keyframes wk-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .wk-banner.live .wk-dot { animation: none; } }
+.wk-banner-join { flex: none; height: 26px; padding: 0 12px; border-radius: 7px; background: var(--honey); color: var(--on-honey); font-weight: 700; font-size: 12.5px; }
+.wk-banner-join:hover { background: var(--honey-hover); }
+.wk-banner-join:disabled { opacity: .55; }
+.wk-card { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 14px; background: var(--card); box-shadow: 0 0 0 .5px var(--line-strong), 0 1px 2px rgba(0,0,0,.04); }
+.wk-label { font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); margin: 0 2px 4px; }
+.wk-sublabel { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--honey-ink); margin: 6px 2px 0; }
+.wk-empty, .wk-note { font-size: 12.5px; padding: 2px 2px 4px; }
+.wk-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.wk-row + .wk-row { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; }
+.wk-row-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; border-radius: 9px; }
+.wk-row-main:hover .wk-text b { text-decoration: underline; text-decoration-color: var(--ink-4); text-underline-offset: 2px; }
+.wk-date { width: 40px; height: 42px; flex: none; border-radius: 10px; background: var(--card-3); display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; }
+.wk-date small { font-size: 9.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--honey-ink); }
+.wk-date b { font-size: 17px; font-weight: 700; font-family: var(--display); }
+.wk-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.wk-text b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-text small { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-live { color: var(--honey-ink); font-weight: 600; }
+.wk-act { flex: none; height: 28px; padding: 0 11px; font-size: 12.5px; }
+.wk-act svg { width: 13px; height: 13px; }
+.wk-act.going { background: var(--honey-soft); color: var(--honey-ink); box-shadow: inset 0 0 0 .5px rgba(255, 204, 4, .45); }
+.wk-link { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin: 6px 2px 0; font-size: 12.5px; font-weight: 600; color: var(--honey-ink); }
+.wk-link svg { width: 13px; height: 13px; transition: transform .12s; }
+.wk-link:hover svg { transform: translateX(2px); }
+.wk-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wk-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--card-3); text-align: left; min-width: 0; }
+.wk-tile:hover { box-shadow: inset 0 0 0 .5px var(--line-strong); }
+.wk-tile b { font-size: 20px; font-weight: 700; font-family: var(--display); letter-spacing: -.01em; }
+.wk-tile small { font-size: 12px; color: var(--ink-3); }
+.wk-streak { display: flex; align-items: center; gap: 10px; padding: 10px 2px 2px; }
+.wk-streak > span:last-child { display: flex; flex-direction: column; min-width: 0; }
+.wk-streak b { font-size: 13.5px; }
+.wk-streak small { font-size: 12px; color: var(--ink-3); }
+.wk-flame { font-size: 20px; line-height: 1; }
 .today-page { max-width: 560px; display: flex; flex-direction: column; gap: 8px; }
 .paid-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .paid-top { display: flex; align-items: center; gap: 10px; }
