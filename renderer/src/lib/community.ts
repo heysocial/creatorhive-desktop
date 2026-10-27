@@ -246,7 +246,8 @@ export async function sendMessage(where: Thread, input: {
         attachments: files,
         parentMessageId: input.parentMessageId ?? null,
         clientMutationId,
-        ...(where.kind === "channel" ? { mentions: input.mentions ?? [] } : {}),
+        // Channels, and Hey Social DMs (CreatorHive DMs ignore them).
+        ...(where.kind === "channel" || input.mentions?.length ? { mentions: input.mentions ?? [] } : {}),
         ...(where.kind === "dm" && input.replyToMessageId ? { replyToMessageId: input.replyToMessageId } : {}),
       },
     }));
@@ -500,6 +501,16 @@ export function useMembers(enabled = true) {
     enabled,
     staleTime: 5 * 60_000,
     queryFn: async () => (await api<{ members: Member[] }>("/api/members")).members,
+  });
+}
+
+/** Everyone in Hey Social Inc. but me, for its `@` list: channels there are often just a few people. */
+export function useHsMembers(enabled = true) {
+  return useQuery({
+    queryKey: ["members", "heysocial"],
+    enabled,
+    staleTime: 5 * 60_000,
+    queryFn: async () => (await api<{ members: Member[] }>("/api/members?view=picker&workspace=heysocial&limit=40")).members,
   });
 }
 

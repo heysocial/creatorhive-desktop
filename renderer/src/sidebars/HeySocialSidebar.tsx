@@ -32,6 +32,11 @@ function useBuiltinCollapsed() {
   return [state, toggle] as const;
 }
 
+const lastActivity = (item: Item) => Date.parse((item.row as HsDm).lastMessageAt ?? (item.row as HsDm).createdAt ?? "") || 0;
+
+/** Direct messages: newest conversation first, as in Slack. A saved drag position never pins a DM there. */
+const byLatestMessage = (items: Item[]) => [...items].sort((a, b) => lastActivity(b) - lastActivity(a));
+
 function sortItems(items: Item[]) {
   return [...items].sort((a, b) => {
     const ao = a.row.sortOrder ?? Infinity;
@@ -39,9 +44,7 @@ function sortItems(items: Item[]) {
     if (ao !== bo) return ao - bo;
     if (a.kind !== b.kind) return a.kind === "channel" ? -1 : 1;
     if (a.kind === "channel" && b.kind === "channel") return channelName(a.row.name).localeCompare(channelName(b.row.name));
-    const at = (a.row as HsDm).lastMessageAt ?? (a.row as HsDm).createdAt ?? "";
-    const bt = (b.row as HsDm).lastMessageAt ?? (b.row as HsDm).createdAt ?? "";
-    return bt.localeCompare(at);
+    return lastActivity(b) - lastActivity(a);
   });
 }
 
@@ -151,7 +154,7 @@ export function HeySocialSidebar() {
       starred: sortItems(starred),
       sections: [...data.sections].sort((a, b) => a.sortOrder - b.sortOrder).map((s) => ({ section: s, items: sortItems(rest.filter((i) => inSection(i) === s.id)) })),
       channels: sortItems(rest.filter((i) => i.kind === "channel" && !inSection(i))),
-      dms: sortItems(rest.filter((i) => i.kind === "dm" && !inSection(i))),
+      dms: byLatestMessage(rest.filter((i) => i.kind === "dm" && !inSection(i))),
       browse: data.channels.filter((c) => !c.joined && c.workspaceOpen),
     };
   }, [data]);

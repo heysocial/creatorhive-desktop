@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, keys, queryClient, useChannels, useConversations, type Workspace } from "../../lib/api";
 import {
-  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, patchMessage, useChannelMembers, useMembers, useMessages, useReplies,
+  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, patchMessage, useChannelMembers, useHsMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
 } from "../../lib/community";
 import { dayLabel } from "../../lib/format";
@@ -150,7 +150,7 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
   realtimeChannel: string | null;
 }) {
   const query = useReplies(where, parentId);
-  const people = useMentionSearch(where);
+  const people = useMentionSearch(where, workspace);
   const scroller = useRef<HTMLDivElement>(null);
   const actions = useRowActions(where, user, { inThread: true, heySocial: workspace === "heysocial" });
   const count = query.data?.replies.length ?? 0;
@@ -199,7 +199,7 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
       </div>
       <Composer compact draftKey={`thread:${parentId}`}
         uploadVideo={workspace === "heysocial" || where.kind === "dm" ? undefined : (file, onProgress) => uploadVideo(where, file, onProgress)}
-        voice={where.kind === "dm" || workspace === "heysocial" ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, parentMessageId: parentId, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={workspace === "heysocial" ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder="Reply in thread…" searchPeople={where.kind === "channel" ? people : undefined}
+        voice={where.kind === "dm" || workspace === "heysocial" ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, parentMessageId: parentId, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={workspace === "heysocial" ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder="Reply in thread…" searchPeople={where.kind === "channel" || workspace === "heysocial" ? people : undefined}
         onTyping={typingSignal(realtimeChannel)}
         onSend={async (input) => {
           if (input.videos.length) {
@@ -212,16 +212,19 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
   );
 }
 
-function useMentionSearch(where: Thread) {
-  const channelMembers = useChannelMembers(where.kind === "channel" ? where.id : null).data?.members;
-  const everyone = useMembers(where.kind === "channel").data;
+function useMentionSearch(where: Thread, workspace: Workspace) {
+  // Hey Social Inc. offers everyone in the workspace, in channels and DMs alike, as Slack does.
+  const heySocial = workspace === "heysocial";
+  const channelMembers = useChannelMembers(where.kind === "channel" && !heySocial ? where.id : null).data?.members;
+  const everyone = useMembers(where.kind === "channel" && !heySocial).data;
+  const workspaceMembers = useHsMembers(heySocial).data;
   return useCallback((query: string): MentionCandidate[] => {
-    const pool = channelMembers?.length ? channelMembers : everyone ?? [];
+    const pool = heySocial ? workspaceMembers ?? [] : channelMembers?.length ? channelMembers : everyone ?? [];
     const q = query.toLowerCase();
     return pool
       .filter((m) => !q || m.name.toLowerCase().split(/\s+/).some((part) => part.startsWith(q)) || m.name.toLowerCase().startsWith(q))
       .map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatarUrl, sub: m.badge?.label ?? null }));
-  }, [channelMembers, everyone]);
+  }, [heySocial, workspaceMembers, channelMembers, everyone]);
 }
 
 function useRowActions(where: Thread, user: SessionUser, { inThread = false, onOpenThread, onReply, heySocial = false }: {
@@ -343,7 +346,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
   const [jump, setJump] = useState<string | null>(messageId ?? null);
   const [dragging, setDragging] = useState(false);
   const composer = useRef<ComposerHandle>(null);
-  const people = useMentionSearch(where);
+  const people = useMentionSearch(where, workspace);
   const typing = useLiveThread(where, realtimeChannel, user.id);
   const sendTyping = useMemo(() => typingSignal(realtimeChannel), [realtimeChannel]);
   const actions = useRowActions(where, user, {
@@ -467,7 +470,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
         <Composer ref={composer} draftKey={`${where.kind}:${where.id}`}
           uploadVideo={heySocial ? undefined : (file, onProgress) => uploadVideo(where, file, onProgress)}
           voice={where.kind === "dm" || heySocial ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder={where.kind === "channel" ? `Message #${title}` : `Message ${title}`}
-          searchPeople={where.kind === "channel" ? people : undefined} onTyping={sendTyping}
+          searchPeople={where.kind === "channel" || workspace === "heysocial" ? people : undefined} onTyping={sendTyping}
           onSend={async (input: ComposerSend) => {
             if (input.videos.length) {
               // Goes out now; the message shows the upload and becomes real when it's done.
