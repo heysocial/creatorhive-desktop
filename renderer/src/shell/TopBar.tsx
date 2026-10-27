@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CircleHelp, PanelLeft, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, PanelLeft, Search } from "lucide-react";
 import { commands } from "../lib/commands";
 import { nav, useNav } from "../lib/nav";
 import { useConnectionState } from "../lib/realtime";
@@ -25,7 +25,6 @@ export function TopBar({ preview, sidebarOpen }: { preview: boolean; sidebarOpen
       <div className="topright">
         {reconnecting ? <span className="conn" title="Live updates are reconnecting"><i />Reconnecting…</span> : null}
         {preview ? <span className="preview-tag" title="The team's preview of CreatorHive 2.0">PREVIEW</span> : null}
-        <button className="iconbtn" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (⌘/)" onClick={() => commands.run("shortcuts")}><CircleHelp /></button>
       </div>
     </header>
   );

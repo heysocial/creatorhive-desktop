@@ -45,7 +45,14 @@ const errors = require("./errors");
 /* Must match DESKTOP_NOTIFICATION_EVENT in the web app's lib/realtime/channels.ts. */
 const DESKTOP_NOTIFICATION_EVENT = "notification:desktop";
 
-const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+/*
+  How often to look for a new version. Every 4 hours meant a Mac left open
+  all day met a release hours late, and quitting before the download finished
+  started the wait over. Now: soon after launch, every 30 minutes, and on
+  waking or coming back to the window when the last look is 15 minutes old.
+*/
+const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
+const UPDATE_RECHECK_AFTER_MS = 15 * 60 * 1000;
 const BADGE_POLL_FOCUSED_MS = 30 * 1000;
 const BADGE_POLL_HIDDEN_MS = 5 * 60 * 1000;
 const PAUSE_MS = 60 * 60 * 1000;
@@ -227,6 +234,7 @@ function createWindow({ show }) {
   mainWindow.on("enter-full-screen", () => send("window:fullscreen", true));
   mainWindow.on("leave-full-screen", () => send("window:fullscreen", false));
   mainWindow.on("focus", () => {
+    checkForUpdatesSoon();
     send("window:focus", true);
     refreshBadgeSoon();
   });
@@ -784,13 +792,29 @@ function configureUpdates() {
   }
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.on("update-available", () => { downloadingUpdate = true; });
   autoUpdater.on("update-downloaded", (info) => {
     debug("update downloaded", info.version);
+    downloadingUpdate = false;
     markUpdateReady(info.version);
   });
-  autoUpdater.on("error", (error) => console.error("[update]", error?.message ?? error));
-  setTimeout(() => void checkForUpdates(false), 30 * 1000);
+  autoUpdater.on("error", (error) => {
+    downloadingUpdate = false;
+    console.error("[update]", error?.message ?? error);
+  });
+  setTimeout(() => void checkForUpdates(false), 10 * 1000);
   setInterval(() => void checkForUpdates(false), UPDATE_CHECK_INTERVAL_MS);
+  powerMonitor.on("resume", checkForUpdatesSoon);
+}
+
+let lastUpdateCheck = 0;
+let downloadingUpdate = false;
+
+/* Waking up or coming back to the window: look again unless we looked recently, a download is under way, or one is ready. */
+function checkForUpdatesSoon() {
+  if (!app.isPackaged || updateReady || downloadingUpdate) return;
+  if (Date.now() - lastUpdateCheck < UPDATE_RECHECK_AFTER_MS) return;
+  void checkForUpdates(false);
 }
 
 async function checkForUpdates(fromMenu) {
@@ -798,6 +822,8 @@ async function checkForUpdates(fromMenu) {
     if (fromMenu) void dialog.showMessageBox({ message: "Updates are only checked in the installed app." });
     return;
   }
+  if (!fromMenu && (updateReady || downloadingUpdate)) return;
+  lastUpdateCheck = Date.now();
   try {
     const result = await autoUpdater.checkForUpdates();
     if (!fromMenu) return;
