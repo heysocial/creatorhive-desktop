@@ -186,3 +186,37 @@ export async function deleteComment(postId: string, comment: Comment) {
   }
   await queryClient.invalidateQueries({ queryKey: ["comments", postId] });
 }
+
+const plain = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * A post's first paragraph or heading stands as its title when more words follow
+ * it, as on the website (splitPostBody in app/page.tsx there). Same rule, so a
+ * post's first line is a title on both or on neither.
+ */
+export function splitPostBody(html: string): { title: string | null; body: string } {
+  const first = html.trim().match(/^<(p|h2|h3)\b[^>]*>[\s\S]*?<\/\1>/i);
+  if (!first) return { title: null, body: html };
+  const rest = html.trim().slice(first[0].length).trim();
+  if (!plain(first[0]) || !plain(rest)) return { title: null, body: html };
+  return { title: first[0], body: rest };
+}
+
+/** Pictures by their extension, as the website decides (isImageAttachmentUrl there); anything else is a file. */
+export function isImageUrl(url: string) {
+  try {
+    return /\.(jpe?g|png|webp|gif)$/i.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** A file's name from its storage URL, without the upload's random suffix. */
+export function attachmentName(url: string) {
+  try {
+    const segment = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? "Attachment");
+    return segment.replace(/-[a-zA-Z0-9]{8,}(?=\.[^.]+$)/, "") || "Attachment";
+  } catch {
+    return "Attachment";
+  }
+}

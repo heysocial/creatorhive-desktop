@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Image as ImageIcon, Loader2, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { ChevronRight, Download, FileText, Image as ImageIcon, Loader2, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, queryClient, rateLimitMessage } from "../../lib/api";
 import {
-  CATEGORIES, POST_REACTIONS, addComment, categoryOf, createPost, deleteComment, editComment, editPost, likeComment, patchPost,
-  reactToPost, useComments, useFeed, usePinnedPosts, usePost, useUnreadCategories, vote,
+  CATEGORIES, POST_REACTIONS, addComment, attachmentName, categoryOf, createPost, deleteComment, editComment, editPost, isImageUrl, likeComment, patchPost,
+  reactToPost, splitPostBody, useComments, useFeed, usePinnedPosts, usePost, useUnreadCategories, vote,
   type CategoryKey, type Comment, type Post,
 } from "../../lib/feed";
 import { ago, money } from "../../lib/format";
@@ -264,6 +264,70 @@ function PollView({ post }: { post: Post }) {
   );
 }
 
+/** The body, with its first line as a title when more follows (splitPostBody). */
+function PostBody({ html }: { html: string }) {
+  const { title, body } = useMemo(() => splitPostBody(html), [html]);
+  return (
+    <div className="post-text">
+      {title ? <RichText html={title} className="rich post-title" /> : null}
+      <RichText html={body} className="rich post-body" />
+    </div>
+  );
+}
+
+/*
+  A post's pictures and files, laid out as the website's feed does
+  (components/feed/FeedAttachments.tsx there). Every picture fills a frame of
+  fixed shape: one sits in a 340 × 190 frame, several share a two-column grid
+  of squares. The picture is cropped to its frame (object-fit: cover), so there
+  is never a frame wider than its picture, which is how a GIF used to get an
+  empty grey box beside it. Anything that isn't a picture (a video, a PDF) is a
+  file row, as on the website.
+*/
+function PostMedia({ urls }: { urls: string[] }) {
+  const images = urls.filter(isImageUrl);
+  const files = urls.filter((url) => !isImageUrl(url));
+  const menu = async (event: MouseEvent, url: string, name: string, image: boolean) => {
+    event.preventDefault();
+    const choice = await ch.menu.popup([
+      { id: "look", label: "Quick Look" },
+      { id: "save", label: "Save to Downloads…" },
+      ...(image ? [{ id: "copy", label: "Copy image address" }] : []),
+    ]);
+    if (choice === "look") void ch.files.quickLook(url, name);
+    if (choice === "save") void ch.files.save(url, name);
+    if (choice === "copy") void navigator.clipboard.writeText(url);
+  };
+  return (
+    <>
+      {images.length ? (
+        <div className={`post-imgs ${images.length > 1 ? "multi" : "one"}`}>
+          {images.map((url) => {
+            const name = attachmentName(url);
+            return (
+              <button key={url} className="post-img" title="Click to preview (Quick Look)" onClick={() => void ch.files.quickLook(url, name)} onContextMenu={(e) => void menu(e, url, name, true)}>
+                <img src={url} alt="Post attachment" loading="lazy" decoding="async" draggable={false} />
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      {files.length ? (
+        <div className="post-files">
+          {files.map((url) => {
+            const name = attachmentName(url);
+            return (
+              <button key={url} className="post-file" title="Click to preview (Quick Look)" onClick={() => void ch.files.quickLook(url, name)} onContextMenu={(e) => void menu(e, url, name, false)}>
+                <span><FileText /></span><b>{name}</b><Download />
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser; onOpen: (post: Post) => void }) {
   const category = categoryOf(post.filterTag);
   const own = post.author.id === user.id;
@@ -343,14 +407,8 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
       </header>
       {editing ? (
         <PostEditor html={post.body} saving={saving} error={editError} onSave={(html, empty) => void saveEdit(html, empty)} onCancel={() => setEditing(false)} />
-      ) : <RichText html={post.body} />}
-      {post.mediaUrls.length ? (
-        <div className={`imgs n${Math.min(post.mediaUrls.length, 4)}`}>
-          {post.mediaUrls.map((url) => (
-            <button key={url} className="img" onClick={() => void ch.files.quickLook(url, url.split("/").pop() ?? "image")}><img src={url} alt="" loading="lazy" /></button>
-          ))}
-        </div>
-      ) : null}
+      ) : <PostBody html={post.body} />}
+      {post.mediaUrls.length ? <PostMedia urls={post.mediaUrls} /> : null}
       {post.poll ? <PollView post={post} /> : null}
       <footer>
         <div className="reacts">
