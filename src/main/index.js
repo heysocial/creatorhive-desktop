@@ -273,7 +273,34 @@ function createWindow({ show }) {
   else void mainWindow.loadFile(path.join(__dirname, "..", "..", "renderer", "dist", "index.html"));
 }
 
+/*
+  A Dock click, a second launch, a notification or a link can ask for the
+  window while the app is still starting, before Electron allows windows
+  ("Cannot create BrowserWindow before app is ready", Admin → Bugs, Oct 28).
+  Those requests wait here and run, in order, once start-up has made it.
+*/
+let windowStarted = false;
+const waitingForWindow = [];
+
+function whenWindowStarted(task) {
+  if (windowStarted) task();
+  else waitingForWindow.push(task);
+}
+
+function windowHasStarted() {
+  windowStarted = true;
+  for (const task of waitingForWindow.splice(0)) task();
+}
+
+/** Send once the interface has loaded, so a navigation asked for at start-up isn't lost. */
+function sendWhenLoaded(channel, payload) {
+  const contents = mainWindow?.webContents;
+  if (contents && !contents.isDestroyed() && contents.isLoading()) contents.once("did-finish-load", () => send(channel, payload));
+  else send(channel, payload);
+}
+
 function showWindow() {
+  if (!windowStarted) return void whenWindowStarted(showWindow);
   if (!mainWindow) createWindow({ show: true });
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
@@ -282,14 +309,16 @@ function showWindow() {
 
 /** Open a website path (from a notification or the menu bar) in the app. */
 function openPath(target) {
+  if (!windowStarted) return void whenWindowStarted(() => openPath(target));
   showWindow();
-  if (typeof target === "string" && target.startsWith("/") && !target.startsWith("//")) send("navigate", target);
+  if (typeof target === "string" && target.startsWith("/") && !target.startsWith("//")) sendWhenLoaded("navigate", target);
 }
 
 function command(id) {
+  if (!windowStarted) return void whenWindowStarted(() => command(id));
   if (id === "settings") return void popouts.open({ kind: "settings", id: "main" }, windowChrome);
   showWindow();
-  send("command", id);
+  sendWhenLoaded("command", id);
 }
 
 /* ---------- Sign-in state ---------- */
@@ -968,6 +997,7 @@ app.whenReady().then(async () => {
 
   const openedAtLogin = app.getLoginItemSettings().wasOpenedAtLogin;
   createWindow({ show: !openedAtLogin });
+  windowHasStarted();
   // Signed in from before (or from 1.x)? Start listening even with the window hidden.
   const user = await site.getSession();
   if (user) setSignedIn(true);

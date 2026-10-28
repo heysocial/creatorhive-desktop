@@ -67,6 +67,32 @@ function describe(error: unknown): { message: string; stack: string | null } {
   }
 }
 
+/*
+  A chunk that fails to load means this window's code is older than the files
+  next to it (an update swapped them underneath a running app). Reload once
+  instead of reporting; if it fails again within five minutes, the reload
+  didn't help and it is reported. Same rule as the website's
+  lib/errors/stale-chunk.ts.
+*/
+const CHUNK_FAILURE =
+  /Failed to load chunk|Loading chunk [\w./-]+ failed|ChunkLoadError|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
+const CHUNK_RELOAD_KEY = "creatorhive:chunk-reload-at";
+const CHUNK_RETRY_WINDOW_MS = 5 * 60_000;
+
+function reloadForStaleChunk(message: string): boolean {
+  if (!CHUNK_FAILURE.test(message)) return false;
+  try {
+    const now = Date.now();
+    const last = Number(window.sessionStorage.getItem(CHUNK_RELOAD_KEY));
+    if (last > 0 && now - last >= 0 && now - last < CHUNK_RETRY_WINDOW_MS) return false;
+    window.sessionStorage.setItem(CHUNK_RELOAD_KEY, String(now));
+  } catch {
+    return false;
+  }
+  window.location.reload();
+  return true;
+}
+
 /** Not worth a report: a request that failed for being offline or signed out (the app already says so). */
 function expected(error: unknown) {
   if (error instanceof ApiError) return error.status === 0 || error.status === 401;
@@ -77,7 +103,7 @@ export function reportError(kind: "render" | "error" | "unhandled-rejection", er
   try {
     if (expected(error) || reported >= MAX_PER_PAGE) return;
     const { message, stack } = describe(error);
-    if (!message) return;
+    if (!message || reloadForStaleChunk(message)) return;
     reported += 1;
     ch.errors?.report({ kind, message, stack, componentStack: componentStack ?? null, route: currentScreen() });
   } catch {
