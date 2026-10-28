@@ -24,45 +24,7 @@ import "../../styles/admin-events-misc.css";
   star, and Delete with its children. Members only read them.
 */
 
-/* ---------- Who sees Resources ---------- */
-
-export function ResourcesAudienceSwitch() {
-  const owner = useAdminAccess().data?.owner === true;
-  const audience = useQuery({
-    queryKey: ["resources", "audience"],
-    enabled: owner,
-    queryFn: async () => ((await api<{ audience?: string }>("/api/resources/access")).audience === "everyone" ? "everyone" : "owner") as "owner" | "everyone",
-  });
-  const [saving, setSaving] = useState(false);
-  if (!owner) return null;
-
-  async function change(next: "owner" | "everyone") {
-    if (next === audience.data) return;
-    const question = next === "everyone"
-      ? "Turn Resources on for every member? They'll see it in place of Improve straight away."
-      : "Hide Resources from everyone but you? Members' pages stay saved; they just can't open them until it's back on.";
-    if (!window.confirm(question)) return;
-    setSaving(true);
-    try {
-      await api("/api/resources/access", { method: "PATCH", body: { audience: next } });
-      queryClient.setQueryData(["resources", "audience"], next);
-    } catch {
-      window.alert("Couldn't change who sees Resources. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="resx-audience" role="group" aria-label="Who sees Resources">
-      <span>Who sees Resources</span>
-      <div className="seg">
-        <button className={audience.data === "owner" ? "on" : ""} aria-pressed={audience.data === "owner"} disabled={saving || !audience.data} onClick={() => void change("owner")}>Only you</button>
-        <button className={audience.data === "everyone" ? "on" : ""} aria-pressed={audience.data === "everyone"} disabled={saving || !audience.data} onClick={() => void change("everyone")}>Everyone</button>
-      </div>
-    </div>
-  );
-}
+/* The "Who sees Resources" switch was removed in 2.0.16 (it was flipped by accident); the website hides Resources for everyone for now. */
 
 /* ---------- The CreatorHive guides ---------- */
 

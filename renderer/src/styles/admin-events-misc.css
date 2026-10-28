@@ -24,8 +24,6 @@
 
 /* ---------- Resources: who sees it (the owner's switch) ---------- */
 
-.resx-audience { display: inline-flex; align-items: center; gap: 8px; }
-.resx-audience > span { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
 
 /* ---------- The CreatorHive guides, as owner and team edit them ---------- */
 

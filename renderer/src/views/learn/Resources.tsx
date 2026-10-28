@@ -7,7 +7,7 @@ import { api, ApiError, queryClient } from "../../lib/api";
 import { bytes, shortTime } from "../../lib/format";
 import { RichText, openLink } from "../../lib/html";
 import { nav } from "../../lib/nav";
-import { GuideEditor, GuidesTree, ResourcesAudienceSwitch, useCanEditGuides } from "./ResourcesAdmin";
+import { GuideEditor, GuidesTree, useCanEditGuides } from "./ResourcesAdmin";
 
 /*
   Resources: the member's own pages (the website's Notion-like workspace,
@@ -217,7 +217,6 @@ export function Resources({ pageId }: { pageId?: string }) {
       <div className="mhead">
         <h1>Resources</h1><span className="sub">{access.data ? "Your pages · Only you" : "CreatorHive guides"}</span>
         <div className="acts">
-          <ResourcesAudienceSwitch />
           {access.data ? <button className="btn honey" onClick={() => void newPage()}><Plus />New page</button> : null}
           {pageId && access.data ? <button className="btn" onClick={async () => {
             if (!window.confirm("Move this page to the trash?")) return;
