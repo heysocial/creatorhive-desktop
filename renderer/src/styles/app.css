@@ -1355,7 +1355,9 @@ html.is-popout body { background: var(--card); }
 .tree-row .tw { width: 20px; height: 26px; display: grid; place-items: center; color: var(--ink-4); }
 .tree-row .tw svg { width: 13px; height: 13px; }
 .tree-row .tl, .tree-row.tl { flex: 1; display: flex; align-items: center; gap: 7px; text-align: left; font-size: 13.5px; height: 28px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tree-row.solo { padding: 0 8px; width: 100%; }
+.tree-row.solo { flex: none; padding: 0 8px; width: 100%; }
+.tree-row.solo svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--ink-3); }
+.tree-row.solo span { overflow: hidden; text-overflow: ellipsis; }
 .tree-hit { display: flex; flex-direction: column; text-align: left; padding: 6px 10px; border-radius: 8px; font-size: 13px; }
 .tree-hit:hover { background: var(--sel); }
 .tree-hit small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

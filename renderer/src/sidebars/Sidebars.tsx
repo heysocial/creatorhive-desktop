@@ -17,8 +17,8 @@ import { openDealForm } from "../views/hub/DealForm";
 import { openExport } from "../views/hub/Export";
 import { money } from "../lib/format";
 import { Clock3, Hourglass, Repeat, Heart, MessagesSquare, MessageCircle as Bubble, PlayCircle, Sparkles as Spark, FileText } from "lucide-react";
-import { percent, useCourses, useImprove } from "../lib/learn";
-import { useResourcePages, useResourcesAccess, useWikiPages } from "../views/learn/Resources";
+import { percent, useCourses, useImprove, useImproveResources } from "../lib/learn";
+import { useResourcePages, useResourcesAccess } from "../views/learn/Resources";
 import { useActivity, useActivityThreads } from "../lib/activity";
 import { HeySocialSidebar } from "./HeySocialSidebar";
 import { AdminSidebar } from "./AdminSidebar";
@@ -184,7 +184,7 @@ function Learn() {
   const grade = useImprove().data?.grade.overallPercentage;
   const access = useResourcesAccess().data;
   const mine = useResourcePages(access === true).data ?? [];
-  const wiki = useWikiPages(access === false).data ?? [];
+  const guides = useImproveResources().data ?? [];
   const inProgress = courses.filter((c) => c.completedCount > 0 && c.completedCount < c.lessonCount);
   return (
     <>
@@ -204,9 +204,10 @@ function Learn() {
             {mine.filter((p) => !p.parentId).slice(0, 12).map((p) => <SidebarItem key={p.id} icon={<span className="emoji-ico">{p.icon ?? "📄"}</span>} label={p.title || "Untitled"} view={{ kind: "resource", id: p.id }} />)}
           </SidebarSection>
         ) : null}
-        {access === false && wiki.length ? (
+        {access === false && guides.length ? (
           <SidebarSection id="learn-guides" title="CreatorHive guides">
-            {wiki.filter((p) => !p.parentId).slice(0, 12).map((p) => <SidebarItem key={p.id} icon={<FileText />} label={p.title} view={{ kind: "resource", id: p.id }} />)}
+            {/* AI Script Writer already has its own item above. */}
+            {guides.filter((g) => g.slug !== "ai-script-writer").map((g) => <SidebarItem key={g.id} icon={<FileText />} label={g.title} view={{ kind: "improve-resource", slug: g.slug }} />)}
           </SidebarSection>
         ) : null}
       </div>

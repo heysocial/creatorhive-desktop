@@ -1,18 +1,19 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { PageEditor, knowVersion, savePage } from "./PageEditor";
 import { ChevronDown, ChevronRight, File as FileIcon, FileText, Link2, Plus, Search, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
 import { bytes, shortTime } from "../../lib/format";
-import { RichText, openLink } from "../../lib/html";
+import { openLink } from "../../lib/html";
 import { nav } from "../../lib/nav";
-import { GuideEditor, GuidesTree, useCanEditGuides } from "./ResourcesAdmin";
+import { useImproveResources } from "../../lib/learn";
 
 /*
   Resources: the member's own pages (the website's Notion-like workspace,
-  /api/resources) when it's switched on for them, otherwise the shared
-  CreatorHive guides (/api/pages). Pages read here; files open in Quick Look.
+  /api/resources) when it's switched on for them, otherwise the CreatorHive
+  guides: the website's Improve resources, each opening in ImproveResource.
+  Pages read here; files open in Quick Look.
   Writing a page's body happens on the website for now.
 */
 
@@ -20,7 +21,6 @@ interface PageNode { id: string; parentId: string | null; title: string; icon: s
 interface ResFile { id: string; kind: string; filename: string; mimeType: string; sizeBytes: number; url: string }
 interface PageDetail extends PageNode { doc: TipNode; version: number; archivedAt: string | null; breadcrumbs: { id: string; title: string; icon: string | null }[]; files: Record<string, ResFile>; coverFileId: string | null }
 interface TipNode { type: string; text?: string; attrs?: Record<string, unknown>; marks?: { type: string; attrs?: Record<string, unknown> }[]; content?: TipNode[] }
-interface WikiPage { id: string; parentId: string | null; title: string; icon: string | null; isPublished: boolean; starred: boolean }
 
 export function useResourcesAccess() {
   return useQuery({
@@ -33,9 +33,6 @@ export function useResourcesAccess() {
 
 export function useResourcePages(enabled: boolean) {
   return useQuery({ queryKey: ["resources", "pages"], enabled, queryFn: async () => (await api<{ pages: PageNode[] }>("/api/resources/pages")).pages });
-}
-export function useWikiPages(enabled: boolean) {
-  return useQuery({ queryKey: ["wiki", "pages"], enabled, retry: false, queryFn: async () => (await api<{ pages: WikiPage[] }>("/api/pages")).pages });
 }
 
 /* ---------- TipTap JSON, drawn read-only ---------- */
@@ -140,21 +137,7 @@ function MyPage({ id }: { id: string }) {
   );
 }
 
-/* ---------- The shared CreatorHive guides ---------- */
-
-function WikiPageView({ id }: { id: string }) {
-  const page = useQuery({ queryKey: ["wiki", "page", id], queryFn: async () => (await api<{ page: { title: string; icon: string | null; body: string; authorName: string | null; updatedAt: string } }>(`/api/pages/${id}`)).page });
-  if (!page.data) return <div className="empty-state">{page.isError ? "This guide isn't available." : "Loading…"}</div>;
-  return (
-    <div className="doc-page scroll">
-      <div className="doc-inner">
-        <div className="doc-title"><span className="doc-icon">{page.data.icon ?? "📘"}</span><h1>{page.data.title}</h1></div>
-        <div className="faint" style={{ fontSize: 12.5 }}>{page.data.authorName ? `By ${page.data.authorName} · ` : ""}Updated {shortTime(page.data.updatedAt)}</div>
-        <RichText html={page.data.body} className="rich doc-body selectable" />
-      </div>
-    </div>
-  );
-}
+/* ---------- The CreatorHive guides: the website's Improve resources (lib/learn.ts), opened in ImproveResource ---------- */
 
 function Tree({ pages, parent, depth, current, onOpen }: { pages: PageNode[]; parent: string | null; depth: number; current?: string; onOpen: (id: string) => void }) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -180,27 +163,19 @@ function Tree({ pages, parent, depth, current, onOpen }: { pages: PageNode[]; pa
 export function Resources({ pageId }: { pageId?: string }) {
   const access = useResourcesAccess();
   const mine = useResourcePages(access.data === true);
-  const wiki = useWikiPages(access.data === false);
   const [q, setQ] = useState("");
   const search = useQuery({
     queryKey: ["resources", "search", q],
     enabled: access.data === true && q.trim().length >= 2,
     queryFn: async () => (await api<{ results: { id: string; title: string; icon: string | null; snippet: string }[] }>(`/api/resources/search?q=${encodeURIComponent(q.trim())}`)).results,
   });
-  // The guides search, as the website's Resources page has it.
-  const guideSearch = useQuery({
-    queryKey: ["wiki", "search", q],
-    enabled: access.data === false && q.trim().length >= 2,
-    queryFn: async () => {
-      const { results } = await api<{ results: { id: string; title: string; icon: string | null; snippet: string }[] }>(`/api/pages/search?q=${encodeURIComponent(q.trim())}`);
-      // The server can answer with every published guide for members: keep the ones that match.
-      const needle = q.trim().toLowerCase();
-      return results.filter((r) => `${r.title} ${r.snippet}`.toLowerCase().includes(needle));
-    },
-  });
+  // The CreatorHive guides: the same 10 as the website's Improve section.
+  const guides = useImproveResources();
+  const needle = q.trim().toLowerCase();
+  const shownGuides = (guides.data ?? []).filter((g) => needle.length < 2 || `${g.title} ${g.description}`.toLowerCase().includes(needle));
   const open = (id: string) => nav.open({ kind: "resource", id }, "learn", "ch");
-  const canEditGuides = useCanEditGuides();
-  const wikiPages = useMemo(() => (wiki.data ?? []).filter((p) => p.isPublished !== false), [wiki.data]);
+  // A guide opens as on the Improve page: the Script Writer is its own screen.
+  const openGuide = (slug: string) => nav.open(slug === "ai-script-writer" ? { kind: "script-writer" } : { kind: "improve-resource", slug }, "learn", "ch");
 
   async function newPage(parentId: string | null = null) {
     try {
@@ -239,20 +214,17 @@ export function Resources({ pageId }: { pageId?: string }) {
           ) : (
             <>
               <label className="search-inline" style={{ margin: "0 6px 8px" }}><Search /><input placeholder="Search guides" value={q} onChange={(e) => setQ(e.target.value)} /></label>
-              {q.trim().length >= 2 ? (
-                <>
-                  {(guideSearch.data ?? []).map((r) => (
-                    <button key={r.id} className="tree-hit" onClick={() => open(r.id)}><b>{r.icon ?? "📘"} {r.title}</b><small className="faint">{r.snippet}</small></button>
-                  ))}
-                  {guideSearch.data?.length === 0 ? <p className="faint" style={{ padding: 10 }}>No guides match.</p> : null}
-                </>
-              ) : canEditGuides ? <GuidesTree pages={wiki.data ?? []} current={pageId} /> : wikiPages.map((p) => <button key={p.id} className={`tree-row tl solo ${pageId === p.id ? "on" : ""}`} onClick={() => open(p.id)}><span>{p.icon ?? "📘"}</span>{p.title}</button>)}
+              {shownGuides.map((g) => (
+                <button key={g.id} className="tree-row tl solo" title={g.title} onClick={() => openGuide(g.slug)}><FileText /><span>{g.title}</span></button>
+              ))}
+              {guides.data && shownGuides.length === 0 ? <p className="faint" style={{ padding: 10 }}>No guides match.</p> : null}
+              {guides.isError || guides.data === null ? <p className="faint" style={{ padding: 10 }}>The guides couldn't load.</p> : null}
             </>
           )}
         </aside>
         <div className="res-main">
-          {pageId ? (access.data ? <MyPage key={pageId} id={pageId} /> : canEditGuides ? <GuideEditor key={pageId} id={pageId} /> : <WikiPageView key={pageId} id={pageId} />)
-            : <div className="empty-state">{access.isLoading ? "Loading…" : "Pick a page on the left."}</div>}
+          {pageId && access.data ? <MyPage key={pageId} id={pageId} />
+            : <div className="empty-state">{access.isLoading ? "Loading…" : access.data ? "Pick a page on the left." : "Pick a guide on the left."}</div>}
         </div>
       </div>
     </div>
