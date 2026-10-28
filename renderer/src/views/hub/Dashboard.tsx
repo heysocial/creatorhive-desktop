@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ChevronRight, Download, Hourglass, Plus, Wallet } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { DEAL_STATUSES, sourcePath, useHubSource, type DealStatus } from "../../lib/hub";
+import { DEAL_STATUSES, deliveredAgo, sourcePath, staleText, useHubSource, type DealStatus } from "../../lib/hub";
 import { money, plural } from "../../lib/format";
 import { Modal, Monogram, StagePill } from "./parts";
 import { openDeal } from "./Deals";
@@ -28,8 +28,10 @@ interface Dash {
   };
   deals: DashDeal[];
   attention: {
-    awaitingPayment: { id: string; brandName: string; amount: number; days: number }[];
+    // Overdue first (delivered 14+ days ago, not paid), as the server orders them; older servers leave out the newer fields.
+    awaitingPayment: { id: string; brandName: string; amount: number; days: number; deliveredAt?: string | null; overdue?: boolean }[];
     awaitingCount: number; awaitingTotal: number; awaitingIds?: string[];
+    overdueCount?: number; overdueTotal?: number; overdueIds?: string[];
     stale: { id: string; brandName: string; amount: number; days: number; status: DealStatus }[];
     staleCount: number; staleIds?: string[];
   };
@@ -177,6 +179,7 @@ export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
   const when = d ? during(d.rangeLabel) : "";
   const before = d ? previousPeriod(d.range) : null;
   const brands = d ? topBrands(d) : [];
+  const overdueCount = d?.attention.overdueCount ?? 0;
 
   return (
     <div className="page dash-page">
@@ -263,16 +266,36 @@ export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
           <aside className="dash-side scroll">
             <h3>Needs attention</h3>
             {d.attention.awaitingCount ? (
-              <button className="t-card" onClick={() => setDrill({ title: "Awaiting payment", figure: money(d.attention.awaitingTotal), ids: d.attention.awaitingIds ?? d.attention.awaitingPayment.map((a) => a.id) })}>
-                <span className="t-ico honey"><Wallet /></span>
-                <span><b>Awaiting payment · {money(d.attention.awaitingTotal)}</b><small>{d.attention.awaitingPayment.slice(0, 2).map((a) => `${a.brandName} ${a.days}d`).join(" · ")}{d.attention.awaitingCount > 2 ? ` · +${d.attention.awaitingCount - 2} more` : ""}</small></span>
-              </button>
+              <div className="att-box">
+                <button className="t-card" onClick={() => setDrill({ title: "Awaiting payment", figure: money(d.attention.awaitingTotal), ids: d.attention.awaitingIds ?? d.attention.awaitingPayment.map((a) => a.id) })}>
+                  <span className="t-ico honey"><Wallet /></span>
+                  <span><b>Awaiting payment · {money(d.attention.awaitingTotal)}</b><small>{plural(d.attention.awaitingCount, "deal")} delivered, not paid yet</small></span>
+                </button>
+                {overdueCount ? (
+                  <button className="att-link" onClick={() => setDrill({ title: "Overdue", figure: money(d.attention.overdueTotal ?? 0), ids: d.attention.overdueIds ?? d.attention.awaitingPayment.filter((a) => a.overdue).map((a) => a.id) })}>
+                    <span className="tag-s late">{overdueCount} overdue</span><span className="faint">Delivered 14+ days ago</span><ChevronRight />
+                  </button>
+                ) : null}
+                {d.attention.awaitingPayment.map((a) => (
+                  <button key={a.id} className="att-row" onClick={() => openDeal(a.id)}>
+                    <span><b>{a.brandName}</b><small>{a.deliveredAt ? deliveredAgo(a.days) : `${a.days}d`}</small></span>
+                    {a.overdue ? <span className="tag-s late">Overdue</span> : null}<b>{money(a.amount)}</b>
+                  </button>
+                ))}
+              </div>
             ) : null}
             {d.attention.staleCount ? (
-              <button className="t-card" onClick={() => setDrill({ title: "Stale deals", figure: plural(d.attention.staleCount, "deal"), ids: d.attention.staleIds ?? d.attention.stale.map((s) => s.id) })}>
-                <span className="t-ico flame"><Hourglass /></span>
-                <span><b>{plural(d.attention.staleCount, "stale deal")}</b><small>No update in 7+ days: {d.attention.stale.slice(0, 3).map((s) => s.brandName).join(", ")}</small></span>
-              </button>
+              <div className="att-box">
+                <button className="t-card" onClick={() => setDrill({ title: "Stale deals", figure: plural(d.attention.staleCount, "deal"), ids: d.attention.staleIds ?? d.attention.stale.map((s) => s.id) })}>
+                  <span className="t-ico flame"><Hourglass /></span>
+                  <span><b>{plural(d.attention.staleCount, "stale deal")}</b><small>No stage change in 7+ days</small></span>
+                </button>
+                {d.attention.stale.map((s) => (
+                  <button key={s.id} className="att-row" onClick={() => openDeal(s.id)}>
+                    <span><b>{s.brandName}</b><small>{staleText(s.days)}</small></span><b>{money(s.amount)}</b>
+                  </button>
+                ))}
+              </div>
             ) : null}
             {!d.attention.awaitingCount && !d.attention.staleCount ? <p className="faint">Nothing waiting on you. Nice.</p> : null}
           </aside>

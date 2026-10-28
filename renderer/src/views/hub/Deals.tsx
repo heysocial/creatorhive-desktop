@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import {
   BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, active, addDaysIso, allDeals, contracted, dayOf, daysBetween, dealTypeLabel, isDraftPending, localToday,
-  monDay, monDayYear, potential, total, useCash, useDeals, type Board, type Cash, type Deal, type DealStatus,
+  monDay, monDayYear, potential, timingLine, total, useCash, useDeals, type Board, type Cash, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { money, plural } from "../../lib/format";
 import { nav } from "../../lib/nav";
@@ -110,6 +110,7 @@ function PeopleChip({ deal, shared }: { deal: Deal; shared: boolean }) {
 
 function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared: boolean; onDragStart: (e: React.PointerEvent, deal: Deal) => void; dragging: boolean }) {
   const payment = deal.payment_method_ref?.label;
+  const timing = timingLine(deal);
   return (
     <div className={`deal-card ${dragging ? "ghost" : ""}`} onPointerDown={(e) => onDragStart(e, deal)} onClick={() => openDeal(deal.id)}
       role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") openDeal(deal.id); }}>
@@ -125,6 +126,7 @@ function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared:
       {deal.deliverables ? <div className="dc-line">{deal.deliverables}</div> : null}
       {deal.status === "pending_payment" && deal.payment_expected_at ? <div className={`dc-due ${deal.payment_expected_at < localToday() ? "late-text" : ""}`}>Payment expected {monDay(deal.payment_expected_at)}</div> : null}
       {isDraftPending(deal.status) && deal.draft_due_at ? <div className="dc-due">Draft due {monDay(deal.draft_due_at)}</div> : null}
+      {timing ? <div className="dc-when">{timing.text}{timing.overdue ? <span className="tag-s late">Overdue</span> : null}</div> : null}
       <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}><StageButton deal={deal} onPick={(s) => void moveDeal(deal, s)} /></div>
     </div>
   );

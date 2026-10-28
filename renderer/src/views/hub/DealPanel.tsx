@@ -6,8 +6,8 @@ import { ch } from "../../lib/bridge";
 import { openLink } from "../../lib/html";
 import { api, queryClient } from "../../lib/api";
 import {
-  BOARD_LABELS, DEAL_STATUSES, STATUS_LABELS, boardOf, daysBetween, dealTypeLabel, deleteDeal, isDraftPending, localToday, monDay,
-  monDayYear, nextStatus, useDeal, useDeals, withTz, type Deal, type DealStatus,
+  BOARD_LABELS, DEAL_STATUSES, STATUS_LABELS, boardOf, daysBetween, dealTypeLabel, deleteDeal, isDeliveredOrLater, isDraftPending, localToday, monDay,
+  monDayYear, nextStatus, shortDay, staleText, unpaidText, useDeal, useDeals, withTz, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { bytes, money } from "../../lib/format";
 import { nav } from "../../lib/nav";
@@ -19,8 +19,10 @@ interface Brief { id: string; filename: string; kind: "pdf" | "word" | "image" |
 
 function urgency(deal: Deal) {
   const today = localToday();
+  // Delivered and not paid: how long ago, red once it's overdue (14+ days), unless an expected payment day says more.
+  const unpaid = deal.unpaid_days != null ? { text: unpaidText(deal.unpaid_days), late: Boolean(deal.payment_overdue) } : null;
   if (deal.status === "pending_payment") {
-    if (!deal.payment_expected_at) return { text: "Payment pending", late: false };
+    if (!deal.payment_expected_at) return unpaid ?? { text: "Payment pending", late: false };
     const days = daysBetween(today, deal.payment_expected_at);
     if (days < 0) return { text: `Payment ${-days} ${days === -1 ? "day" : "days"} overdue`, late: true };
     if (days === 0) return { text: "Payment expected today", late: false };
@@ -30,7 +32,9 @@ function urgency(deal: Deal) {
     const late = deal.draft_due_at <= today;
     return { text: deal.draft_due_at === today ? "Draft due today" : `Draft due ${monDay(deal.draft_due_at)}`, late };
   }
+  if (unpaid) return unpaid;
   if (deal.status === "completed") return null;
+  if (deal.stale_days != null) return { text: staleText(deal.stale_days), late: false };
   const days = daysBetween(deal.created_at, today);
   return { text: `${days} ${days === 1 ? "day" : "days"} in your pipeline`, late: false };
 }
@@ -277,7 +281,7 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
       <div className="dp-cols">
         <div className="dp-main scroll">
           <div className="faint">{dealTypeLabel(deal.deal_type)} · started {started} · {daysIn} {daysIn === 1 ? "day" : "days"} in</div>
-          <div className="dp-amount"><b>{money(deal.amount_usd)}</b>{u ? <span className={`urgent ${u.late ? "late" : ""}`}><Clock />{u.text}</span> : null}</div>
+          <div className="dp-amount"><b>{money(deal.amount_usd)}</b>{u ? <span className={`urgent ${u.late ? "late" : ""}`}><Clock />{u.text}</span> : null}{deal.payment_overdue ? <span className="tag-s late">Overdue</span> : null}</div>
           <div className="dp-actions">
             {next ? (
               <button className="btn honey lg" disabled={moving} onClick={() => void moveTo(next)}>
@@ -305,9 +309,11 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
         </div>
         <div className="dp-side scroll">
           <InvoiceSection deal={deal} />
-          {deal.payment_expected_at || deal.payment_terms_days != null || deal.payment_method_ref || deal.paid_at || deal.status === "completed" ? (
+          {deal.payment_expected_at || deal.payment_terms_days != null || deal.payment_method_ref || deal.paid_at || isDeliveredOrLater(deal.status) ? (
             <section className="dp-sec">
               <span className="section-label">Payment</span>
+              {/* Set by the server on the move to Delivered; changed or cleared in Edit deal, like the other dates. */}
+              {isDeliveredOrLater(deal.status) ? <Row label="Delivered on">{deal.delivered_at ? shortDay(deal.delivered_at) : <button className="link" onClick={() => openDealForm({ deal })}>Add date</button>}</Row> : null}
               {deal.payment_expected_at ? <Row label="Expected">{monDay(deal.payment_expected_at)}</Row> : null}
               {deal.payment_terms_days != null ? <Row label="Terms">{deal.payment_terms_days === 0 ? "Due on receipt" : `Net ${deal.payment_terms_days}`}</Row> : null}
               {deal.payment_method_ref ? <Row label="Via">{deal.payment_method_ref.label}</Row> : null}

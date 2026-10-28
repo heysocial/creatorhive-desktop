@@ -42,6 +42,9 @@ export const MONEY_IN_PLAY_STATUSES: DealStatus[] = ["deal_secured", "waiting_pr
 export const POTENTIAL_STATUSES: DealStatus[] = ["pitching", "deliverables_contract"];
 const DRAFT_PENDING = new Set<DealStatus>(["pitching", "deliverables_contract", "deal_secured", "waiting_product", "production", "post_production", "revisions"]);
 export const isDraftPending = (s: DealStatus) => DRAFT_PENDING.has(s);
+/** Delivered or later: the stages a deal can have a "Delivered on" day. */
+export const DELIVERED_STATUSES: DealStatus[] = ["delivered", "pending_payment", "case_study", "completed"];
+export const isDeliveredOrLater = (s: DealStatus) => DELIVERED_STATUSES.includes(s);
 
 export const boardOf = (status: DealStatus): Board => BOARDS.find((b) => BOARD_STATUSES[b].includes(status)) ?? "outreach";
 export function nextStatus(status: DealStatus): DealStatus | null {
@@ -77,6 +80,12 @@ export interface Deal {
   deliverables_count: number | null;
   status: DealStatus;
   paid_at: string | null;
+  /* The day it was delivered, its last stage change, and what the server works out from them (lib/hub/timing.ts on the website). Older servers leave them out. */
+  delivered_at?: string | null;
+  stage_changed_at?: string;
+  stale_days?: number | null;
+  unpaid_days?: number | null;
+  payment_overdue?: boolean;
   created_at: string;
   updated_at: string;
   added_by: { id: string; name: string; initials: string } | null;
@@ -189,6 +198,24 @@ export function daysBetween(from: string, to: string) {
 export const monDay = (value: string) => new Date(`${dayOf(value)}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 export const monDayYear = (value: string) => new Date(`${dayOf(value)}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
+/** "Oct 20", with the year only when it isn't this one ("Oct 20, 2025"). */
+export const shortDay = (value: string) => (dayOf(value).slice(0, 4) === localToday().slice(0, 4) ? monDay(value) : monDayYear(value));
+
+/* ---------- Timing words (the website's lib/hub/timing.ts; the server counts the days) ---------- */
+
+/** "Delivered today" / "Delivered yesterday" / "Delivered 9 days ago". */
+export const deliveredAgo = (days: number) => (days <= 0 ? "Delivered today" : days === 1 ? "Delivered yesterday" : `Delivered ${days} days ago`);
+export const unpaidText = (days: number) => `${deliveredAgo(days)} · not paid yet`;
+export const staleText = (days: number) => `No stage change in ${days} ${days === 1 ? "day" : "days"}`;
+
+/** A card's one timing line: unpaid since delivery (maybe overdue), else the delivered day, else why it's stale. */
+export function timingLine(deal: Deal): { text: string; overdue: boolean } | null {
+  if (deal.unpaid_days != null) return { text: unpaidText(deal.unpaid_days), overdue: Boolean(deal.payment_overdue) };
+  if (deal.delivered_at) return { text: `Delivered ${shortDay(deal.delivered_at)}`, overdue: false };
+  if (deal.stale_days != null) return { text: staleText(deal.stale_days), overdue: false };
+  return null;
+}
+
 /* ---------- Writes ---------- */
 
 export async function refreshHub() {
@@ -254,6 +281,8 @@ export function errorText(error: unknown) {
     "invalid contact_email": "That contact email doesn't look right.",
     "paid_on can't be in the future": "The paid date can't be in the future.",
     "invalid paid_on": "That paid date doesn't look right.",
+    "delivered_on can't be in the future": "The delivered date can't be in the future.",
+    "invalid delivered_on": "That delivered date doesn't look right.",
   };
   if (words[code]) return words[code];
   return code.charAt(0).toUpperCase() + code.slice(1);

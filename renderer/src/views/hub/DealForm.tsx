@@ -3,7 +3,7 @@ import { Check, FileText, Link2, Loader2, Paperclip, Pencil, Plus, Trash2, X } f
 import { api, ApiError, queryClient } from "../../lib/api";
 import { bytes } from "../../lib/format";
 import {
-  DEAL_STATUSES, DEAL_TYPES, STATUS_LABELS, createDeal, dayOf, createOption, deleteOption, errorText, localToday, patchDeal, renameOption, useIndustries,
+  DEAL_STATUSES, DEAL_TYPES, STATUS_LABELS, createDeal, dayOf, createOption, deleteOption, errorText, isDeliveredOrLater, localToday, patchDeal, renameOption, useIndustries,
   usePaymentMethods, useSources, withTz, type Deal, type DealStatus, type DealType, type Option, type OptionKind,
 } from "../../lib/hub";
 import { Modal, celebrate, hubToast, useLayer } from "./parts";
@@ -232,7 +232,7 @@ async function attachBriefs(dealId: string, drafts: DraftBrief[]) {
 
 interface Values {
   amount: string; brand: string; email: string; name: string; phone: string; sources: string[]; industry: string | null;
-  type: DealType; status: DealStatus; paidOn: string; paidTouched: boolean; method: string | null; deliverables: string; notes: string;
+  type: DealType; status: DealStatus; paidOn: string; paidTouched: boolean; deliveredOn: string; deliveredTouched: boolean; method: string | null; deliverables: string; notes: string;
   draftDue: string; paymentExpected: string; terms: string; count: string;
 }
 
@@ -251,6 +251,8 @@ function initial(start: FormStart): Values {
     status: dup ? "pitching" : d?.status ?? start.status ?? "pitching",
     paidOn: d?.paid_at && !dup ? dayOf(d.paid_at) : "",
     paidTouched: false,
+    deliveredOn: d?.delivered_at && !dup ? dayOf(d.delivered_at) : "",
+    deliveredTouched: false,
     method: d?.payment_method_ref?.id ?? null,
     deliverables: d?.deliverables ?? "",
     notes: d?.notes ?? "",
@@ -313,6 +315,8 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
       payment_terms_days: v.terms,
       deliverables_count: v.count,
       ...(completed && (v.paidTouched || !editing) ? { paid_on: v.paidOn || null } : {}),
+      // Only when the member set it (or cleared it): otherwise the server stamps today on the move to Delivered.
+      ...(isDeliveredOrLater(v.status) && (editing ? v.deliveredTouched : v.deliveredOn) ? { delivered_on: v.deliveredOn || null } : {}),
     };
   }
 
@@ -437,6 +441,16 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
             <label className="flabel">Paid on</label>
             <input className="field narrow" type="date" max={today} value={v.paidOn} onChange={(e) => setV((c) => ({ ...c, paidOn: e.target.value, paidTouched: true }))} />
             <p className="hint">{!v.paidOn ? "Not counted in any month until you add the day it was paid." : v.paidOn === today ? "Today, unless you pick another day." : "Counts toward that month in Cash."}</p>
+          </>
+        ) : null}
+        {isDeliveredOrLater(v.status) ? (
+          <>
+            <label className="flabel">Delivered on · optional</label>
+            <div className="row">
+              <input className="field narrow" type="date" max={today} value={v.deliveredOn} aria-label="Delivered on" onChange={(e) => setV((c) => ({ ...c, deliveredOn: e.target.value, deliveredTouched: true }))} />
+              {v.deliveredOn ? <button type="button" className="btn" onClick={() => setV((c) => ({ ...c, deliveredOn: "", deliveredTouched: true }))}>Clear</button> : null}
+            </div>
+            <p className="hint">{v.deliveredOn ? "Unpaid 14 days after this day, it shows as overdue." : start.deal && isDeliveredOrLater(start.deal.status) ? "Add the day you delivered the content." : "Today when the deal moves to Delivered, unless you pick another day."}</p>
           </>
         ) : null}
         {editing || start.duplicateOf ? (
