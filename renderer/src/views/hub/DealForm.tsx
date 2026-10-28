@@ -450,7 +450,7 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
               <input className="field narrow" type="date" max={today} value={v.deliveredOn} aria-label="Delivered on" onChange={(e) => setV((c) => ({ ...c, deliveredOn: e.target.value, deliveredTouched: true }))} />
               {v.deliveredOn ? <button type="button" className="btn" onClick={() => setV((c) => ({ ...c, deliveredOn: "", deliveredTouched: true }))}>Clear</button> : null}
             </div>
-            <p className="hint">{v.deliveredOn ? "Unpaid 14 days after this day, it shows as overdue." : start.deal && isDeliveredOrLater(start.deal.status) ? "Add the day you delivered the content." : "Today when the deal moves to Delivered, unless you pick another day."}</p>
+            <p className="hint">{v.deliveredOn ? "Payment counts as overdue 14 days after this day." : start.deal && isDeliveredOrLater(start.deal.status) ? "Add the day the work was delivered." : "Today when the deal moves to Delivered, unless you pick another day."}</p>
           </>
         ) : null}
         {editing || start.duplicateOf ? (
