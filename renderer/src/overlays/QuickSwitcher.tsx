@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Bell, Calendar, ChartNoAxesCombined, Contact, FileText, GraduationCap, Hash, House, Kanban, Keyboard, Lock,
   LogOut, MessageCircle, Receipt, Search, Trophy, User, Users, ArrowLeftRight,
+  MessagesSquare,
 } from "lucide-react";
 import { api, useChannels, useConversations, useHeySocialAccess, useSearch } from "../lib/api";
 import { useQuery } from "@tanstack/react-query";
@@ -51,7 +52,8 @@ const SCREENS: { title: string; icon: ReactNode; location: Location; hint?: stri
   { title: "Past clients", icon: <Contact />, location: { ws: "ch", section: "hub", view: { kind: "hub", page: "clients" } } },
   { title: "Invoices", icon: <Receipt />, location: { ws: "ch", section: "hub", view: { kind: "hub", page: "invoices" } } },
   { title: "Courses", icon: <GraduationCap />, location: { ws: "ch", section: "learn", view: { kind: "learn", page: "courses" } }, hint: "⌘4" },
-  { title: "Activity", icon: <Bell />, location: { ws: "ch", section: "activity", view: { kind: "activity" } }, hint: "⌘5" },
+  { title: "Activity", icon: <Bell />, location: { ws: "ch", section: "home", view: { kind: "activity" } }, hint: "⌘5" },
+  { title: "Threads", icon: <MessagesSquare />, location: { ws: "ch", section: "home", view: { kind: "activity", tab: "threads" } } },
 ];
 
 export function QuickSwitcher({ onClose }: { onClose: () => void }) {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  AtSign, Bell, Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
+  Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
   Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen,
 } from "lucide-react";
 import { useChannels, useConversations, type Conversation, type Workspace } from "../lib/api";
@@ -16,10 +16,9 @@ import { smartDeals } from "../views/hub/Deals";
 import { openDealForm } from "../views/hub/DealForm";
 import { openExport } from "../views/hub/Export";
 import { money } from "../lib/format";
-import { Clock3, Hourglass, Repeat, Heart, MessagesSquare, MessageCircle as Bubble, PlayCircle, Sparkles as Spark, FileText } from "lucide-react";
+import { Clock3, Hourglass, Repeat, PlayCircle, Sparkles as Spark, FileText } from "lucide-react";
 import { percent, useCourses, useImprove, useImproveResources } from "../lib/learn";
 import { useResourcePages, useResourcesAccess } from "../views/learn/Resources";
-import { useActivity, useActivityThreads } from "../lib/activity";
 import { HeySocialSidebar } from "./HeySocialSidebar";
 import { AdminSidebar } from "./AdminSidebar";
 
@@ -219,28 +218,6 @@ function Learn() {
   );
 }
 
-function Activity({ title }: { title: string }) {
-  const all = useActivity("all").data;
-  const items = all?.items ?? [];
-  const count = (kind: string) => items.filter((i) => i.unread && i.kind === kind).length || undefined;
-  const threads = (useActivityThreads().data ?? []).filter((t) => t.unread).length || undefined;
-  return (
-    <>
-      <SidebarHead title={title} />
-      <div className="sb-scroll">
-        <SidebarItem icon={<Bell />} label="All activity" view={{ kind: "activity" }} count={all?.unread || undefined} />
-        <SidebarItem icon={<AtSign />} label="Mentions" view={{ kind: "activity", filter: "mentions" }} count={count("mention")} />
-        <SidebarItem icon={<Bubble />} label="Thread replies" view={{ kind: "activity", filter: "threads" }} quietCount={count("thread")} />
-        <SidebarItem icon={<Heart />} label="Reactions" view={{ kind: "activity", filter: "reactions" }} quietCount={count("reaction")} />
-        <SidebarSection id="activity-threads" title="Threads">
-          <SidebarItem icon={<MessagesSquare />} label="Threads" view={{ kind: "activity", tab: "threads" }} count={threads} />
-        </SidebarSection>
-      </div>
-    </>
-  );
-}
-
-
 export function Sidebar({ user }: { user: SessionUser }) {
   const { current } = useNav();
   const workspace: Workspace = current.ws === "hs" ? "heysocial" : "creatorhive";
@@ -256,7 +233,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
       content = <Learn />;
       break;
     case "activity":
-      content = current.ws === "hs" ? <HeySocialSidebar /> : <Activity title="Activity" />;
+      content = <HeySocialSidebar />;
       break;
     case "later":
       content = <HeySocialSidebar />;

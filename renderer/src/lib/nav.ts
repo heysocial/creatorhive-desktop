@@ -41,7 +41,8 @@ export interface Location {
 
 export const SECTIONS: Record<WorkspaceKey, Section[]> = {
   // Admin only shows on the rail for people the website lets in (Rail.tsx).
-  ch: ["home", "dms", "hub", "learn", "activity", "admin"],
+  // CreatorHive's Activity lives in the sidebar (Activity and Threads rows), not on the rail.
+  ch: ["home", "dms", "hub", "learn", "admin"],
   hs: ["home", "dms", "activity", "later"],
 };
 
@@ -51,7 +52,6 @@ const DEFAULT_VIEW: Record<WorkspaceKey, Partial<Record<Section, View>>> = {
     dms: { kind: "dms-home" },
     hub: { kind: "hub", page: "deals" },
     learn: { kind: "learn", page: "courses" },
-    activity: { kind: "activity" },
     admin: { kind: "admin", page: "metrics" },
   },
   hs: {
@@ -82,7 +82,11 @@ function initial(): State {
         : v.kind === "feed" ? { ...v, commentId: undefined }
         : v.kind === "activity" && v.filter && !["all", "mentions", "threads", "reactions"].includes(v.filter) ? { ...v, filter: undefined } : v);
       const remembered = Object.fromEntries(Object.entries(saved.remembered ?? {}).map(([k, v]) => [k, clean(v as View)]));
-      return { ...saved, current: { ...saved.current, view: clean(saved.current.view) }, remembered, back: [], forward: [] };
+      // CreatorHive's rail no longer has an Activity section: what was open there opens in Home.
+      const section = (ws: WorkspaceKey, s: Section) => (SECTIONS[ws].includes(s) ? s : "home");
+      const current = { ...saved.current, section: section(saved.current.ws, saved.current.section), view: clean(saved.current.view) };
+      const lastSection = { ch: section("ch", saved.lastSection?.ch ?? "home"), hs: section("hs", saved.lastSection?.hs ?? "home") };
+      return { ...saved, current, lastSection, remembered, back: [], forward: [] };
     }
   } catch {
     // Nothing saved, or unreadable: start at Home.

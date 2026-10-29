@@ -214,7 +214,8 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       case "go:dms": return nav.section("dms");
       case "go:hub": return nav.section("hub", "ch");
       case "go:learn": return nav.section("learn", "ch");
-      case "go:activity": return nav.section("activity");
+      // CreatorHive: Activity opens in the main area beside the channel list, as its sidebar row does. Hey Social keeps its own section.
+      case "go:activity": return nav.get().ws === "hs" ? nav.section("activity") : nav.open({ kind: "activity" }, "home", "ch");
       case "workspace:ch": return nav.workspace("ch");
       case "workspace:hs": return heySocial ? nav.workspace("hs") : undefined;
       case "quick-open": return setOverlay((open) => (open === "quick-open" ? null : "quick-open"));

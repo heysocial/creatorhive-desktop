@@ -89,11 +89,6 @@ export function useActivityThreads(enabled = true) {
   return useQuery({ queryKey: THREADS_KEY, enabled, queryFn: fetchThreads });
 }
 
-/** The bell's badge: `unread` counts every filter, so the All list carries it. */
-export function useActivityUnread() {
-  return useActivity("all").data?.unread ?? 0;
-}
-
 /**
  * The sidebar's two red counts, as on the website's bell: `activity` is the
  * list's unread (every filter), `threads` the threads with new replies.
