@@ -8,7 +8,7 @@ import type { SessionUser } from "../lib/bridge";
 import { commands } from "../lib/commands";
 import { nav, useNav } from "../lib/nav";
 import { Avatar, channelName } from "../lib/ui";
-import { SidebarHead, SidebarItem, SidebarSection, Skeleton } from "./parts";
+import { ActivityRows, SidebarHead, SidebarItem, SidebarSection, Skeleton } from "./parts";
 import { useTodayCount } from "../views/home/Today";
 import { useNextEventDay } from "../views/events/Events";
 import { BOARDS, BOARD_LABELS, active, allDeals, total, useDeals } from "../lib/hub";
@@ -75,6 +75,7 @@ function CreatorHiveHome() {
   return (
     <>
       <SidebarHead title="CreatorHive" action={() => commands.run("new-message")} />
+      <ActivityRows />
       <div className="sb-scroll">
         <SidebarItem icon={<House />} label="Home" view={{ kind: "feed" }} />
         <SidebarItem icon={<Sun />} label="Today" view={{ kind: "today" }} quietCount={today} honeyCount />
@@ -102,6 +103,7 @@ function DirectMessages({ workspace, user }: { workspace: Workspace; user: Sessi
   return (
     <>
       <SidebarHead title="Direct messages" action={() => commands.run("new-message")} />
+      {workspace === "creatorhive" ? <ActivityRows /> : null}
       <label className="search-trigger" style={{ position: "static", transform: "none", width: "auto", margin: "0 4px 8px", height: 28, flex: "none" }}>
         <Search />
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Find a DM"
@@ -155,6 +157,7 @@ function Hub() {
   return (
     <>
       <SidebarHead title="Creator Hub" actionLabel="New deal (⌥⌘N)" action={() => openDealForm({})} />
+      <ActivityRows />
       <div className="sb-scroll">
         <SidebarItem icon={<Kanban />} label="Deals" view={{ kind: "hub", page: "deals" }} meta={data ? String(active(deals).length) : undefined} />
         <SidebarItem icon={<ChartNoAxesCombined />} label="Dashboard" view={{ kind: "hub", page: "dashboard" }} />
@@ -189,6 +192,7 @@ function Learn() {
   return (
     <>
       <SidebarHead title="Learn" />
+      <ActivityRows />
       <div className="sb-scroll">
         <SidebarItem icon={<GraduationCap />} label="Courses" view={{ kind: "learn", page: "courses" }} meta={courses.length ? String(courses.length) : undefined} />
         <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} meta={grade !== undefined ? `${grade}%` : undefined} />

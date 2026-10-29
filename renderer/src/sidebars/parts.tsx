@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from "react";
-import { ChevronDown, SquarePen } from "lucide-react";
+import { Bell, ChevronDown, MessagesSquare, SquarePen } from "lucide-react";
+import { useActivityCounts } from "../lib/activity";
 import { ch, type NativeMenuItem } from "../lib/bridge";
 import { nav, useNav, type View } from "../lib/nav";
 import { sitePathFor } from "../lib/sitePaths";
+import { countLabel } from "../lib/ui";
 
 /* An open deal sits over its page; the page's row stays selected. */
 const strip = (v: View) => (v.kind === "hub" ? { ...v, dealId: undefined } : v);
@@ -100,4 +102,34 @@ export function SidebarSection({ id, title, children }: { id: string; title: str
 
 export function Skeleton({ rows = 4 }: { rows?: number }) {
   return <>{Array.from({ length: rows }, (_, i) => <div key={i} className="sb-skel" style={{ width: `${70 - i * 9}%` }} />)}</>;
+}
+
+/**
+ * CreatorHive's Activity and Threads, pinned at the top of every CreatorHive
+ * sidebar the way Slack has them, each with its red count. They open in Home,
+ * so the channel list stays beside them and one click goes straight back.
+ */
+export function ActivityRows() {
+  const { current } = useNav();
+  const counts = useActivityCounts();
+  const open = current.ws === "ch" && current.view.kind === "activity" ? (current.view.tab === "threads" ? "threads" : "activity") : null;
+  const row = (key: "activity" | "threads", label: string, icon: ReactNode, view: View) => {
+    const count = counts[key];
+    const on = open === key;
+    return (
+      <button key={key} className={`sb-item ${on ? "on" : count ? "unread" : ""}`} data-nav={JSON.stringify(view)} data-act-row={key}
+        aria-current={on ? "page" : undefined} aria-label={count ? `${label}, ${count} unread` : label}
+        onClick={() => nav.open(view, "home", "ch")}>
+        {icon}
+        <span className="label">{label}</span>
+        {count ? <span className="cnt">{countLabel(count)}</span> : null}
+      </button>
+    );
+  };
+  return (
+    <div className="sb-act-rows">
+      {row("activity", "Activity", <Bell />, { kind: "activity" })}
+      {row("threads", "Threads", <MessagesSquare />, { kind: "activity", tab: "threads" })}
+    </div>
+  );
 }

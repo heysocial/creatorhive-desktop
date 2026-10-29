@@ -74,28 +74,40 @@ export const ACTIVITY_KEY = ["activity"] as const;
 const listKey = (filter: ActivityFilter) => [...ACTIVITY_KEY, "list", filter] as const;
 const THREADS_KEY = [...ACTIVITY_KEY, "threads"] as const;
 
+async function fetchList(filter: ActivityFilter) {
+  const { unread, items } = await api<ActivityList>(`/api/activity?filter=${filter}`);
+  return { unread, items };
+}
+
+const fetchThreads = async () => (await api<{ threads: ActivityThread[] }>("/api/activity/threads")).threads;
+
 export function useActivity(filter: ActivityFilter = "all", enabled = true) {
-  return useQuery({
-    queryKey: listKey(filter),
-    enabled,
-    queryFn: async () => {
-      const { unread, items } = await api<ActivityList>(`/api/activity?filter=${filter}`);
-      return { unread, items };
-    },
-  });
+  return useQuery({ queryKey: listKey(filter), enabled, queryFn: () => fetchList(filter) });
 }
 
 export function useActivityThreads(enabled = true) {
-  return useQuery({
-    queryKey: THREADS_KEY,
-    enabled,
-    queryFn: async () => (await api<{ threads: ActivityThread[] }>("/api/activity/threads")).threads,
-  });
+  return useQuery({ queryKey: THREADS_KEY, enabled, queryFn: fetchThreads });
 }
 
 /** The bell's badge: `unread` counts every filter, so the All list carries it. */
 export function useActivityUnread() {
   return useActivity("all").data?.unread ?? 0;
+}
+
+/**
+ * The sidebar's two red counts, as on the website's bell: `activity` is the
+ * list's unread (every filter), `threads` the threads with new replies.
+ * Same queries as the Activity view, so reading there clears them here. They
+ * follow notifications:changed and window focus, and check once a minute too
+ * in case a read on another device didn't send a signal.
+ */
+export function useActivityCounts() {
+  const all = useQuery({ queryKey: listKey("all"), queryFn: () => fetchList("all"), refetchInterval: 60_000 });
+  const threads = useQuery({ queryKey: THREADS_KEY, queryFn: fetchThreads, refetchInterval: 60_000 });
+  return {
+    activity: all.data?.unread ?? 0,
+    threads: (threads.data ?? []).filter((t) => t.unread).length,
+  };
 }
 
 /** Fresh again when the window comes back (the list also follows notifications:changed, realtime.ts). */
