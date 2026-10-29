@@ -39,7 +39,7 @@ export function locationForPath(target: string): Location | null {
   if (admin) return { ws: "ch", section: "admin", view: { kind: "admin", page: (admin[1] ?? "metrics") as "metrics", id: ticket ?? (admin[2] ? decodeURIComponent(admin[2]) : undefined) } };
   // Admin → Announcements: its notification and its Activity row open the whole message.
   const announcement = /^\/announcements\/([0-9a-f-]{36})$/i.exec(url.pathname)?.[1];
-  if (announcement) return { ws: "ch", section: "activity", view: { kind: "announcement", id: announcement } };
+  if (announcement) return { ws: "ch", section: "home", view: { kind: "announcement", id: announcement } };
   const guide = /^\/library\/resources\/([\w-]+)$/.exec(url.pathname)?.[1];
   if (guide) return { ws: "ch", section: "learn", view: guide === "ai-script-writer" ? { kind: "script-writer" } : { kind: "improve-resource", slug: guide } };
 
@@ -82,6 +82,9 @@ export function locationForPath(target: string): Location | null {
       return { ws: "hs", section: "later", view: { kind: "saved" } };
     case "/hey-social/people":
       return { ws: "hs", section: "home", view: { kind: "hs-people" } };
+    case "/activity":
+      // The website's Activity page (and its Threads tab): CreatorHive's sidebar rows.
+      return { ws: "ch", section: "home", view: { kind: "activity", tab: url.searchParams.get("tab") === "threads" ? "threads" : "activity" } };
     case "/hey-social/activity":
       return { ws: "hs", section: "activity", view: { kind: "activity" } };
     case "/hub":
