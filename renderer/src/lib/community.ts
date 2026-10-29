@@ -115,7 +115,12 @@ export function useReplies(where: Thread, parentId: string | null) {
   return useQuery({
     queryKey: messageKeys.replies(where, parentId ?? ""),
     enabled: Boolean(parentId),
-    queryFn: () => api<{ parent: Message; replies: Message[] }>(`${base(where)}/messages/${parentId}/replies`),
+    queryFn: async () => {
+      const data = await api<{ parent: Message; replies: Message[] }>(`${base(where)}/messages/${parentId}/replies`);
+      // Loading the replies reads the thread on the server: the sidebar's Activity and Threads counts catch up.
+      void queryClient.invalidateQueries({ queryKey: ["activity"] });
+      return data;
+    },
   });
 }
 

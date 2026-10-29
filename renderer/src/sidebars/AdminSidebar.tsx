@@ -3,7 +3,7 @@ import { BarChart3, BookOpen, Bug, Flag, LifeBuoy, Map, Wallet } from "lucide-re
 import { ADMIN_LABELS, adminPages, useAdminAccess, useOpenReports, type AdminPage } from "../lib/admin";
 import { useNewBugCount } from "../lib/adminBugs";
 import { useSupportUnread } from "../lib/support";
-import { SidebarHead, SidebarItem } from "./parts";
+import { ActivityRows, SidebarHead, SidebarItem } from "./parts";
 
 const ICONS: Record<AdminPage, ReactNode> = {
   support: <LifeBuoy />,
@@ -24,6 +24,7 @@ export function AdminSidebar() {
   return (
     <>
       <SidebarHead title="Admin" />
+      <ActivityRows />
       <div className="sb-scroll">
         {adminPages(access).map((page) => (
           <SidebarItem key={page} icon={ICONS[page]} label={ADMIN_LABELS[page]} view={{ kind: "admin", page }}
