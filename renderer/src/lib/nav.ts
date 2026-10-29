@@ -13,6 +13,7 @@ export type Section = "home" | "dms" | "hub" | "learn" | "activity" | "later" | 
 export type View =
   | { kind: "feed"; postId?: string; commentId?: string }
   | { kind: "today" }
+  | { kind: "announcement"; id: string }
   | { kind: "events"; eventId?: string }
   | { kind: "profile"; id: string }
   | { kind: "leaderboard" }

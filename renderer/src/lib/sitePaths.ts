@@ -18,6 +18,8 @@ export function sitePathFor({ ws, view }: Location): string {
       return ws === "hs" ? "/hey-social/dm" : "/messages";
     case "events":
       return "/events";
+    case "announcement":
+      return `/announcements/${view.id}`;
     case "course":
       return `/courses/${view.id}${view.lessonId ? `?lesson=${view.lessonId}` : ""}`;
     case "resource":

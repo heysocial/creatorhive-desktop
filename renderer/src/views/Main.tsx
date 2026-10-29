@@ -7,6 +7,7 @@ import { useNav, type Location } from "../lib/nav";
 import { Conversation } from "./messages/Conversation";
 import { Home } from "./home/Home";
 import { TodayPage } from "./home/Today";
+import { AnnouncementPage } from "./home/Announcement";
 import { Events } from "./events/Events";
 import { Leaderboard } from "./people/Leaderboard";
 import { Members } from "./people/Members";
@@ -35,6 +36,8 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
       return <Home user={user} openPostId={view.postId ?? null} commentId={view.commentId} />;
     case "today":
       return <TodayPage />;
+    case "announcement":
+      return <AnnouncementPage key={view.id} id={view.id} />;
     case "events":
       return <Events eventId={view.eventId} />;
     case "leaderboard":

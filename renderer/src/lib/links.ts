@@ -37,6 +37,9 @@ export function locationForPath(target: string): Location | null {
   // A support alert names its ticket in the query: /admin/support?ticket=<id>.
   const ticket = admin?.[1] === "support" ? url.searchParams.get("ticket") : null;
   if (admin) return { ws: "ch", section: "admin", view: { kind: "admin", page: (admin[1] ?? "metrics") as "metrics", id: ticket ?? (admin[2] ? decodeURIComponent(admin[2]) : undefined) } };
+  // Admin → Announcements: its notification and its Activity row open the whole message.
+  const announcement = /^\/announcements\/([0-9a-f-]{36})$/i.exec(url.pathname)?.[1];
+  if (announcement) return { ws: "ch", section: "activity", view: { kind: "announcement", id: announcement } };
   const guide = /^\/library\/resources\/([\w-]+)$/.exec(url.pathname)?.[1];
   if (guide) return { ws: "ch", section: "learn", view: guide === "ai-script-writer" ? { kind: "script-writer" } : { kind: "improve-resource", slug: guide } };
 

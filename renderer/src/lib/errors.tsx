@@ -23,6 +23,7 @@ export function screenFor(location: Location): string {
   switch (view.kind) {
     case "feed": return view.postId ? "Home → Post" : "Home";
     case "today": return "Today";
+    case "announcement": return "Announcement";
     case "events": return "Events";
     case "profile": return "Profile";
     case "leaderboard": return "Leaderboard";

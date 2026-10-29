@@ -1838,3 +1838,9 @@ html.is-popout body { background: var(--card); }
 
 .signin-sub { margin: 0 0 6px; font-size: 13px; color: var(--ink-3); text-align: left; }
 .signin-note { padding: 12px 14px; border-radius: 12px; background: rgba(52,199,89,.12); color: var(--ink-2); font-size: 13.5px; line-height: 1.45; text-align: left; }
+
+/* ---------- Announcement (Admin → Announcements, whole) ---------- */
+.ann-page { max-width: 600px; margin: 18px auto 0; }
+.ann-meta { font-size: 12.5px; color: var(--ink-3); margin-bottom: 8px; }
+.ann-title { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; margin-bottom: 14px; overflow-wrap: anywhere; }
+.ann-body { font-size: 15px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 24px; user-select: text; }
