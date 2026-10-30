@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { ChevronRight, Download, FileText, Image as ImageIcon, Loader2, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
+import { ArrowUp, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, queryClient, rateLimitMessage } from "../../lib/api";
 import {
-  CATEGORIES, POST_REACTIONS, addComment, attachmentName, categoryOf, createPost, deleteComment, editComment, editPost, isImageUrl, likeComment, patchPost,
-  reactToPost, splitPostBody, useComments, useFeed, usePinnedPosts, usePost, useUnreadCategories, vote,
+  CATEGORIES, POST_REACTIONS, addComment, newestPosts, onPostCreated, prependPosts, attachmentName, categoryOf, createPost, deleteComment, editComment, editPost, isImageUrl, likeComment, patchPost,
+  reactToPost, splitPostBody, useComments, watchCommentVideos, useFeed, usePinnedPosts, usePost, useUnreadCategories, vote,
   type CategoryKey, type Comment, type Post,
 } from "../../lib/feed";
 import { ago, money } from "../../lib/format";
@@ -20,6 +20,7 @@ import { PostEditor } from "./PostEditor";
 import { Modal, Monogram } from "../hub/parts";
 import { pastedFiles } from "../../lib/paste";
 import { ReportDialog, type ReportTarget } from "../../overlays/Report";
+import { CommentComposer, CommentMedia, rememberPoster, serverSentence } from "./CommentComposer";
 
 /* ---------- Paid this month ---------- */
 
@@ -471,8 +472,10 @@ function CommentRow({ comment, postId, meId, editing, actions, onSaveEdit, onCan
   const [saving, setSaving] = useState(false);
   useEffect(() => { if (editing) setDraft(comment.body); }, [editing, comment.body]);
 
+  // Words can go from a comment that has a picture, file or video; not from one that has only words.
+  const hasMedia = Boolean(comment.mediaUrls?.length || comment.videoAttachments?.length);
   async function save() {
-    if (saving || !draft.trim()) return;
+    if (saving || (!draft.trim() && !hasMedia)) return;
     setSaving(true);
     try { if (await onSaveEdit(draft.trim())) onCancelEdit(); } finally { setSaving(false); }
   }
@@ -513,13 +516,14 @@ function CommentRow({ comment, postId, meId, editing, actions, onSaveEdit, onCan
               }} />
             <div className="hint">Escape to cancel · Return to save
               <button className="btn" disabled={saving} onClick={onCancelEdit}>Cancel</button>
-              <button className="btn honey" disabled={saving || !draft.trim()} onClick={() => void save()}>{saving ? <Loader2 className="spin" /> : null}Save</button>
+              <button className="btn honey" disabled={saving || (!draft.trim() && !hasMedia)} onClick={() => void save()}>{saving ? <Loader2 className="spin" /> : null}Save</button>
             </div>
           </div>
         ) : (
           <div className="bubble">
             <span className="who"><b>{comment.author.name}</b><Badge badge={comment.author.badge} role={comment.author.role} /></span>
             <div className="selectable" style={{ whiteSpace: "pre-wrap" }}>{comment.deleted ? <i className="faint">Comment deleted</i> : <CommentText comment={comment} meId={meId} />}</div>
+            <CommentMedia comment={comment} />
           </div>
         )}
         {!comment.deleted && !editing ? (
@@ -562,7 +566,6 @@ export function PostSheet({ postId, commentId, user, onClose }: { postId: string
   const comments = useComments(postId);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
-  const [sending, setSending] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [reporting, setReporting] = useState<ReportTarget | null>(null);
   const staff = user.role === "owner" || user.role === "team";
@@ -596,7 +599,7 @@ export function PostSheet({ postId, commentId, user, onClose }: { postId: string
   }, [commentId, comments.data, comments.isFetching, post.data, post.isError]);
 
   useEffect(() => {
-    const key = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector(".emoji-pop, .scrim.center") && onClose();
+    const key = (e: KeyboardEvent) => e.key === "Escape" && !document.querySelector(".emoji-pop, .gif-pop, .scrim.center") && onClose();
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [onClose]);
@@ -644,20 +647,21 @@ export function PostSheet({ postId, commentId, user, onClose }: { postId: string
     }
   }
 
-  async function send() {
-    if (!text.trim() || sending) return;
-    setSending(true);
+  async function send(input: { body: string; mediaUrls: string[]; videoUploadToken?: string; videoUid?: string; videoPreview?: string | null }) {
+    rememberPoster(input.videoUid, input.videoPreview);
     try {
-      await addComment(postId, text.trim(), replyTo?.id ?? null, picker.mentionIds(text));
+      await addComment(postId, input.body, replyTo?.id ?? null, picker.mentionIds(input.body), { mediaUrls: input.mediaUrls, videoUploadToken: input.videoUploadToken });
       setText("");
       setReplyTo(null);
       picker.reset();
+      return null;
     } catch (error) {
-      window.alert(rateLimitMessage(error) ?? "Couldn't add the comment.");
-    } finally {
-      setSending(false);
+      return serverSentence(error) ?? "Couldn't add the comment.";
     }
   }
+
+  // Videos still being made playable when the list loads: watch them until they are.
+  useEffect(() => { for (const c of comments.data ?? []) watchCommentVideos(postId, c); }, [comments.data, postId]);
 
   return (
     <div className="scrim side" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -680,16 +684,8 @@ export function PostSheet({ postId, commentId, user, onClose }: { postId: string
         </div>
         <div className="comment-box">
           {replyTo ? <div className="replying"><span>Replying to <b>{replyTo.author.name}</b></span><button className="iconbtn" onClick={() => setReplyTo(null)}><X /></button></div> : null}
-          <div className="composer compact" style={{ margin: 0 }}>
-            <textarea ref={box} rows={1} value={text} maxLength={2000} placeholder="Write a comment… (@ to mention)"
-              onChange={(e) => { setText(e.target.value); picker.track(e.target.value, e.target.selectionStart); }}
-              onKeyDown={(e) => {
-                if (picker.onKeyDown(e)) return;
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
-              }} />
-            {picker.list}
-            <div className="tools"><button className={`send ${text.trim() ? "on" : ""}`} disabled={!text.trim() || sending} onClick={() => void send()}>{sending ? <Loader2 className="spin" /> : <SquarePen />}</button></div>
-          </div>
+          <CommentComposer postId={postId} value={text} setValue={setText} box={box} placeholder={replyTo ? `Reply to ${replyTo.author.name}… (@ to mention)` : "Write a comment… (@ to mention)"}
+            onChange={(value, caret) => picker.track(value, caret)} onKeyDown={(e) => picker.onKeyDown(e)} extra={picker.list} onSend={send} />
         </div>
       </aside>
       {reporting ? <ReportDialog target={reporting} onClose={() => setReporting(null)} /> : null}
@@ -731,6 +727,58 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
   const pinnedIds = new Set((filter === "all" ? pinned.data ?? [] : []).map((p) => p.id));
   const posts = (feed.data?.pages.flatMap((p) => p.posts) ?? []).filter((p) => !pinnedIds.has(p.id));
 
+  /*
+    New posts while reading (post:created on feed:community): read the newest
+    page of this filter and keep what's newer than the top of the feed, not
+    mine and not shown. At the very top they go straight in; further down they
+    wait behind the "New posts" pill, so nothing moves under the reader.
+  */
+  const [pending, setPending] = useState<Post[]>([]);
+  const live = useRef({ filter, posts, pinnedIds, pending });
+  live.current = { filter, posts, pinnedIds, pending };
+  useEffect(() => setPending([]), [filter]);
+  // Shown some other way (a refetch, my own post): no longer new.
+  useEffect(() => {
+    if (!pending.length) return;
+    const shown = new Set(posts.map((p) => p.id));
+    if (pending.some((p) => shown.has(p.id))) setPending((all) => all.filter((p) => !shown.has(p.id)));
+  }, [posts, pending]);
+
+  const checkNewPosts = useCallback(async () => {
+    const asked = live.current.filter;
+    const fresh = await newestPosts(asked).catch(() => null);
+    const now = live.current;
+    if (!fresh || now.filter !== asked) return;
+    const newest = Math.max(0, ...now.posts.filter((p) => !p.pinned).slice(0, 5).map((p) => Date.parse(p.createdAt)));
+    const known = new Set([...now.posts, ...now.pending].map((p) => p.id));
+    const found = fresh.filter((p) => p.author.id !== user.id && !known.has(p.id) && !now.pinnedIds.has(p.id) && !p.pinned && Date.parse(p.createdAt) > newest);
+    if (!found.length) return;
+    if ((scroller.current?.scrollTop ?? 0) <= 4) prependPosts(asked, found);
+    else setPending((all) => [...found.filter((p) => !all.some((x) => x.id === p.id)), ...all]);
+  }, [user.id]);
+
+  useEffect(() => onPostCreated((signal) => {
+    if (signal?.authorId === user.id) return;
+    const { filter: active } = live.current;
+    if (signal?.category && active !== "all" && signal.category !== active) return;
+    void checkNewPosts();
+  }), [checkNewPosts, user.id]);
+
+  // Back from a dropped connection: one catch-up check (no polling).
+  useEffect(() => {
+    let last = "connected";
+    return ch.realtime.onState((state) => {
+      if (state === "connected" && last !== "connected") void checkNewPosts();
+      last = state;
+    });
+  }, [checkNewPosts]);
+
+  function showPending() {
+    prependPosts(filter, pending);
+    setPending([]);
+    scroller.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   return (
     <div className="home">
       <div className="mhead">
@@ -750,6 +798,11 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
           const el = e.currentTarget;
           if (el.scrollHeight - el.scrollTop - el.clientHeight < 600 && feed.hasNextPage && !feed.isFetchingNextPage) void feed.fetchNextPage();
         }}>
+          {pending.length ? (
+            <div className="new-posts-pin">
+              <button className="new-posts-pill" onClick={showPending}><ArrowUp />{pending.length === 1 ? "1 new post" : `${pending.length} new posts`}</button>
+            </div>
+          ) : null}
           <div className="feed-col">
             <PaidCard />
             <NewPost key={draft?.text ?? "blank"} user={user} open={writing} draft={draft} onOpen={() => setWriting(true)} onClose={() => { setWriting(false); setDraft(null); }} />

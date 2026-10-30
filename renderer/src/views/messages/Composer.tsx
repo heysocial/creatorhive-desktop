@@ -50,7 +50,7 @@ interface Staged {
 }
 
 /** A frame from the video and its length, made on the Mac for the chip before anything uploads. */
-function videoThumbnail(file: File): Promise<{ url: string | null; duration: number }> {
+export function videoThumbnail(file: File): Promise<{ url: string | null; duration: number }> {
   return new Promise((resolve) => {
     const src = URL.createObjectURL(file);
     const el = document.createElement("video");

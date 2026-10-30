@@ -3,6 +3,7 @@ import { ch } from "./bridge";
 import { api, keys, queryClient, type Channel, type Conversation } from "./api";
 import { HS_KEY, type HsSidebar } from "./heysocial";
 import { nav } from "./nav";
+import { postCreated, type PostCreated } from "./feed";
 
 const FEED_CHANNEL = "feed:community";
 const PRESENCE_CHANNEL = "presence:global";
@@ -71,8 +72,11 @@ export function useRealtimeRefresh(userId: string, { sidebar = true }: { sidebar
       if (message.channel === FEED_CHANNEL) {
         const postId = (message.data as { postId?: string } | null)?.postId;
         if (message.name === "post:comments" && postId) soon(["comments", postId], 200);
-        soon(["posts"], message.name === "post:created" ? 800 : 300);
-        if (postId) soon(["post", postId], 300);
+        if (message.name === "post:created") {
+          // Home turns it into the "New posts" pill rather than reordering the feed under the reader.
+          if (!postCreated(message.data as PostCreated | null)) soon(["posts"], 800);
+        } else soon(["posts"], 300);
+        if (postId && message.name !== "post:created") soon(["post", postId], 300);
         soon(["posts-unread"], 1000);
       }
     });

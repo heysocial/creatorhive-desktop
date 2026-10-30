@@ -669,6 +669,86 @@ html.is-popout body { background: var(--card); }
 .comment .mention.self { background: rgba(255, 204, 4, .45); }
 .comment.jump-target .bubble { animation: jump-target 1.8s ease-out; }
 .comment .inline-edit { min-width: 320px; }
+
+/*
+  The comment box, as the website's: staged attachments above the words, and
+  Emoji, Files and GIF inside the box on the right, grey until hovered (the
+  open one stays dark). Send is the honey circle beside it, there only when
+  there's something to send.
+*/
+.cc { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; column-gap: 8px; row-gap: 6px; }
+.cc .cc-box { margin: 0; border-radius: 20px; }
+.cc .cc-box.has-staged { border-radius: 16px; }
+.cc-row { display: flex; align-items: flex-end; }
+.cc-row textarea { flex: 1; min-width: 0; padding: 9px 6px 9px 14px; }
+.cc-icons { display: flex; align-items: center; gap: 1px; padding: 0 6px 5px 0; flex: none; }
+.cc-icons button { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; color: var(--ink-4); transition: color .12s; }
+.cc-icons button svg { width: 17px; height: 17px; }
+.cc-icons button:hover, .cc-icons button.on { color: var(--ink); }
+.cc-icons .gif span { font-size: 9.5px; font-weight: 800; letter-spacing: .04em; line-height: 1; padding: 2.5px 3px; border: 1.6px solid currentColor; border-radius: 4px; }
+.cc-send { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--honey); color: var(--on-honey); margin-bottom: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.cc-send:hover:not(:disabled) { background: var(--honey-hover); }
+.cc-send:disabled { opacity: .7; }
+.cc-send svg { width: 16px; height: 16px; }
+.cc-error { grid-column: 1 / -1; font-size: 12.5px; color: #C2334D; padding: 0 6px; }
+@media (prefers-color-scheme: dark) { .cc-error { color: #FF8F8F; } }
+.cc .emoji-pop.above { left: auto; right: 0; }
+.cc-staged { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 10px 2px; }
+.cc-thumb { position: relative; width: 62px; height: 62px; border-radius: 10px; overflow: hidden; background: var(--card-3); box-shadow: inset 0 0 0 .5px var(--line-strong); flex: none; }
+.cc-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cc-thumb.failed img { opacity: .4; }
+.cc-busy { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.25); color: #fff; }
+.cc-busy svg { width: 18px; height: 18px; }
+.cc-x { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: rgba(31, 30, 28, .72); color: #fff; }
+.cc-x svg { width: 12px; height: 12px; }
+.cc-x:hover { background: rgba(31, 30, 28, .9); }
+.cc-file { position: relative; display: flex; align-items: center; gap: 9px; height: 62px; padding: 0 34px 0 10px; border-radius: 10px; background: var(--card-2); box-shadow: inset 0 0 0 .5px var(--line-strong); max-width: 280px; min-width: 0; }
+.cc-file .ficon { width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center; background: rgba(229, 72, 77, .12); color: #E5484D; flex: none; position: relative; overflow: hidden; }
+.cc-file .ficon svg { width: 19px; height: 19px; position: relative; }
+.cc-file .vthumb { background: #1F1E1C; color: #fff; }
+.cc-file .vthumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .8; }
+.cc-file .fmeta { display: flex; flex-direction: column; min-width: 0; font-size: 12px; }
+.cc-file .fmeta b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+.cc-file .fmeta span { color: var(--ink-3); }
+.cc-file.failed .fmeta span { color: #C2334D; }
+.cc-file .vprog { display: block; height: 4px; border-radius: 2px; background: var(--card-3); margin-top: 4px; width: 140px; overflow: hidden; }
+.cc-file .vprog i { display: block; height: 100%; background: var(--blue); transition: width .2s; }
+.cc-file .cc-x { top: 50%; transform: translateY(-50%); right: 8px; background: none; color: var(--ink-3); }
+.cc-file .cc-x:hover { background: var(--sel); color: var(--ink); }
+.gif-tag { position: absolute; left: 6px; bottom: 6px; font-style: normal; font-size: 9.5px; font-weight: 800; letter-spacing: .05em; color: #fff; background: rgba(31, 30, 28, .72); border-radius: 4px; padding: 2px 4px; line-height: 1; }
+.cc-thumb .gif-tag { left: 4px; bottom: 4px; }
+
+/* GIPHY, above the box like the emoji popover. */
+.gif-pop { position: absolute; z-index: 25; bottom: calc(100% + 8px); right: 0; width: 340px; background: var(--overlay); backdrop-filter: blur(30px); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.25), 0 0 0 .5px rgba(0,0,0,.2); display: flex; flex-direction: column; padding: 8px; gap: 8px; }
+.gif-search { display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border-radius: 8px; background: var(--card-3); color: var(--ink-3); }
+.gif-search svg { width: 14px; height: 14px; flex: none; }
+.gif-search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font-size: 13.5px; color: var(--ink); }
+.gif-search input:focus-visible { box-shadow: none; }
+.gif-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: 280px; overflow-y: auto; }
+.gif-grid button { display: block; border-radius: 8px; overflow: hidden; aspect-ratio: 16 / 10; background: var(--card-3); }
+.gif-grid button:hover { box-shadow: 0 0 0 2px var(--honey); }
+.gif-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gif-note { grid-column: 1 / -1; display: grid; place-items: center; padding: 24px 8px; font-size: 13px; color: var(--ink-3); }
+.gif-note svg { width: 18px; height: 18px; }
+.gif-by { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-4); text-align: right; padding: 0 2px; }
+
+/* A comment's photos, GIFs, files and video, under its words in the bubble. */
+.c-media { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; margin: 6px 0 2px; }
+.c-img { position: relative; display: block; width: 240px; max-width: 100%; padding: 0; border-radius: 10px; overflow: hidden; }
+.c-img img { display: block; width: 100%; max-height: 320px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+.c-file { width: 300px; max-width: 100%; cursor: default; background: var(--card); }
+.c-file .c-dl { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px; color: var(--ink-3); }
+.c-file .c-dl:hover { background: var(--sel); color: var(--ink); }
+.c-file .c-dl svg { width: 16px; height: 16px; }
+.c-video .video { width: 300px; }
+
+/* "N new posts": pinned near the top of the feed while it scrolls. */
+.new-posts-pin { position: sticky; top: 12px; z-index: 5; height: 0; display: flex; justify-content: center; }
+.new-posts-pill { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 16px 0 13px; border-radius: 17px; background: #FFCC00; color: #1F1E1C; font-weight: 700; font-size: 13.5px; box-shadow: 0 6px 18px rgba(0,0,0,.16), 0 1px 3px rgba(0,0,0,.12); animation: pill-in .22s ease-out; }
+.new-posts-pill:hover { filter: brightness(.97); }
+.new-posts-pill svg { width: 15px; height: 15px; }
+@media (prefers-color-scheme: dark) { .new-posts-pill { background: #FFD60A; box-shadow: 0 6px 18px rgba(0,0,0,.45); } }
+@keyframes pill-in { from { opacity: 0; transform: translateY(-6px); } }
 .post-editor { display: flex; flex-direction: column; gap: 8px; }
 .post-editor .pe-toolbar { position: static; box-shadow: none; background: var(--card-2); }
 .post-edit-body { min-height: 80px; max-height: 420px; overflow-y: auto; border-radius: 9px; padding: 8px 12px; background: var(--card); box-shadow: inset 0 0 0 1px var(--blue); outline: none; font-size: 15px; user-select: text; }
