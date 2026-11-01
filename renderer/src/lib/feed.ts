@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
 import { api, ApiError, queryClient, rateLimitMessage } from "./api";
-import type { Author, Reactions, UploadedVideo, VideoAttachment } from "./community";
+import { putToMux, type Author, type Reactions, type UploadedVideo, type VideoAttachment } from "./community";
 
 export const CATEGORIES = [
   { key: "general", label: "General", emoji: "💬", staffOnly: false },
@@ -171,21 +171,13 @@ export async function addComment(postId: string, body: string, parentCommentId: 
 
 export const MAX_COMMENT_MEDIA = 4;
 
-/** A comment video's bytes straight to Mux, with progress (uploadVideo in community.ts, aimed at a post). */
-export async function uploadCommentVideo(postId: string, file: File, onProgress: (pct: number) => void): Promise<UploadedVideo> {
+/** A comment video's bytes straight to Mux, with progress (uploadVideo in community.ts, aimed at a post); an abort stops it. */
+export async function uploadCommentVideo(postId: string, file: File, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<UploadedVideo> {
   const start = await api<{ uploadUrl: string; uploadToken: string; uid: string }>(`/api/posts/${postId}/comments/videos/upload-url`, {
     method: "POST",
     body: { fileName: file.name, mimeType: file.type || "video/mp4", sizeBytes: file.size, providers: ["mux"] },
   });
-  await new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", start.uploadUrl);
-    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload ${xhr.status}`)));
-    xhr.onerror = () => reject(new Error("upload failed"));
-    xhr.send(file);
-  });
+  await putToMux(start.uploadUrl, file, onProgress, signal);
   onProgress(100);
   return { uploadToken: start.uploadToken, uid: start.uid, name: file.name };
 }
@@ -246,21 +238,40 @@ export async function likeComment(postId: string, comment: Comment) {
   }
 }
 
-/** Edit your own post: its formatted words (pictures and a poll stay as they are). The server sanitizes the HTML. */
-export async function editPost(post: Post, html: string) {
-  const { post: saved } = await api<{ post: { body: string; edited_at: string | null } }>(`/api/posts/${post.id}`, {
+/**
+ * Edit your own post: its formatted words and, with `mediaUrls`, its pictures
+ * and files (kept and new, in order). A poll stays as it is. The server
+ * sanitizes the HTML.
+ */
+export async function editPost(post: Post, html: string, mediaUrls?: string[]) {
+  const { post: saved } = await api<{ post: { body: string; edited_at: string | null; mediaUrls?: string[] } }>(`/api/posts/${post.id}`, {
     method: "PATCH",
-    body: { body: html },
+    body: { body: html, ...(mediaUrls ? { mediaUrls } : {}) },
   });
-  patchPost(post.id, (p) => ({ ...p, body: saved.body, editedAt: saved.edited_at ?? p.editedAt }));
+  patchPost(post.id, (p) => ({ ...p, body: saved.body, editedAt: saved.edited_at ?? p.editedAt, ...(Array.isArray(saved.mediaUrls) ? { mediaUrls: saved.mediaUrls } : {}) }));
 }
 
-export async function editComment(postId: string, comment: Comment, body: string) {
-  const { comment: saved } = await api<{ comment: { body: string; editedAt: string | null } }>(`/api/posts/${postId}/comments/${comment.id}`, {
-    method: "PATCH",
-    body: { body },
-  });
-  queryClient.setQueryData<Comment[]>(["comments", postId], (list) => list?.map((c) => (c.id === comment.id ? { ...c, body: saved.body, editedAt: saved.editedAt } : c)));
+/**
+ * Edit your own comment: its words and, with `media`, its photos, files, GIFs
+ * and video. Mux can take a moment to see a new video's bytes: the edit
+ * answers 409 until then, as posting does.
+ */
+export async function editComment(postId: string, comment: Comment, body: string, media?: { mediaUrls: string[]; videoUids: string[]; videoUploadToken?: string }) {
+  const payload = { body, ...(media ?? {}) };
+  let saved: { body: string; editedAt: string | null; mediaUrls?: string[]; videoAttachments?: VideoAttachment[] };
+  for (let attempt = 0; ; attempt++) {
+    try {
+      saved = (await api<{ comment: typeof saved }>(`/api/posts/${postId}/comments/${comment.id}`, { method: "PATCH", body: payload })).comment;
+      break;
+    } catch (error) {
+      if (!(media?.videoUploadToken && error instanceof ApiError && error.status === 409 && /still uploading/i.test(String(error.data?.error ?? "")) && attempt < 120)) throw error;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+  const swap = Array.isArray(saved.mediaUrls);
+  const next = (c: Comment): Comment => ({ ...c, body: saved.body, editedAt: saved.editedAt, ...(swap ? { mediaUrls: saved.mediaUrls, videoAttachments: saved.videoAttachments ?? [] } : {}) });
+  queryClient.setQueryData<Comment[]>(["comments", postId], (list) => list?.map((c) => (c.id === comment.id ? next(c) : c)));
+  if (swap) watchCommentVideos(postId, next(comment));
 }
 
 /**

@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { Download, FileText, Loader2, Paperclip, Play, Search, SendHorizontal, Smile, X } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import { ApiError, rateLimitMessage } from "../../lib/api";
-import { localPosters } from "../../lib/community";
+import { localPosters, type Attachment } from "../../lib/community";
+import { UPLOAD_FAILED, keptAttachment, useEditAttachments, useSaveWhenUploaded, type EditItem } from "../../lib/editAttachments";
+import { editAttachmentProblem } from "../../lib/editAttachmentRules";
 import { MAX_COMMENT_MEDIA, attachmentName, isGiphyUrl, isImageUrl, searchGifs, uploadCommentVideo, type Comment, type Gif } from "../../lib/feed";
 import { bytes } from "../../lib/format";
 import { EmojiPicker } from "../messages/EmojiPicker";
@@ -356,3 +358,153 @@ export function CommentMedia({ comment }: { comment: Comment }) {
 
 /** A frame taken on this Mac stands in for Mux's poster while it processes. */
 export const rememberPoster = (uid: string | undefined, preview: string | null | undefined) => { if (uid && preview) localPosters.set(uid, preview); };
+
+/* ---------- Editing ---------- */
+
+/**
+ * The comment composer's checks for one file it's handed (type, size, a
+ * video's length), with its sentences: for the edit boxes of comments and posts.
+ */
+export async function feedFileProblem(file: File, video: boolean, surface: "post" | "comment"): Promise<string | null> {
+  if (file.type.startsWith("video/")) {
+    if (!video) return editAttachmentProblem(surface, { files: 0, videos: 1 });
+    if (file.size > VIDEO_LIMIT) return "Video must be 2 GB or smaller";
+    const { duration } = await videoThumbnail(file);
+    return duration > MAX_VIDEO_SECONDS + 1 ? "Videos must be 5 minutes or shorter." : null;
+  }
+  const image = IMAGE_TYPES.has(file.type);
+  if (image) return file.size > IMAGE_LIMIT ? "Choose a JPEG, PNG, WebP, or GIF image smaller than 8MB." : null;
+  if (!documentType(file)) return "Choose a PDF, text, Word, Excel, or PowerPoint file.";
+  return file.size > FILE_LIMIT ? "Choose a file smaller than 20MB." : null;
+}
+
+/** A photo or file through the routes the comment and post composers use. */
+export async function uploadFeedFile(file: File): Promise<Attachment | { failedReason?: string }> {
+  const image = IMAGE_TYPES.has(file.type);
+  const type = image ? file.type : documentType(file) ?? (file.type || "application/octet-stream");
+  const result = await ch.files.upload({
+    route: image ? "/api/upload" : "/api/upload/feed-attachments",
+    name: `${image ? "feed-images" : "feed-files"}/${stamp(file.name)}`,
+    type,
+    bytes: await file.arrayBuffer(),
+  });
+  if (!result.ok) return { failedReason: (result.error === "rate_limited" && result.message) || "Couldn't upload" };
+  return { url: result.url, name: file.name, size: file.size, mimeType: type, kind: image ? "image" : "file" };
+}
+
+/** The feed's attachments as the edit box keeps them: bare URLs, a GIF from GIPHY counted as a picture. */
+export const feedKept = (urls: string[]): Attachment[] => urls.map((url) => {
+  const kept = keptAttachment(url, undefined);
+  return { ...kept, name: isGiphyUrl(url) ? "GIF" : attachmentName(url), kind: isImageUrl(url) ? "image" : "file" };
+});
+
+/** The staged strip of an edit box, in the comment composer's tiles. */
+export function FeedEditTiles({ items, onRemove }: { items: EditItem[]; onRemove: (key: string) => void }) {
+  if (!items.length) return null;
+  return (
+    <div className="cc-staged">
+      {items.map((item) => <StagedItem key={item.key} item={asStaged(item)} onRemove={() => onRemove(item.key)} />)}
+    </div>
+  );
+}
+
+function asStaged(item: EditItem): Staged {
+  const never = Promise.resolve({ uploadToken: "", uid: "" });
+  switch (item.kind) {
+    case "kept":
+      return isGiphyUrl(item.attachment.url)
+        ? { key: item.key, kind: "gif", preview: item.attachment.url, url: item.attachment.url, state: "done" }
+        : item.attachment.kind === "image"
+          ? { key: item.key, kind: "image", preview: item.attachment.url, name: item.attachment.name, url: item.attachment.url, state: "done" }
+          : { key: item.key, kind: "file", name: item.attachment.name, size: item.attachment.size, url: item.attachment.url, state: "done" };
+    case "kept-video":
+      return { key: item.key, kind: "video", name: item.video.fileName, preview: item.video.thumbnailUrl, progress: 100, state: "done", done: never };
+    case "new":
+      return item.image
+        ? { key: item.key, kind: "image", preview: item.preview ?? "", name: item.file.name, state: item.state, failedReason: item.failedReason }
+        : { key: item.key, kind: "file", name: item.file.name, size: item.file.size, state: item.state, failedReason: item.failedReason };
+    case "new-video":
+      return { key: item.key, kind: "video", name: item.file.name, preview: item.preview, progress: item.progress, state: item.state, failedReason: item.failedReason, done: never };
+  }
+}
+
+/** The comment composer's Files button, for an edit box. */
+export function AttachButton({ onFiles, disabled }: { onFiles: (files: File[]) => void; disabled?: boolean }) {
+  const picker = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <button className="edit-attach" title="Photos, video or files" aria-label="Attach photos, a video or files" disabled={disabled} onClick={() => picker.current?.click()}><Paperclip /></button>
+      <input ref={picker} type="file" accept={ACCEPT} multiple hidden onChange={(e) => { onFiles([...(e.target.files ?? [])]); e.target.value = ""; }} />
+    </>
+  );
+}
+
+/**
+ * A comment's edit box: its words, the photos, files, GIFs or video on it
+ * (each with an ×) and the composer's Files button, under the comment
+ * composer's limits and sentences.
+ */
+export function CommentEditor({ postId, comment, onSave, onClose }: {
+  postId: string;
+  comment: Comment;
+  /** Resolves with the sentence to show when it didn't save, else null. */
+  onSave: (body: string, media?: { mediaUrls: string[]; videoUids: string[]; videoUploadToken?: string }) => Promise<string | null>;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState(comment.body);
+  const [saving, setSaving] = useState(false);
+  const [files] = useState(() => feedKept(comment.mediaUrls ?? []));
+  const [videos] = useState(() => comment.videoAttachments ?? []);
+  const uploadVideo = useCallback((file: File, onProgress: (pct: number) => void, signal: AbortSignal) => uploadCommentVideo(postId, file, onProgress, signal), [postId]);
+  const check = useCallback((file: File, video: boolean) => feedFileProblem(file, video, "comment"), []);
+  const staged = useEditAttachments({ surface: "comment", files, videos, uploadFile: uploadFeedFile, uploadVideo, check });
+
+  const after = useSaveWhenUploaded(staged.uploading);
+  function cancel() { after.cancel(); staged.discard(); onClose(); }
+
+  async function save() {
+    if (saving) return;
+    const words = draft.trim();
+    // Words can go from a comment that keeps a picture, file or video; not from one left with nothing (Save stays off, as before).
+    if (!words && staged.empty) return;
+    // Still uploading: saved by itself as soon as they finish.
+    if (staged.uploading) { after.later(() => void latest.current()); return; }
+    if (staged.failed) { staged.setError(UPLOAD_FAILED); return; }
+    if (words === comment.body && !staged.changed) { onClose(); return; }
+    setSaving(true);
+    staged.setError(null);
+    try {
+      const media = staged.changed ? staged.result() : null;
+      const sentence = await onSave(words, media ? { mediaUrls: media.mediaUrls, videoUids: media.videoUids, videoUploadToken: media.videoUploadTokens[0] } : undefined);
+      if (sentence) { staged.setError(sentence); return; }
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const latest = useRef(save);
+  latest.current = save;
+  const busy = saving || after.waiting;
+  return (
+    <div className="inline-edit">
+      <FeedEditTiles items={staged.items} onRemove={staged.remove} />
+      <textarea autoFocus value={draft} maxLength={2000} disabled={busy} onChange={(e) => setDraft(e.target.value)}
+        onPaste={(e) => {
+          const list = [...e.clipboardData.files];
+          if (list.length) { e.preventDefault(); void staged.add(list); }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); }
+          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void save(); }
+        }} />
+      {staged.error ? <div className="edit-error" role="alert">{staged.error}</div> : null}
+      <div className="hint">
+        <AttachButton disabled={saving} onFiles={(list) => void staged.add(list)} />
+        Escape to cancel · Return to save
+        <button className="btn" onClick={cancel}>Cancel</button>
+        <button className="btn honey" disabled={busy || (!draft.trim() && staged.empty)} onClick={() => void save()}>{busy ? <Loader2 className="spin" /> : null}Save</button>
+      </div>
+    </div>
+  );
+}

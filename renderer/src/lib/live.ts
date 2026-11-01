@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ch } from "./bridge";
 import { api, queryClient } from "./api";
-import { addMessage, countsChanged, markRead, mergeCounts, messageKeys, patchMessage, refreshReactions, removeMessage, type Message, type Thread } from "./community";
+import { addMessage, applyEdit, countsChanged, markRead, mergeCounts, messageKeys, patchMessage, refreshReactions, removeMessage, type EditedMessage, type Message, type Thread } from "./community";
 
 /*
   Live updates for an open channel or DM: new, edited and deleted messages,
@@ -37,9 +37,8 @@ export function useLiveThread(where: Thread, realtimeChannel: string | null, meI
           break;
         }
         case "message:updated":
-          patchMessage(where, String(payload.messageId), (m) => ({
-            ...m, body: String(payload.body ?? m.body), bodyHtml: (payload.bodyHtml as string) ?? m.bodyHtml, editedAt: (payload.editedAt as string) ?? m.editedAt,
-          }));
+          // The attachments come too when an edit changed them (the whole new list).
+          applyEdit(where, String(payload.messageId), payload as EditedMessage);
           break;
         case "message:deleted":
           removeMessage(where, String(payload.messageId));

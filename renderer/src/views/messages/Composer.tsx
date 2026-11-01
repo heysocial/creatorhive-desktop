@@ -84,7 +84,7 @@ const uploadRefusal = (result: UploadResult) => (!result.ok && result.error === 
  * Uploads one file through the website's Blob route, the same one its composer
  * uses. A failure carries the website's reason when it gave one.
  */
-async function uploadFile(file: File, folder?: string): Promise<SentFile | { failedReason?: string }> {
+export async function uploadFile(file: File, folder?: string): Promise<SentFile | { failedReason?: string }> {
   // Hey Social Inc. takes any file up to 1 GB into its own folder; pictures show inline only for these four types.
   if (folder) {
     const inline = /^image\/(jpeg|png|webp|gif)$/.test(file.type);

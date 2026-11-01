@@ -304,22 +304,29 @@ export function startVideoJob(file: File, upload: (file: File, onProgress: (pct:
   return job;
 }
 
-export async function uploadVideo(where: Thread, file: File, onProgress: (pct: number) => void): Promise<UploadedVideo> {
+export async function uploadVideo(where: Thread, file: File, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<UploadedVideo> {
   const start = await api<{ uploadUrl: string; uploadToken: string; uid: string }>(`${base(where)}/videos/upload-url`, {
     method: "POST",
     body: { fileName: file.name, mimeType: file.type || "video/mp4", sizeBytes: file.size, providers: ["mux"] },
   });
-  await new Promise<void>((resolve, reject) => {
+  await putToMux(start.uploadUrl, file, onProgress, signal);
+  onProgress(100);
+  return { uploadToken: start.uploadToken, uid: start.uid, name: file.name };
+}
+
+/** A video's bytes to its Mux upload URL, with progress; an abort (a cancelled edit) stops it. */
+export function putToMux(url: string, file: File, onProgress: (pct: number) => void, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) return reject(new DOMException("aborted", "AbortError"));
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", start.uploadUrl);
+    signal?.addEventListener("abort", () => { xhr.abort(); reject(new DOMException("aborted", "AbortError")); }, { once: true });
+    xhr.open("PUT", url);
     xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload ${xhr.status}`)));
     xhr.onerror = () => reject(new Error("upload failed"));
     xhr.send(file);
   });
-  onProgress(100);
-  return { uploadToken: start.uploadToken, uid: start.uid, name: file.name };
 }
 
 /** Mux takes a moment to see the bytes: finalize answers 409 until then. */
@@ -433,9 +440,52 @@ export async function toggleReaction(where: Thread, message: Message, emoji: str
   }
 }
 
-export async function editMessage(where: Thread, id: string, body: string) {
-  const result = await api<{ body: string; bodyHtml: string; editedAt: string }>(`/api/messages/${id}`, { method: "PATCH", body: { body } });
-  patchMessage(where, id, (m) => ({ ...m, body: result.body, bodyHtml: result.bodyHtml, editedAt: result.editedAt }));
+/** What an edit changes on a message, as the PATCH answer and `message:updated` carry it. */
+export interface EditedMessage {
+  body?: string;
+  bodyHtml?: string | null;
+  editedAt?: string | null;
+  /** Only when the attachments changed: the whole new list. */
+  mediaUrls?: string[];
+  attachments?: Attachment[];
+  videoAttachment?: VideoAttachment | null;
+  videoAttachments?: VideoAttachment[];
+}
+
+/** An edit (ours or anyone's, live) on the cached message: words, and the attachments when they changed. */
+export function applyEdit(where: Thread, id: string, edit: EditedMessage) {
+  const swap = Array.isArray(edit.mediaUrls);
+  const videos = edit.videoAttachments ?? (edit.videoAttachment ? [edit.videoAttachment] : []);
+  patchMessage(where, id, (m) => ({
+    ...m,
+    body: typeof edit.body === "string" ? edit.body : m.body,
+    bodyHtml: edit.bodyHtml !== undefined ? edit.bodyHtml : m.bodyHtml,
+    editedAt: edit.editedAt ?? m.editedAt,
+    ...(swap ? { mediaUrls: edit.mediaUrls!, attachments: edit.attachments ?? [], videoAttachment: videos[0] ?? null, videoAttachments: videos } : {}),
+  }));
+  // New videos still processing update themselves when Mux has them ready.
+  if (swap && videos.length) watchVideos(where, { id, videoAttachments: videos } as Message);
+}
+
+/**
+ * Save an edit. Without `attachments` it's a words-only edit, as before; with
+ * them it sets the message's photos, files and videos too (the website's
+ * docs/edit-attachments.md). Mux can take a moment to see a video's bytes:
+ * the edit answers 409 until then, as finalize does.
+ */
+export async function editMessage(where: Thread, id: string, body: string, attachments?: { mediaUrls: string[]; attachments: Attachment[]; videoUids: string[]; videoUploadTokens: string[] }) {
+  const payload = { body, ...(attachments ?? {}) };
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const result = await api<EditedMessage>(`/api/messages/${id}`, { method: "PATCH", body: payload });
+      applyEdit(where, id, result);
+      return;
+    } catch (error) {
+      const stillUploading = error instanceof ApiError && error.status === 409 && /still uploading/i.test(String(error.data?.error ?? ""));
+      if (!(attachments?.videoUploadTokens.length && stillUploading && attempt < 120)) throw error;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
 }
 
 export async function deleteMessage(where: Thread, id: string) {

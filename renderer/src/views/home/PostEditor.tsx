@@ -43,12 +43,18 @@ const Mention = Node.create({
  * onSave gets the new HTML, or null when nothing changed (so an unchanged
  * post isn't stamped "edited"), and whether the words are now empty.
  */
-export function PostEditor({ html, saving, error, onSave, onCancel }: {
+export function PostEditor({ html, saving, error, onSave, onCancel, attachments, attach, onPasteFiles }: {
   html: string;
   saving: boolean;
   error: string | null;
   onSave: (html: string | null, empty: boolean) => void;
   onCancel: () => void;
+  /** The pictures and files on the post, each with an ×. */
+  attachments?: React.ReactNode;
+  /** The Files button. */
+  attach?: React.ReactNode;
+  /** Pictures pasted into the words. */
+  onPasteFiles?: (files: File[]) => void;
 }) {
   // What the editor makes of the post before any change, to tell an edit from none.
   const before = useRef<string | null>(null);
@@ -58,8 +64,8 @@ export function PostEditor({ html, saving, error, onSave, onCancel }: {
     onSave(current === before.current ? null : current, !editor.getText().trim() && !editor.$nodes("mention")?.length);
   };
   // The latest handlers, for the keymap that's set up once.
-  const keys = useRef({ save, onCancel });
-  keys.current = { save, onCancel };
+  const keys = useRef({ save, onCancel, onPasteFiles });
+  keys.current = { save, onCancel, onPasteFiles };
   const extensions = useMemo(() => [
     StarterKit.configure({ heading: { levels: [2, 3] }, codeBlock: false, horizontalRule: false, underline: false, link: false }),
     // No default target or rel: a link keeps what it was saved with (the server sets rel itself).
@@ -74,6 +80,14 @@ export function PostEditor({ html, saving, error, onSave, onCancel }: {
     // Spaces typed in the Mac composer are part of the post: keep them.
     parseOptions: { preserveWhitespace: true },
     editorProps: {
+      // A picture pasted while editing goes on the post, as in the composer.
+      handlePaste: (_view, event) => {
+        const files = [...(event.clipboardData?.files ?? [])];
+        if (!files.length || !keys.current.onPasteFiles) return false;
+        event.preventDefault();
+        keys.current.onPasteFiles(files);
+        return true;
+      },
       attributes: { class: "rich post-edit-body", "aria-label": "Edit post" },
       handleKeyDown: (_view, event) => {
         if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); keys.current.onCancel(); return true; }
@@ -108,9 +122,10 @@ export function PostEditor({ html, saving, error, onSave, onCancel }: {
         {btn("Quote", <Quote />, () => editor.chain().focus().toggleBlockquote().run(), editor.isActive("blockquote"))}
       </div>
       <EditorContent editor={editor} />
+      {attachments}
       {error ? <div className="signin-error">{error}</div> : null}
-      <div className="hint">Escape to cancel · ⌘↩ to save
-        <button className="btn" disabled={saving} onClick={onCancel}>Cancel</button>
+      <div className="hint">{attach}Escape to cancel · ⌘↩ to save
+        <button className="btn" onClick={onCancel}>Cancel</button>
         <button className="btn honey" disabled={saving} onClick={save}>{saving ? <Loader2 className="spin" /> : null}{saving ? "Saving…" : "Save changes"}</button>
       </div>
     </div>

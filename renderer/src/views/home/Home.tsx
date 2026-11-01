@@ -21,7 +21,8 @@ import { Modal, Monogram } from "../hub/parts";
 import { landsLabel } from "../../lib/hub";
 import { pastedFiles } from "../../lib/paste";
 import { ReportDialog, type ReportTarget } from "../../overlays/Report";
-import { CommentComposer, CommentMedia, rememberPoster, serverSentence } from "./CommentComposer";
+import { AttachButton, CommentComposer, CommentEditor, CommentMedia, FeedEditTiles, feedFileProblem, feedKept, rememberPoster, serverSentence, uploadFeedFile } from "./CommentComposer";
+import { UPLOAD_FAILED, useEditAttachments, useSaveWhenUploaded } from "../../lib/editAttachments";
 
 /* ---------- Paid this month ---------- */
 
@@ -337,6 +338,50 @@ function PostMedia({ urls }: { urls: string[] }) {
   );
 }
 
+/**
+ * Editing a post: its words in the post editor, and the pictures and files
+ * on it (each with an ×) with the Files button to add more, up to the
+ * composer's four.
+ */
+function PostEditBox({ post, onClose }: { post: Post; onClose: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const [files] = useState(() => feedKept(post.mediaUrls));
+  const check = useCallback((file: File, video: boolean) => feedFileProblem(file, video, "post"), []);
+  const staged = useEditAttachments({ surface: "post", files, videos: [], uploadFile: uploadFeedFile, check });
+
+  const after = useSaveWhenUploaded(staged.uploading);
+  function cancel() { after.cancel(); staged.discard(); onClose(); }
+
+  async function save(html: string | null, empty: boolean) {
+    if (saving) return;
+    if (empty && staged.empty && !post.poll) { staged.setError("A post needs some words, a photo or a poll."); return; }
+    // Still uploading: saved by itself as soon as they finish.
+    if (staged.uploading) { after.later(() => void latest.current(html, empty)); return; }
+    if (staged.failed) { staged.setError(UPLOAD_FAILED); return; }
+    // Nothing changed: close without stamping "edited" on it.
+    if (html === null && !staged.changed) { onClose(); return; }
+    setSaving(true);
+    staged.setError(null);
+    try {
+      await editPost(post, html ?? post.body, staged.changed ? staged.result().mediaUrls : undefined);
+      onClose();
+    } catch (error) {
+      staged.setError(serverSentence(error) ?? "Couldn’t save your edit. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const latest = useRef(save);
+  latest.current = save;
+  return (
+    <PostEditor html={post.body} saving={saving || after.waiting} error={staged.error} onSave={(html, empty) => void save(html, empty)} onCancel={cancel}
+      attachments={<FeedEditTiles items={staged.items} onRemove={staged.remove} />}
+      attach={<AttachButton disabled={saving} onFiles={(list) => void staged.add(list)} />}
+      onPasteFiles={(list) => void staged.add(list)} />
+  );
+}
+
 export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser; onOpen: (post: Post) => void }) {
   const category = categoryOf(post.filterTag);
   const own = post.author.id === user.id;
@@ -344,26 +389,7 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
   // Never your own: reporting yourself is noise for the team's queue, as on the website.
   const canReport = !own && post.author.role !== "system";
   const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
   const [reporting, setReporting] = useState(false);
-
-  async function saveEdit(html: string | null, empty: boolean) {
-    if (saving) return;
-    // Nothing changed: close without stamping "edited" on it.
-    if (html === null) { setEditing(false); return; }
-    if (empty && post.mediaUrls.length === 0 && !post.poll) { setEditError("A post needs some words, a photo or a poll."); return; }
-    setSaving(true);
-    setEditError(null);
-    try {
-      await editPost(post, html);
-      setEditing(false);
-    } catch {
-      setEditError("Couldn’t save your edit. Try again.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function more() {
     const choice = await ch.menu.popup([
@@ -377,7 +403,7 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
       ...(own || staff ? [{ id: "delete", label: "Delete post…" }] : []),
       ...(canReport ? [{ id: "report", label: "Report post…" }] : []),
     ]);
-    if (choice === "edit") { setEditError(null); setEditing(true); }
+    if (choice === "edit") setEditing(true);
     if (choice === "report") setReporting(true);
     if (choice === "comments") onOpen(post);
     if (choice === "copy") void navigator.clipboard.writeText(`${(await ch.info()).origin}/?post=${post.id}`);
@@ -414,10 +440,8 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
           <button className="iconbtn" onClick={() => void more()} aria-label="More"><MoreHorizontal /></button>
         </div>
       </header>
-      {editing ? (
-        <PostEditor html={post.body} saving={saving} error={editError} onSave={(html, empty) => void saveEdit(html, empty)} onCancel={() => setEditing(false)} />
-      ) : <PostBody html={post.body} />}
-      {post.mediaUrls.length ? <PostMedia urls={post.mediaUrls} /> : null}
+      {editing ? <PostEditBox post={post} onClose={() => setEditing(false)} /> : <PostBody html={post.body} />}
+      {post.mediaUrls.length && !editing ? <PostMedia urls={post.mediaUrls} /> : null}
       {post.poll ? <PollView post={post} /> : null}
       <footer>
         <div className="reacts">
@@ -471,21 +495,9 @@ function CommentRow({ comment, postId, meId, editing, actions, onSaveEdit, onCan
   postId: string;
   editing: boolean;
   actions: CommentActions;
-  onSaveEdit: (body: string) => Promise<boolean>;
+  onSaveEdit: (body: string, media?: { mediaUrls: string[]; videoUids: string[]; videoUploadToken?: string }) => Promise<string | null>;
   onCancelEdit: () => void;
 }) {
-  const [draft, setDraft] = useState(comment.body);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => { if (editing) setDraft(comment.body); }, [editing, comment.body]);
-
-  // Words can go from a comment that has a picture, file or video; not from one that has only words.
-  const hasMedia = Boolean(comment.mediaUrls?.length || comment.videoAttachments?.length);
-  async function save() {
-    if (saving || (!draft.trim() && !hasMedia)) return;
-    setSaving(true);
-    try { if (await onSaveEdit(draft.trim())) onCancelEdit(); } finally { setSaving(false); }
-  }
-
   // The same actions on a right-click, as messages have.
   async function menu() {
     const choice = await ch.menu.popup([
@@ -514,17 +526,7 @@ function CommentRow({ comment, postId, meId, editing, actions, onSaveEdit, onCan
       <Avatar name={comment.author.name} src={comment.author.avatarUrl} seed={comment.author.id} size={30} />
       <div>
         {editing ? (
-          <div className="inline-edit">
-            <textarea autoFocus value={draft} maxLength={2000} disabled={saving} onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onCancelEdit(); }
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void save(); }
-              }} />
-            <div className="hint">Escape to cancel · Return to save
-              <button className="btn" disabled={saving} onClick={onCancelEdit}>Cancel</button>
-              <button className="btn honey" disabled={saving || (!draft.trim() && !hasMedia)} onClick={() => void save()}>{saving ? <Loader2 className="spin" /> : null}Save</button>
-            </div>
-          </div>
+          <CommentEditor postId={postId} comment={comment} onSave={onSaveEdit} onClose={onCancelEdit} />
         ) : (
           <div className="bubble">
             <span className="who"><b>{comment.author.name}</b><Badge badge={comment.author.badge} role={comment.author.role} /></span>
@@ -642,14 +644,13 @@ export function PostSheet({ postId, commentId, user, onClose }: { postId: string
     }
   }
 
-  async function saveEdit(comment: Comment, body: string) {
-    if (body === comment.body) return true;
+  async function saveEdit(comment: Comment, body: string, media?: { mediaUrls: string[]; videoUids: string[]; videoUploadToken?: string }) {
+    if (body === comment.body && !media) return null;
     try {
-      await editComment(postId, comment, body);
-      return true;
-    } catch {
-      window.alert("Couldn’t save your edit. Try again.");
-      return false;
+      await editComment(postId, comment, body, media);
+      return null;
+    } catch (error) {
+      return serverSentence(error) ?? "Couldn’t save your edit. Try again.";
     }
   }
 
@@ -681,7 +682,7 @@ export function PostSheet({ postId, commentId, user, onClose }: { postId: string
               <div key={comment.id}>
                 {[comment, ...replies].map((c) => (
                   <CommentRow key={c.id} comment={c} postId={postId} meId={user.id} editing={editingId === c.id} actions={actionsFor(c)}
-                    onSaveEdit={(body) => saveEdit(c, body)} onCancelEdit={() => setEditingId(null)} />
+                    onSaveEdit={(body, media) => saveEdit(c, body, media)} onCancelEdit={() => setEditingId(null)} />
                 ))}
               </div>
             ))}

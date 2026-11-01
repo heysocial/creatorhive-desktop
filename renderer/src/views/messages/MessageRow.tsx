@@ -8,6 +8,8 @@ import { Avatar } from "../../lib/ui";
 import { EmojiPicker } from "./EmojiPicker";
 import { VideoPlayer } from "./VideoPlayer";
 import { VoicePlayer } from "./VoicePlayer";
+import { MessageEditor, type EditUploads } from "./MessageEditor";
+import type { EditAttachmentsResult } from "../../lib/editAttachments";
 
 export interface RowActions {
   meId: string;
@@ -15,7 +17,10 @@ export interface RowActions {
   onReact: (message: Message, emoji: string) => void;
   onOpenThread?: (message: Message) => void;
   onReply?: (message: Message) => void;
-  onEdit?: (message: Message, body: string) => Promise<boolean>;
+  /** Saves an edit (attachments too when they changed); resolves with the sentence to show when it didn't, else null. */
+  onEdit?: (message: Message, body: string, attachments?: EditAttachmentsResult) => Promise<string | null>;
+  /** Where the edit box's new files go, and the limits it holds to. */
+  editUploads?: EditUploads;
   onDelete?: (message: Message) => void;
   onPin?: (message: Message) => void;
   onRetry?: (message: Message) => void;
@@ -140,7 +145,7 @@ export const MessageRow = memo(function MessageRow({ message, grouped, actions, 
   inThread?: boolean;
 }) {
   const [picker, setPicker] = useState(false);
-  const [editing, setEditing] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const own = message.author.id === actions.meId;
   const local = message.id.startsWith("local-");
 
@@ -158,7 +163,7 @@ export const MessageRow = memo(function MessageRow({ message, grouped, actions, 
     if (choice === "link") actions.copyLink?.(message);
     if (choice === "pin") actions.onPin?.(message);
     if (choice === "reply") actions.onReply?.(message);
-    if (choice === "edit") setEditing(message.body);
+    if (choice === "edit") setEditing(true);
     if (choice === "delete") actions.onDelete?.(message);
   }
 
@@ -191,28 +196,17 @@ export const MessageRow = memo(function MessageRow({ message, grouped, actions, 
           {message.replyTo ? (
             <div className="quote"><b>{message.replyTo.author.name}</b> {message.replyTo.body}</div>
           ) : null}
-          {message.huddle ? <HuddleRecap recap={message.huddle as Recap} /> : editing !== null ? (
-            <div className="inline-edit">
-              <textarea autoFocus value={editing} onChange={(e) => setEditing(e.target.value)}
-                onKeyDown={async (e) => {
-                  if (e.key === "Escape") { e.preventDefault(); setEditing(null); }
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    if (await actions.onEdit!(message, editing)) setEditing(null);
-                  }
-                }} />
-              <div className="hint">Escape to cancel · Return to save
-                <button className="btn" onClick={() => setEditing(null)}>Cancel</button>
-                <button className="btn honey" onClick={async () => { if (await actions.onEdit!(message, editing)) setEditing(null); }}>Save</button>
-              </div>
-            </div>
+          {message.huddle ? <HuddleRecap recap={message.huddle as Recap} /> : editing && actions.onEdit ? (
+            <MessageEditor message={message} uploads={actions.editUploads ?? { surface: "channel" }}
+              onSave={(body, attachments) => actions.onEdit!(message, body, attachments)} onClose={() => setEditing(false)} />
           ) : message.bodyHtml || message.body ? (
             <div className="text">
               <RichText html={message.bodyHtml} text={message.body} />
               {message.editedAt ? <span className="edited">(edited)</span> : null}
             </div>
-          ) : null}
-          <Media message={message} />
+          ) : message.editedAt ? <div className="text"><span className="edited">(edited)</span></div> : null}
+          {/* The edit box shows the attachments itself, with an × on each. */}
+          {editing ? null : <Media message={message} />}
           {message.failed ? (
             <div className="failed"><TriangleAlert />{message.failedReason ?? "Not sent."}{actions.onRetry ? <button onClick={() => actions.onRetry?.(message)}>Try again</button> : null}</div>
           ) : null}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Bell, BellOff, ExternalLink, Hash, Info, Lock, Pin, SquareArrowOutUpRight, Star, Upload, Users, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
-import { api, keys, queryClient, useChannels, useConversations, type Workspace } from "../../lib/api";
+import { api, ApiError, keys, queryClient, rateLimitMessage, useChannels, useConversations, type Workspace } from "../../lib/api";
 import {
   addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, patchMessage, useChannelMembers, useHsMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
@@ -14,6 +14,7 @@ import { sitePathFor } from "../../lib/sitePaths";
 import { Avatar, channelName } from "../../lib/ui";
 import { Composer, type ComposerHandle, type ComposerSend, type MentionCandidate } from "./Composer";
 import { MessageRow, type RowActions } from "./MessageRow";
+import { EMPTY_EDIT } from "./MessageEditor";
 import { RichText } from "../../lib/html";
 import { HS_KEY, huddleFor, setPrefs, toggleSaved, useHsSidebar, useHuddles } from "../../lib/heysocial";
 import { HuddleButton } from "../heysocial/Huddle";
@@ -248,16 +249,19 @@ function useRowActions(where: Thread, user: SessionUser, { inThread = false, onO
     onReact: (message, emoji) => void toggleReaction(where, message, emoji),
     onOpenThread: inThread ? undefined : onOpenThread,
     onReply,
-    onEdit: async (message, body) => {
-      if (!body.trim()) return false;
-      if (body.trim() === message.body.trim()) return true;
+    onEdit: async (message, body, attachments) => {
       try {
-        await editMessage(where, message.id, body);
-        return true;
-      } catch {
-        window.alert("Couldn't save the edit. Try again.");
-        return false;
+        await editMessage(where, message.id, body, attachments);
+        return null;
+      } catch (error) {
+        return editRefusal(error);
       }
+    },
+    editUploads: {
+      surface: heySocial ? (where.kind === "channel" ? "hey-social-channel" : "hey-social-dm") : where.kind,
+      // Hey Social Inc.'s videos are files in its own folder, as its composer sends them.
+      uploadFolder: heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined,
+      uploadVideo: heySocial ? undefined : (file, onProgress, signal) => uploadVideo(where, file, onProgress, signal),
     },
     onDelete: async (message) => {
       if (!window.confirm("Delete this message? This can't be undone.")) return;
@@ -290,6 +294,16 @@ function useRowActions(where: Thread, user: SessionUser, { inThread = false, onO
       void navigator.clipboard.writeText(`${origin}${place}${thread}&message=${encodeURIComponent(message.id)}`);
     },
   }), [where.kind, where.id, user.id, isStaff, inThread, onOpenThread, onReply, heySocial, saved]);
+}
+
+/** The sentence an edit box shows when the website refused the edit. */
+function editRefusal(error: unknown) {
+  const limited = rateLimitMessage(error);
+  if (limited) return limited;
+  const sentence = error instanceof ApiError ? error.data?.error : null;
+  if (sentence === "body required") return EMPTY_EDIT;
+  if (error instanceof ApiError && error.status < 500 && typeof sentence === "string" && /\s/.test(sentence)) return sentence;
+  return "Couldn't save your edit. Try again.";
 }
 
 /** Unpin from the pinned list, as owner and team can on the website's pins panel. */
