@@ -3,9 +3,10 @@ import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import {
-  BOARDS, BOARD_LABELS, BOARD_STATUSES, MAX_PAID_DAYS_AHEAD, STATUS_LABELS, addDaysIso, dayOf, errorText, isLanding, landsLabel, localToday, longDay, patchDeal,
-  type Deal, type DealStatus, type Payday,
+  BOARDS, BOARD_LABELS, BOARD_STATUSES, MAX_PAID_DAYS_AHEAD, STATUS_LABELS, UNPAID_REASON_LABELS, addDaysIso, dayOf, errorText, isLanding, landsLabel, localToday, longDay, patchDeal,
+  type Deal, type DealStatus, type Payday, type UnpaidReason,
 } from "../../lib/hub";
+import type { NativeMenuItem } from "../../lib/bridge";
 import { money } from "../../lib/format";
 import { nav } from "../../lib/nav";
 
@@ -13,18 +14,29 @@ export function StagePill({ status, small = false }: { status: DealStatus; small
   return <span className={`stage-pill s-${status} ${small ? "sm" : ""}`}>{STATUS_LABELS[status]}</span>;
 }
 
+/**
+  Every stage, grouped by board, with Closed – Unpaid apart at the bottom: a
+  deal ends there on purpose, from any stage, never as the next step.
+  The card's, the table's and the pop-up's Move stage all use it.
+*/
+export async function pickStage(current: DealStatus): Promise<DealStatus | null> {
+  const items: NativeMenuItem[] = BOARDS.flatMap((board, i) => [
+    ...(i ? [{ type: "separator" as const }] : []),
+    { id: `h-${board}`, label: BOARD_LABELS[board], enabled: false },
+    ...BOARD_STATUSES[board].filter((s) => s !== "closed_unpaid").map((s) => ({ id: s, label: STATUS_LABELS[s], checked: s === current })),
+  ]);
+  items.push({ type: "separator" }, { id: "closed_unpaid", label: STATUS_LABELS.closed_unpaid, sublabel: "Ended without being paid", checked: current === "closed_unpaid" });
+  const choice = await ch.menu.popup(items);
+  return choice && !choice.startsWith("h-") && choice !== current ? (choice as DealStatus) : null;
+}
+
 /** The stage dropdown on a card: a native menu with every stage, grouped by board. */
 export function StageButton({ deal, onPick }: { deal: Deal; onPick: (status: DealStatus) => void }) {
   return (
     <button className={`stage-btn s-${deal.status}`} onClick={async (event) => {
       event.stopPropagation();
-      const items = BOARDS.flatMap((board, i) => [
-        ...(i ? [{ type: "separator" as const }] : []),
-        { id: `h-${board}`, label: BOARD_LABELS[board], enabled: false },
-        ...BOARD_STATUSES[board].map((s) => ({ id: s, label: STATUS_LABELS[s], checked: s === deal.status })),
-      ]);
-      const choice = await ch.menu.popup(items);
-      if (choice && !choice.startsWith("h-") && choice !== deal.status) onPick(choice as DealStatus);
+      const choice = await pickStage(deal.status);
+      if (choice) onPick(choice);
     }}>
       {STATUS_LABELS[deal.status]}<ChevronDown />
     </button>
@@ -105,6 +117,7 @@ export function Modal({ title, onClose, children, width = 460, foot }: { title?:
 type Dialog =
   | { kind: "payment-date"; deal: Deal; status: DealStatus; resolve: (fields: Record<string, unknown> | null) => void }
   | { kind: "paid-on"; deal: Deal; change: boolean; resolve: (fields: Record<string, unknown> | null) => void }
+  | { kind: "closed-unpaid"; deal: Deal; edit: boolean; resolve: (fields: Record<string, unknown> | null) => void }
   | { kind: "payday"; deal: Deal; payday: Payday }
   | null;
 
@@ -115,9 +128,13 @@ export const hubToast = (text: string) => toast(text);
 
 /**
   Before moving to Delivered or Pending Payment without a payment date: ask for one.
-  Before moving to Completed: ask the day it was paid. Null means cancelled.
+  Before moving to Completed: ask the day it was paid. Before closing it
+  unpaid: ask why. Null means cancelled.
 */
 function askPaymentDate(deal: Deal, status: DealStatus) {
+  if (status === "closed_unpaid" && deal.status !== "closed_unpaid") {
+    return new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "closed-unpaid", deal, edit: false, resolve }));
+  }
   if (status === "completed" && deal.status !== "completed") {
     return new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "paid-on", deal, change: false, resolve }));
   }
@@ -153,6 +170,55 @@ export async function changePaidOn(deal: Deal) {
   } catch (error) {
     toast(`${deal.brand_name}'s paid date wasn't changed: ${errorText(error)}`);
   }
+}
+
+/** "Edit reason" on a Closed – Unpaid deal: the same question, prefilled, and the deal stays where it is. */
+export async function editUnpaidReason(deal: Deal) {
+  const fields = await new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "closed-unpaid", deal, edit: true, resolve }));
+  if (!fields) return;
+  try {
+    await patchDeal(deal.id, fields);
+  } catch (error) {
+    toast(`${deal.brand_name}'s reason wasn't changed: ${errorText(error)}`);
+  }
+}
+
+const REASON_HINTS: Record<UnpaidReason, string> = {
+  declined: "The brand passed on the video or cancelled.",
+  unresolved: "You've stopped counting on this money.",
+};
+
+/*
+  Why a deal ended without the money (Tara's Roadmap card). It keeps its
+  amount and counts toward nothing until it moves out again. Declined is the
+  usual answer, so it's picked; Cancel leaves the deal where it was.
+*/
+function ClosedUnpaidPrompt({ deal, edit, resolve, close }: { deal: Deal; edit: boolean; resolve: (f: Record<string, unknown> | null) => void; close: () => void }) {
+  const [reason, setReason] = useState<UnpaidReason>(deal.unpaid_reason ?? "declined");
+  const [note, setNote] = useState(deal.unpaid_note ?? "");
+  const done = (value: Record<string, unknown> | null) => { resolve(value); close(); };
+  const save = () => done({ unpaid_reason: reason, unpaid_note: note.trim() || null });
+  return (
+    <Modal title={edit ? `Why didn't ${deal.brand_name} pay?` : `Close ${deal.brand_name} as unpaid?`} onClose={() => done(null)} width={460}
+      foot={<>
+        <button className="btn" onClick={() => done(null)}>Cancel</button>
+        <button className="btn unpaid" onClick={save}>{edit ? "Save" : "Close as unpaid"}</button>
+      </>}>
+      <p className="muted">It keeps its {money(deal.amount_usd)} but stops counting toward your money, tier and stats.</p>
+      <span className="section-label unpaid-label">Why didn't it pay?</span>
+      <div className="unpaid-reasons" role="radiogroup" aria-label="Why didn't it pay?">
+        {(["declined", "unresolved"] as const).map((r) => (
+          <button key={r} type="button" role="radio" aria-checked={reason === r} className={`unpaid-reason ${reason === r ? "on" : ""}`} onClick={() => setReason(r)}>
+            <i /><span><b>{UNPAID_REASON_LABELS[r]}</b><small>{REASON_HINTS[r]}</small></span>
+          </button>
+        ))}
+      </div>
+      <label className="flabel">Note (optional)</label>
+      <input className="field" value={note} maxLength={500} placeholder="e.g. Video not approved on Trybe" aria-label="Note"
+        onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }} />
+      <p className="unpaid-tip">If they pay after all, open the deal and choose <b>They paid</b>.</p>
+    </Modal>
+  );
 }
 
 /*
@@ -281,6 +347,7 @@ export function HubDialogs() {
     <>
       {dialog?.kind === "payment-date" ? <PaymentDatePrompt deal={dialog.deal} status={dialog.status} resolve={dialog.resolve} close={() => setDialog(null)} /> : null}
       {dialog?.kind === "paid-on" ? <PaidOnPrompt deal={dialog.deal} change={dialog.change} resolve={dialog.resolve} close={() => setDialog(null)} /> : null}
+      {dialog?.kind === "closed-unpaid" ? <ClosedUnpaidPrompt deal={dialog.deal} edit={dialog.edit} resolve={dialog.resolve} close={() => setDialog(null)} /> : null}
       {dialog?.kind === "payday" ? <PaydayDialog deal={dialog.deal} payday={dialog.payday} close={() => setDialog(null)} /> : null}
       {message ? <div className="toast" role="status">{message}<button className="iconbtn" onClick={() => setMessage(null)}><X /></button></div> : null}
     </>

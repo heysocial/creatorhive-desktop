@@ -16,7 +16,8 @@ interface DashDeal { id: string; brandName: string; amount: number; status: Deal
 interface Dash {
   range: Range;
   rangeLabel: string;
-  headline: { collected: Figure; moneyInPlay: Figure; potential: Figure; totalDeals: Figure; averageDeal: Figure };
+  /* closedUnpaid: Closed – Unpaid deals closed in the range, in no other figure; `declined` is that reason's share. Older servers leave it out. */
+  headline: { collected: Figure; moneyInPlay: Figure; potential: Figure; totalDeals: Figure; averageDeal: Figure; closedUnpaid?: Figure & { declined?: number } };
   trend: { date: string; label: string; amount: number; count: number }[];
   revenueBySource: Breakdown[];
   revenueByIndustry: Breakdown[];
@@ -180,6 +181,7 @@ export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
   const before = d ? previousPeriod(d.range) : null;
   const brands = d ? topBrands(d) : [];
   const overdueCount = d?.attention.overdueCount ?? 0;
+  const unpaid = d?.headline.closedUnpaid;
 
   return (
     <div className="page dash-page">
@@ -221,6 +223,15 @@ export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
                   <span className="muted">Avg deal size</span><b>{money(d.headline.averageDeal.value)}</b><small className="muted"><Comparison f={d.headline.averageDeal} before={before} asMoney /></small>
                 </button>
               </div>
+              {/* Expected money that didn't pay out, by the day each deal closed; shown only when there is some. */}
+              {unpaid && unpaid.value > 0 ? (
+                <button className="dh-unpaid" onClick={() => setDrill({ title: "Didn't pay out", figure: money(unpaid.value), ids: unpaid.dealIds ?? [] })}>
+                  <span className="muted">Didn't pay out</span><b>{money(unpaid.value)}</b>
+                  <small className="muted">{[`${plural(unpaid.count ?? 0, "deal")} ${when}`, ...([["Declined", unpaid.declined ?? 0], ["Unresolved", unpaid.value - (unpaid.declined ?? 0)]] as const)
+                    .filter(([, amount]) => amount > 0).map(([label, amount]) => `${label} ${money(amount)}`)].join(" · ")}</small>
+                  <ChevronRight />
+                </button>
+              ) : null}
             </div>
             <div className="dash-grid">
               <div className="card dash-card">

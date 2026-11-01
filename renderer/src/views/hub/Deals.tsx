@@ -3,8 +3,9 @@ import { ArrowUpRight, CalendarClock, ChartNoAxesColumn, ChartNoAxesCombined, Ch
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import {
-  BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, active, addDaysIso, allDeals, contracted, dayOf, daysBetween, dealTypeLabel, isCollected, isDraftPending, isLanding,
-  landsLabel, landsOn, localToday, monDay, monDayYear, potential, timingLine, total, useCash, useDeals, type Board, type Cash, type Deal, type DealStatus,
+  BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, UNPAID_REASON_LABELS, active, addDaysIso, allDeals, closedUnpaidLine, contracted, dayOf, daysBetween, dealTypeLabel,
+  isActiveDeal, isCollected, isDraftPending, isLanding, landsLabel, landsOn, localToday, monDay, monDayYear, potential, timingLine, total, useCash, useDeals,
+  type Board, type Cash, type ClosedUnpaidSummary, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { money, plural } from "../../lib/format";
 import { nav } from "../../lib/nav";
@@ -98,8 +99,29 @@ export function Overview({ deals }: { deals: Deal[] }) {
           ))}
         </div>
       ) : null}
+      <DidntPayOut summary={cash?.activity.closed_unpaid} />
       {open === "contracted" ? <DealListDialog title="Contracted" deals={inPlay} onClose={() => setOpen(null)} /> : null}
       {open === "potential" ? <DealListDialog title="Potential" deals={pot} onClose={() => setOpen(null)} /> : null}
+    </div>
+  );
+}
+
+/*
+  This year's Closed – Unpaid, by reason: what was expected and didn't pay
+  out. In no figure above. Nothing when there's none (or the server is older).
+*/
+function DidntPayOut({ summary }: { summary: ClosedUnpaidSummary | undefined }) {
+  if (!summary?.count) return null;
+  return (
+    <div className="didnt-pay">
+      <div className="dpo-head">
+        <span><span className="section-label">Didn't pay out</span><small className="muted">{plural(summary.count, "deal")} closed unpaid in {summary.since.slice(0, 4)}. Not in any total above.</small></span>
+        <b>{money(summary.amount_usd)} <small>expected</small></b>
+      </div>
+      {(["declined", "unresolved"] as const).filter((r) => summary[r].count > 0).map((r) => (
+        <div key={r} className="dpo-row"><span>{UNPAID_REASON_LABELS[r]}</span><span className="muted">{plural(summary[r].count, "deal")} · {money(summary[r].amount_usd)}</span></div>
+      ))}
+      <button className="link" onClick={() => nav.open({ kind: "hub", page: "deals", board: "payment" }, "hub", "ch")}>See these deals<ChevronRight /></button>
     </div>
   );
 }
@@ -125,8 +147,10 @@ function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared:
   const payment = deal.payment_method_ref?.label;
   const lands = landsOn(deal);
   const timing = lands ? null : timingLine(deal);
+  // Closed – Unpaid: dashed, the amount grey (expected, never counted), and why instead of any timing.
+  const closed = deal.status === "closed_unpaid";
   return (
-    <div className={`deal-card ${dragging ? "ghost" : ""}`} onPointerDown={(e) => onDragStart(e, deal)} onClick={() => openDeal(deal.id)}
+    <div className={`deal-card ${closed ? "closed-unpaid" : ""} ${dragging ? "ghost" : ""}`} onPointerDown={(e) => onDragStart(e, deal)} onClick={() => openDeal(deal.id)}
       role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") openDeal(deal.id); }}>
       <div className="dc-top">
         <b className="dc-brand">{deal.brand_name}</b>
@@ -141,6 +165,7 @@ function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared:
       {deal.status === "pending_payment" && deal.payment_expected_at ? <div className={`dc-due ${deal.payment_expected_at < localToday() ? "late-text" : ""}`}>Payment expected {monDay(deal.payment_expected_at)}</div> : null}
       {isDraftPending(deal.status) && deal.draft_due_at ? <div className="dc-due">Draft due {monDay(deal.draft_due_at)}</div> : null}
       {lands ? <div className="dc-when landing-text">{landsLabel(lands)}</div> : null}
+      {closed ? <div className="dc-when closed-text">{closedUnpaidLine(deal)}</div> : null}
       {timing ? <div className="dc-when">{timing.text}{timing.overdue ? <span className="tag-s late">Overdue</span> : null}</div> : null}
       <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}><StageButton deal={deal} onPick={(s) => void moveDeal(deal, s)} /></div>
     </div>
@@ -295,6 +320,9 @@ function StageGroup({ status, deals, shared, drag, start }: { status: DealStatus
       <span className={`stage-pill s-${status}`}>{STATUS_LABELS[status]} <b>{deals.length}</b></span>
       {/* Laid over the group, so nothing moves under the pointer while dragging. */}
       {over ? <div className="drop-hint" aria-label={`Drop in ${STATUS_LABELS[status]}`}>Drop here</div> : null}
+      {status === "closed_unpaid" && deals.length ? (
+        <div className="month closed-sum"><b>Didn't pay out</b><span className="muted">{plural(deals.length, "deal")}</span><span className="m-amt">{money(total(deals))} expected</span></div>
+      ) : null}
       {status === "completed" ? <CompletedLane deals={deals} shared={shared} onDragStart={start} draggingId={drag?.deal.id ?? null} /> : (
         <div className="sg-cards">
           {shown.map((d) => <DealCard key={d.id} deal={d} shared={shared} onDragStart={start} dragging={drag?.deal.id === d.id} />)}
@@ -343,12 +371,13 @@ function DealTable({ deals, shared }: { deals: Deal[]; shared: boolean }) {
     <div className="deal-table">
       <div className="dt-row head"><span>Brand / details</span><span>Amount</span><span>Status</span><span>Payment</span><span>Updated / paid</span></div>
       {deals.map((d) => (
-        <div key={d.id} className={`dt-row ${d.status === "completed" ? "done" : ""}`} onClick={() => openDeal(d.id)} role="button">
+        <div key={d.id} className={`dt-row ${d.status === "completed" ? "done" : d.status === "closed_unpaid" ? "done closed" : ""}`} onClick={() => openDeal(d.id)} role="button">
           <span className="dt-brand"><b>{d.brand_name}</b><small>{[dealTypeLabel(d.deal_type), d.deliverables].filter(Boolean).join(" · ")}{shared && d.added_by ? ` · ${d.added_by.initials}` : ""}</small></span>
           <span className="dt-amt"><b>{money(d.amount_usd)}</b>{isCollected(d) ? <CheckCircle2 /> : null}</span>
           <span onClick={(e) => e.stopPropagation()}><StageButton deal={d} onPick={(s) => void moveDeal(d, s)} /></span>
           <span className="muted">{d.payment_method_ref?.label ?? "—"}</span>
           {isLanding(d) ? <span className="landing-text">{landsLabel(landsOn(d)!)}</span>
+            : d.status === "closed_unpaid" ? <span className="muted">{closedUnpaidLine(d)}</span>
             : <span className="muted">{d.status === "completed" && d.paid_at ? monDayYear(d.paid_at) : monDayYear(d.updated_at)}</span>}
         </div>
       ))}
@@ -378,7 +407,7 @@ export function NeedsAttention({ deals }: { deals: Deal[] }) {
   const today = localToday();
   const due = (days: number) => (days < 0 ? `${-days} day${days === -1 ? "" : "s"} overdue` : days === 0 ? "due today" : `due in ${days} day${days === 1 ? "" : "s"}`);
   const items = deals.flatMap((d) => {
-    if (d.status === "completed") return [];
+    if (!isActiveDeal(d.status)) return [];
     const out: { key: string; id: string; title: string; detail: string; priority: number; payment: boolean }[] = [];
     if (d.draft_due_at && isDraftPending(d.status)) {
       const days = daysBetween(today, d.draft_due_at);
@@ -415,7 +444,7 @@ export function smartDeals(view: SmartView, deals: Deal[]) {
   // As the Dashboard and the website count it: deals in Pending Payment, and paid ones still to land.
   if (view === "awaiting") return deals.filter((d) => d.status === "pending_payment" || isLanding(d));
   if (view === "paid") return paidThisWeek(deals);
-  return deals.filter((d) => d.deal_type === "retainer" && d.status !== "completed");
+  return deals.filter((d) => d.deal_type === "retainer" && isActiveDeal(d.status));
 }
 /*
   Paid this week: Completed with a paid date in the last 7 days, today

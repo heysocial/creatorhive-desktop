@@ -49,7 +49,8 @@ type State = "draft" | "sent" | "overdue" | "paid";
 function stateOf(invoice: Invoice, deal: Deal | undefined): State {
   // Not paid while the money is still to land.
   if (deal && isCollected(deal)) return "paid";
-  if (invoice.status === "sent" && invoice.sentAt) return invoice.dueOn && invoice.dueOn < localToday() ? "overdue" : "sent";
+  // Closed – Unpaid is never overdue: she's stopped chasing it.
+  if (invoice.status === "sent" && invoice.sentAt) return invoice.dueOn && invoice.dueOn < localToday() && deal?.status !== "closed_unpaid" ? "overdue" : "sent";
   return "draft";
 }
 function stateLine(invoice: Invoice, deal: Deal | undefined) {

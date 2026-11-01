@@ -922,6 +922,8 @@ html.is-popout body { background: var(--card); }
 .s-pending_payment { --st-bg: #FFF1BF; --st-ink: #7A5800; }
 .s-case_study { --st-bg: #FFE4E6; --st-ink: #9F1D35; }
 .s-completed { --st-bg: #DFF5E6; --st-ink: #17663A; }
+/* Closed – Unpaid: a warm stone grey, apart from Pitching's cool slate, paid green and owed honey. */
+.s-closed_unpaid { --st-bg: #ECE8E2; --st-ink: #57514A; }
 @media (prefers-color-scheme: dark) {
   .s-pitching { --st-bg: #2B3038; --st-ink: #C9D1DC; }
   .s-deliverables_contract { --st-bg: #1B2B47; --st-ink: #9FC2FF; }
@@ -934,6 +936,7 @@ html.is-popout body { background: var(--card); }
   .s-pending_payment { --st-bg: #3A2F0A; --st-ink: #F6D365; }
   .s-case_study { --st-bg: #3D1820; --st-ink: #FFA6B5; }
   .s-completed { --st-bg: #143323; --st-ink: #8EDDA9; }
+  .s-closed_unpaid { --st-bg: #2E2B27; --st-ink: #CFC7BC; }
 }
 .stage-pill { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--st-bg); color: var(--st-ink); white-space: nowrap; }
 .stage-pill.sm { padding: 1px 7px; font-size: 10.5px; }
@@ -1937,3 +1940,50 @@ html.is-popout body { background: var(--card); }
 .ls-row:hover { background: var(--card-2); }
 .ls-row > span { font-weight: 600; }
 .ls-row small { flex: 1; font-size: 12.5px; }
+
+/* Closed – Unpaid: kept, never counted. Dashed cards, grey amounts, the reason where timing would be. */
+.closed-unpaid, .closed-banner, .didnt-pay, .dh-unpaid, .unpaid-reason.on, .btn.unpaid, .month.closed-sum { --st-bg: #ECE8E2; --st-ink: #57514A; }
+@media (prefers-color-scheme: dark) {
+  .closed-unpaid, .closed-banner, .didnt-pay, .dh-unpaid, .unpaid-reason.on, .btn.unpaid, .month.closed-sum { --st-bg: #2E2B27; --st-ink: #CFC7BC; }
+}
+.k-section .deal-card.closed-unpaid, .deal-card.closed-unpaid { background: var(--card-2); box-shadow: none; outline: 1.5px dashed var(--line-strong); outline-offset: -1.5px; }
+.deal-card.closed-unpaid:hover { outline-color: var(--ink-4); }
+.deal-card.closed-unpaid .dc-amt { color: var(--ink-3); }
+.closed-text { color: var(--st-ink); font-weight: 600; }
+.k-section .month.closed-sum, .month.closed-sum { background: var(--st-bg); color: var(--st-ink); cursor: default; }
+.month.closed-sum .muted { color: inherit; opacity: .75; }
+.dt-row.closed .dt-amt b { color: var(--ink-4); }
+.dp-amount.closed-unpaid b { color: var(--ink-3); }
+.dp-amount.closed-unpaid > .muted { font-size: 13px; }
+.closed-banner { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 12px; background: var(--st-bg); color: var(--st-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-ink) 16%, transparent); }
+.closed-banner > b { font-size: 14px; }
+.closed-banner p { margin: 0; font-size: 14px; color: var(--ink-2); }
+.closed-banner .row { display: flex; gap: 8px; }
+.closed-banner .btn:not(.honey) { background: var(--card); box-shadow: 0 0 0 .5px var(--line-strong); }
+.closed-banner small { font-size: 12px; }
+.btn.unpaid { background: var(--st-ink); color: var(--card); }
+.btn.unpaid:hover { background: color-mix(in srgb, var(--st-ink) 88%, var(--ink)); }
+.unpaid-label { display: block; margin: 14px 0 8px; }
+.unpaid-reasons { display: flex; flex-direction: column; gap: 8px; }
+.unpaid-reason { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; text-align: left; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.unpaid-reason:hover { background: var(--card-2); }
+.unpaid-reason > i { width: 16px; height: 16px; margin-top: 1px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--ink-4); flex: none; }
+.unpaid-reason > span { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
+.unpaid-reason small { font-size: 12.5px; color: var(--ink-3); }
+.unpaid-reason.on { background: var(--st-bg); box-shadow: inset 0 0 0 1.5px var(--st-ink); }
+.unpaid-reason.on > i { box-shadow: inset 0 0 0 5px var(--st-ink); }
+.unpaid-tip { margin: 12px 0 0; padding: 9px 12px; border-radius: 10px; background: var(--card-2); font-size: 12.5px; color: var(--ink-3); }
+.unpaid-tip b { color: var(--ink-2); }
+.didnt-pay { display: flex; flex-direction: column; gap: 2px; padding: 14px 22px 14px; border-top: 1px solid var(--line); }
+.dpo-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.dpo-head > span { display: flex; flex-direction: column; gap: 3px; }
+.dpo-head small { font-size: 12.5px; }
+.dpo-head > b { font-size: 18px; color: var(--st-ink); white-space: nowrap; }
+.dpo-head > b small { font-size: 13px; font-weight: 600; }
+.dpo-row { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; font-size: 13.5px; border-top: 1px solid var(--line); }
+.didnt-pay .link { align-self: flex-start; display: inline-flex; align-items: center; gap: 2px; margin-top: 6px; font-size: 13px; font-weight: 600; }
+.didnt-pay .link svg { width: 14px; height: 14px; }
+.dh-unpaid { display: grid; grid-template-columns: auto auto 1fr auto; align-items: baseline; gap: 10px; width: calc(100% + 36px); margin: 0 -18px; padding: 10px 18px; border-top: 1px solid var(--line); text-align: left; font-size: 13px; }
+.dh-unpaid:hover { background: var(--card-2); }
+.dh-unpaid b { font-size: 17px; color: var(--st-ink); }
+.dh-unpaid svg { width: 14px; height: 14px; color: var(--ink-3); align-self: center; }

@@ -511,6 +511,8 @@ function configureIpc() {
       if (item?.type === "separator") return { type: "separator" };
       return {
         label: String(item?.label ?? ""),
+        // A second, smaller line under the label (macOS 14.4 and later shows it).
+        sublabel: typeof item?.sublabel === "string" ? item.sublabel : undefined,
         enabled: item?.enabled !== false,
         accelerator: typeof item?.accelerator === "string" ? item.accelerator : undefined,
         registerAccelerator: false,

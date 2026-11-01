@@ -1,23 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRight, ChevronDown, Clock, FileText, Link2, Loader2, Mail, MoreHorizontal, Paperclip, Phone, Trash2, X } from "lucide-react";
+import { ArrowRight, CheckCircle2, ChevronDown, Clock, FileText, Link2, Loader2, Mail, MoreHorizontal, Paperclip, Phone, Trash2, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { openLink } from "../../lib/html";
 import { api, queryClient } from "../../lib/api";
 import {
-  BOARD_LABELS, DEAL_STATUSES, STATUS_LABELS, boardOf, daysBetween, dealTypeLabel, deleteDeal, isDeliveredOrLater, isDraftPending, landsLabel, landsOn, localToday, monDay,
+  ADVANCE_STATUSES, BOARD_LABELS, STATUS_LABELS, boardOf, closedUnpaidLine, daysBetween, dealTypeLabel, deleteDeal, isDeliveredOrLater, isDraftPending, landsLabel, landsOn, localToday, monDay,
   monDayYear, nextStatus, shortDay, staleText, unpaidText, useDeal, useDeals, withTz, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { bytes, money } from "../../lib/format";
 import { nav } from "../../lib/nav";
-import { Monogram, StagePill, changePaidOn, moveDeal, useLayer } from "./parts";
+import { Monogram, StagePill, changePaidOn, editUnpaidReason, moveDeal, pickStage as pickStageMenu, useLayer } from "./parts";
 import { openDealForm } from "./DealForm";
 import { InvoiceSection } from "./Invoices";
 
 interface Brief { id: string; filename: string; kind: "pdf" | "word" | "image" | "link"; sizeBytes: number | null; site: string | null; url: string | null; createdAt: string }
 
 function urgency(deal: Deal): { text: string; late: boolean; landing?: boolean } | null {
+  // Closed – Unpaid has its own banner, and is never stale or overdue.
+  if (deal.status === "closed_unpaid") return null;
   const today = localToday();
   // Paid for a day still ahead: not collected until then.
   const lands = landsOn(deal);
@@ -235,7 +237,8 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
   const next = deal.status === "pending_payment" ? "completed" : nextStatus(deal.status);
   const u = urgency(deal);
   const lands = landsOn(deal);
-  const index = DEAL_STATUSES.indexOf(deal.status);
+  const index = ADVANCE_STATUSES.indexOf(deal.status);
+  const closed = deal.status === "closed_unpaid";
   const started = monDay(deal.created_at);
   const daysIn = daysBetween(deal.created_at, localToday());
 
@@ -265,8 +268,8 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
   }
 
   async function pickStage() {
-    const choice = await ch.menu.popup(DEAL_STATUSES.map((s) => ({ id: s, label: STATUS_LABELS[s], checked: s === deal!.status })));
-    if (choice && choice !== deal!.status) void moveTo(choice as DealStatus);
+    const choice = await pickStageMenu(deal!.status);
+    if (choice) void moveTo(choice);
   }
 
   const panel = (
@@ -285,7 +288,19 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
       <div className="dp-cols">
         <div className="dp-main scroll">
           <div className="faint">{dealTypeLabel(deal.deal_type)} · started {started} · {daysIn} {daysIn === 1 ? "day" : "days"} in</div>
-          <div className="dp-amount"><b>{money(deal.amount_usd)}</b>{u ? <span className={`urgent ${u.late ? "late" : ""} ${u.landing ? "landing" : ""}`}><Clock />{u.text}</span> : null}{deal.payment_overdue ? <span className="tag-s late">Overdue</span> : null}</div>
+          <div className={`dp-amount ${closed ? "closed-unpaid" : ""}`}><b>{money(deal.amount_usd)}</b>{closed ? <span className="muted">Expected · not counted in any total</span> : null}{u ? <span className={`urgent ${u.late ? "late" : ""} ${u.landing ? "landing" : ""}`}><Clock />{u.text}</span> : null}{deal.payment_overdue && !closed ? <span className="tag-s late">Overdue</span> : null}</div>
+          {closed ? (
+            /* Why it closed, and the ways out: they paid after all (the Paid on question, then Completed, counted as normal), or Move stage to reopen it. */
+            <div className="closed-banner">
+              <b>{closedUnpaidLine(deal)}</b>
+              {deal.unpaid_note ? <p className="selectable">“{deal.unpaid_note}”</p> : null}
+              <div className="row">
+                <button className="btn honey" disabled={moving} onClick={() => void moveTo("completed")}>{moving ? <Loader2 className="spin" /> : <CheckCircle2 />}They paid</button>
+                <button className="btn" disabled={moving} onClick={() => void editUnpaidReason(deal)}>Edit reason</button>
+              </div>
+              <small className="faint">To reopen it without a payment, pick a stage under Move stage.</small>
+            </div>
+          ) : null}
           <div className="dp-actions">
             {next ? (
               <button className="btn honey lg" disabled={moving} onClick={() => void moveTo(next)}>
@@ -294,10 +309,14 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
             ) : null}
             <button className="btn lg" onClick={() => void pickStage()}>Move stage<ChevronDown /></button>
           </div>
-          <div className="story">
-            {DEAL_STATUSES.map((s, i) => <i key={s} className={i <= index ? `on s-${s}` : ""} title={STATUS_LABELS[s]} />)}
-          </div>
-          <div className="story-labels faint"><span>Pitching</span><span>Completed</span></div>
+          {!closed ? (
+            <>
+              <div className="story">
+                {ADVANCE_STATUSES.map((s, i) => <i key={s} className={i <= index ? `on s-${s}` : ""} title={STATUS_LABELS[s]} />)}
+              </div>
+              <div className="story-labels faint"><span>Pitching</span><span>Completed</span></div>
+            </>
+          ) : null}
           <Briefs deal={deal} />
           {deal.deliverables || deal.deliverables_count ? (
             <section className="dp-sec">
@@ -321,6 +340,7 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
               {deal.payment_expected_at ? <Row label="Expected">{monDay(deal.payment_expected_at)}</Row> : null}
               {deal.payment_terms_days != null ? <Row label="Terms">{deal.payment_terms_days === 0 ? "Due on receipt" : `Net ${deal.payment_terms_days}`}</Row> : null}
               {deal.payment_method_ref ? <Row label="Via">{deal.payment_method_ref.label}</Row> : null}
+              {closed && deal.closed_unpaid_at ? <Row label="Closed unpaid">{shortDay(deal.closed_unpaid_at)} · {deal.unpaid_reason === "declined" ? "Declined" : "Unresolved"}</Row> : null}
               {/* Paid for a day still ahead reads "Lands on", and counts from then; either way the day can change here. */}
               {deal.status === "completed" ? (
                 <Row label={lands ? "Lands on" : "Paid on"}>

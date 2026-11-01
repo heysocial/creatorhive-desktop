@@ -26,6 +26,7 @@ export interface RealtimeMessage {
 export interface NativeMenuItem {
   id?: string;
   label?: string;
+  sublabel?: string;
   type?: "separator";
   enabled?: boolean;
   checked?: boolean;
