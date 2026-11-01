@@ -18,6 +18,7 @@ import { useMembers } from "../../lib/community";
 import { WeekPanel } from "./Week";
 import { PostEditor } from "./PostEditor";
 import { Modal, Monogram } from "../hub/parts";
+import { landsLabel } from "../../lib/hub";
 import { pastedFiles } from "../../lib/paste";
 import { ReportDialog, type ReportTarget } from "../../overlays/Report";
 import { CommentComposer, CommentMedia, rememberPoster, serverSentence } from "./CommentComposer";
@@ -88,12 +89,17 @@ function PaidCard() {
   );
 }
 
+/* The server places a deal paid for a day still ahead on that day, as "Paid · landing". */
+const LANDING_LABEL = "Paid · landing";
+
 function Breakdown({ glance, pct, onClose }: { glance: Glance; pct: number; onClose: () => void }) {
   const row = (deal: GlanceDeal, detail: string, late = false) => (
     <li key={deal.id}>
       <button className="glance-row" onClick={() => { onClose(); nav.open({ kind: "hub", page: "deals", dealId: deal.id }, "hub", "ch"); }}>
         <Monogram name={deal.brandName} size={28} />
-        <span className="gr-text"><b>{deal.brandName}</b><small className={late ? "late-text" : ""}>{detail}</small></span>
+        <span className="gr-text"><b>{deal.brandName}</b>{deal.statusLabel === LANDING_LABEL && deal.paymentExpectedAt
+          ? <small className="landing-text">{landsLabel(deal.paymentExpectedAt)} · counts from then</small>
+          : <small className={late ? "late-text" : ""}>{detail}</small>}</span>
         <span className="amt">{money(deal.amountUsd)}</span>
         {late ? <span className="btn">Follow up</span> : null}
       </button>

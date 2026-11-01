@@ -3,7 +3,7 @@ import { ArrowUpDown, Copy, Download, Link2, Mail, Pencil, Plus, Search, Unlink 
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
-import { monDay, type DealStatus } from "../../lib/hub";
+import { landsLabel, landsOn, monDay, type DealStatus } from "../../lib/hub";
 import { money } from "../../lib/format";
 import { Modal, Monogram, StagePill } from "./parts";
 import { openDeal } from "./Deals";
@@ -25,7 +25,9 @@ const setContacts = (data: Partial<Contacts>) => queryClient.setQueryData<Contac
 function lastDeal(c: Client) {
   const d = c.deals[0];
   if (!d) return null;
-  return { deal: d, when: d.status === "completed" && d.paid_at ? `Paid ${monDay(d.paid_at)}` : `Started ${monDay(d.created_at)}` };
+  // Paid for a day still ahead reads "Lands Nov 4" until then.
+  const lands = landsOn(d);
+  return { deal: d, when: lands ? landsLabel(lands) : d.status === "completed" && d.paid_at ? `Paid ${monDay(d.paid_at)}` : `Started ${monDay(d.created_at)}` };
 }
 
 function ContactDialog({ client, onClose, onSaved }: { client: Client | null; onClose: () => void; onSaved: (key: string) => void }) {

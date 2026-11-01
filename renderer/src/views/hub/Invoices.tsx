@@ -5,7 +5,7 @@ import { InvoiceDetailsForm, useInvoiceProfile } from "./InvoiceDetails";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
-import { allDeals, localToday, monDay, useDeals, type Deal } from "../../lib/hub";
+import { allDeals, isCollected, localToday, monDay, useDeals, type Deal } from "../../lib/hub";
 import { money } from "../../lib/format";
 import { Modal, Monogram } from "./parts";
 import { openDeal } from "./Deals";
@@ -47,7 +47,8 @@ export function useInvoice(dealId: string, enabled = true) {
 
 type State = "draft" | "sent" | "overdue" | "paid";
 function stateOf(invoice: Invoice, deal: Deal | undefined): State {
-  if (deal?.status === "completed" && deal.paid_at) return "paid";
+  // Not paid while the money is still to land.
+  if (deal && isCollected(deal)) return "paid";
   if (invoice.status === "sent" && invoice.sentAt) return invoice.dueOn && invoice.dueOn < localToday() ? "overdue" : "sent";
   return "draft";
 }

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import {
-  BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, addDaysIso, errorText, localToday, patchDeal,
+  BOARDS, BOARD_LABELS, BOARD_STATUSES, MAX_PAID_DAYS_AHEAD, STATUS_LABELS, addDaysIso, dayOf, errorText, isLanding, landsLabel, localToday, longDay, patchDeal,
   type Deal, type DealStatus, type Payday,
 } from "../../lib/hub";
 import { money } from "../../lib/format";
@@ -104,6 +104,7 @@ export function Modal({ title, onClose, children, width = 460, foot }: { title?:
 
 type Dialog =
   | { kind: "payment-date"; deal: Deal; status: DealStatus; resolve: (fields: Record<string, unknown> | null) => void }
+  | { kind: "paid-on"; deal: Deal; change: boolean; resolve: (fields: Record<string, unknown> | null) => void }
   | { kind: "payday"; deal: Deal; payday: Payday }
   | null;
 
@@ -112,8 +113,14 @@ let toast: (text: string) => void = () => {};
 
 export const hubToast = (text: string) => toast(text);
 
-/** Before moving to Delivered or Pending Payment without a payment date: ask for one. Null means cancelled. */
+/**
+  Before moving to Delivered or Pending Payment without a payment date: ask for one.
+  Before moving to Completed: ask the day it was paid. Null means cancelled.
+*/
 function askPaymentDate(deal: Deal, status: DealStatus) {
+  if (status === "completed" && deal.status !== "completed") {
+    return new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "paid-on", deal, change: false, resolve }));
+  }
   if ((status !== "delivered" && status !== "pending_payment") || deal.payment_expected_at) return Promise.resolve({});
   return new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "payment-date", deal, status, resolve }));
 }
@@ -124,7 +131,7 @@ export async function moveDeal(deal: Deal, status: DealStatus) {
   if (fields === null) return false;
   try {
     const result = await patchDeal(deal.id, { status, ...fields });
-    if (result.payday && result.deal.paid_at) show({ kind: "payday", deal: result.deal, payday: result.payday });
+    celebrate(result.deal, result.payday);
     return true;
   } catch (error) {
     toast(`${deal.brand_name} wasn't moved to ${STATUS_LABELS[status]}: ${errorText(error)}. Returned to ${STATUS_LABELS[deal.status]}.`);
@@ -132,8 +139,59 @@ export async function moveDeal(deal: Deal, status: DealStatus) {
   }
 }
 
+/** The payday card, unless the money lands on a day still ahead (the server sends no payday then, and older ones might). */
 export function celebrate(deal: Deal, payday: Payday | null) {
-  if (payday && deal.paid_at) show({ kind: "payday", deal, payday });
+  if (payday && deal.paid_at && !isLanding(deal)) show({ kind: "payday", deal, payday });
+}
+
+/** "Change" beside a paid deal's Paid on: the same question, and only the day is sent. */
+export async function changePaidOn(deal: Deal) {
+  const fields = await new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "paid-on", deal, change: true, resolve }));
+  if (!fields?.paid_on) return;
+  try {
+    await patchDeal(deal.id, fields);
+  } catch (error) {
+    toast(`${deal.brand_name}'s paid date wasn't changed: ${errorText(error)}`);
+  }
+}
+
+/*
+  The day a deal was paid: today unless changed, and a day ahead is fine, for
+  money a platform credits today that reaches the bank on Nov 4. Until then
+  the deal shows "Lands Nov 4" and counts as Contracted, not collected.
+  Keeping today on a move sends no day, so the server stamps the moment as it
+  always has; Cancel leaves the deal where it was.
+*/
+function PaidOnPrompt({ deal, change, resolve, close }: { deal: Deal; change: boolean; resolve: (f: Record<string, unknown> | null) => void; close: () => void }) {
+  const today = localToday();
+  const latest = addDaysIso(today, MAX_PAID_DAYS_AHEAD);
+  const was = change ? deal.paid_on ?? (deal.paid_at ? dayOf(deal.paid_at) : null) : null;
+  const [date, setDate] = useState(was ?? today);
+  const ahead = date > today;
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= "2000-01-01" && date <= latest;
+  const done = (value: Record<string, unknown> | null) => { resolve(value); close(); };
+  const save = () => {
+    if (!valid) return;
+    if (change) done(date === was ? {} : { paid_on: date });
+    else done(date === today ? {} : { paid_on: date });
+  };
+  return (
+    <Modal title={`When was ${deal.brand_name} paid?`} onClose={() => done(null)} width={440}
+      foot={<>
+        <button className="btn" onClick={() => done(null)}>Cancel</button>
+        <button className="btn honey" disabled={!valid} onClick={save}>{ahead ? "Save · lands later" : change ? "Save" : "Mark paid"}</button>
+      </>}>
+      <p className="muted">{change ? `The day the ${money(deal.amount_usd)} reached you, or will.` : `Moving to ${STATUS_LABELS.completed}. Pick the day the ${money(deal.amount_usd)} reaches you, if it isn't today.`}</p>
+      <label className="flabel" style={{ marginTop: 12 }}>Paid on</label>
+      <input className="field" type="date" autoFocus value={date} min="2000-01-01" max={latest} aria-label="Paid on"
+        onChange={(e) => setDate(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }} />
+      <p className={`hint ${ahead && valid ? "landing-text" : ""}`}>
+        {!valid ? (date > latest ? "Up to a year from today." : "Pick a day.")
+          : ahead ? `Shows as "${landsLabel(date)}" and counts toward Cash from ${longDay(date)}.`
+          : date === today ? "Counts toward Cash today." : `Counts toward Cash on ${longDay(date)}.`}
+      </p>
+    </Modal>
+  );
 }
 
 function PaymentDatePrompt({ deal, status, resolve, close }: { deal: Deal; status: DealStatus; resolve: (f: Record<string, unknown> | null) => void; close: () => void }) {
@@ -222,6 +280,7 @@ export function HubDialogs() {
   return (
     <>
       {dialog?.kind === "payment-date" ? <PaymentDatePrompt deal={dialog.deal} status={dialog.status} resolve={dialog.resolve} close={() => setDialog(null)} /> : null}
+      {dialog?.kind === "paid-on" ? <PaidOnPrompt deal={dialog.deal} change={dialog.change} resolve={dialog.resolve} close={() => setDialog(null)} /> : null}
       {dialog?.kind === "payday" ? <PaydayDialog deal={dialog.deal} payday={dialog.payday} close={() => setDialog(null)} /> : null}
       {message ? <div className="toast" role="status">{message}<button className="iconbtn" onClick={() => setMessage(null)}><X /></button></div> : null}
     </>

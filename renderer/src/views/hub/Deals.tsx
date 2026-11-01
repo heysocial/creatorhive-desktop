@@ -3,8 +3,8 @@ import { ArrowUpRight, CalendarClock, ChartNoAxesColumn, ChartNoAxesCombined, Ch
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import {
-  BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, active, addDaysIso, allDeals, contracted, dayOf, daysBetween, dealTypeLabel, isDraftPending, localToday,
-  monDay, monDayYear, potential, timingLine, total, useCash, useDeals, type Board, type Cash, type Deal, type DealStatus,
+  BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, active, addDaysIso, allDeals, contracted, dayOf, daysBetween, dealTypeLabel, isCollected, isDraftPending, isLanding,
+  landsLabel, landsOn, localToday, monDay, monDayYear, potential, timingLine, total, useCash, useDeals, type Board, type Cash, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { money, plural } from "../../lib/format";
 import { nav } from "../../lib/nav";
@@ -69,6 +69,8 @@ export function Overview({ deals }: { deals: Deal[] }) {
   const live = active(deals);
   const collected = cash?.tier.collectedThisMonth ?? 0;
   const delta = cash ? collected - cash.activity.previous_month_collected_usd : 0;
+  // Marked paid for a day still ahead: counted in Contracted until it lands, not in Collected.
+  const landing = cash?.activity.landing ?? [];
   return (
     <div className="card hub-overview">
       {cash ? <TierProgress cash={cash} /> : <div className="tier-progress skel" />}
@@ -85,6 +87,17 @@ export function Overview({ deals }: { deals: Deal[] }) {
         <div className="metric"><span className="ml"><Layers />Active deals</span><b>{live.length}</b><small>across 3 sections</small></div>
         <div className="metric"><span className="ml"><ChartNoAxesColumn />Avg Deal Size</span><b>{money(live.length ? Math.round(total(live) / live.length) : 0)}</b><small>across active deals</small></div>
       </div>
+      {landing.length ? (
+        <div className="landing-soon">
+          <span className="section-label">Landing soon</span>
+          {landing.map((l) => (
+            <button key={l.id} className="ls-row" onClick={() => openDeal(l.id)}>
+              <Monogram name={l.brand_name} size={22} /><span>{l.brand_name}</span>
+              <small className="landing-text">{landsLabel(l.lands_on)} · counts from then</small><b>{money(l.amount_usd)}</b>
+            </button>
+          ))}
+        </div>
+      ) : null}
       {open === "contracted" ? <DealListDialog title="Contracted" deals={inPlay} onClose={() => setOpen(null)} /> : null}
       {open === "potential" ? <DealListDialog title="Potential" deals={pot} onClose={() => setOpen(null)} /> : null}
     </div>
@@ -110,13 +123,14 @@ function PeopleChip({ deal, shared }: { deal: Deal; shared: boolean }) {
 
 function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared: boolean; onDragStart: (e: React.PointerEvent, deal: Deal) => void; dragging: boolean }) {
   const payment = deal.payment_method_ref?.label;
-  const timing = timingLine(deal);
+  const lands = landsOn(deal);
+  const timing = lands ? null : timingLine(deal);
   return (
     <div className={`deal-card ${dragging ? "ghost" : ""}`} onPointerDown={(e) => onDragStart(e, deal)} onClick={() => openDeal(deal.id)}
       role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") openDeal(deal.id); }}>
       <div className="dc-top">
         <b className="dc-brand">{deal.brand_name}</b>
-        <span className="dc-amt">{money(deal.amount_usd)}{deal.status === "completed" ? <CheckCircle2 /> : null}</span>
+        <span className="dc-amt">{money(deal.amount_usd)}{isCollected(deal) ? <CheckCircle2 /> : null}</span>
       </div>
       <div className="dc-tags">
         <span className="tag-s">{dealTypeLabel(deal.deal_type)}</span>
@@ -126,6 +140,7 @@ function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared:
       {deal.deliverables ? <div className="dc-line">{deal.deliverables}</div> : null}
       {deal.status === "pending_payment" && deal.payment_expected_at ? <div className={`dc-due ${deal.payment_expected_at < localToday() ? "late-text" : ""}`}>Payment expected {monDay(deal.payment_expected_at)}</div> : null}
       {isDraftPending(deal.status) && deal.draft_due_at ? <div className="dc-due">Draft due {monDay(deal.draft_due_at)}</div> : null}
+      {lands ? <div className="dc-when landing-text">{landsLabel(lands)}</div> : null}
       {timing ? <div className="dc-when">{timing.text}{timing.overdue ? <span className="tag-s late">Overdue</span> : null}</div> : null}
       <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}><StageButton deal={deal} onPick={(s) => void moveDeal(deal, s)} /></div>
     </div>
@@ -140,14 +155,16 @@ function CompletedLane({ deals, shared, onDragStart, draggingId }: { deals: Deal
   });
   useEffect(() => { try { localStorage.setItem("hub.completed.open.v1", JSON.stringify(open)); } catch { /* fine */ } }, [open]);
   const groups = useMemo(() => {
-    const paid = deals.filter((d) => d.paid_at).sort((a, b) => new Date(b.paid_at!).getTime() - new Date(a.paid_at!).getTime());
+    // Paid for a day still ahead: in no month until it lands, soonest first above them.
+    const landing = deals.filter(isLanding).sort((a, b) => new Date(a.paid_at!).getTime() - new Date(b.paid_at!).getTime());
+    const paid = deals.filter((d) => d.paid_at && !isLanding(d)).sort((a, b) => new Date(b.paid_at!).getTime() - new Date(a.paid_at!).getTime());
     const months = new Map<string, Deal[]>();
     for (const d of paid) {
       const date = new Date(d.paid_at!);
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
       months.set(key, [...(months.get(key) ?? []), d]);
     }
-    return { months: [...months.entries()], unknown: deals.filter((d) => !d.paid_at) };
+    return { landing, months: [...months.entries()], unknown: deals.filter((d) => !d.paid_at) };
   }, [deals]);
   const thisYear = new Date().getFullYear();
   const newest = groups.months[0]?.[0];
@@ -159,6 +176,19 @@ function CompletedLane({ deals, shared, onDragStart, draggingId }: { deals: Deal
 
   return (
     <div className="lane-body">
+      {groups.landing.length ? (
+        <div>
+          <button className="month landing" onClick={() => setOpen({ ...open, landing: !(open.landing ?? true) })}>
+            {open.landing ?? true ? <ChevronDown /> : <ChevronRight />}<b>Landing soon</b><span className="muted">{plural(groups.landing.length, "deal")}</span><span className="m-amt">{money(total(groups.landing))}</span>
+          </button>
+          {open.landing ?? true ? (
+            <div className="month-cards">
+              <p className="faint lane-note">Counted in Contracted until the day it lands, then in that month and in Cash.</p>
+              {groups.landing.map((d) => <DealCard key={d.id} deal={d} shared={shared} onDragStart={onDragStart} dragging={draggingId === d.id} />)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {recent.map(([key, list]) => {
         const year = key.slice(0, 4);
         const q = Math.ceil(Number(key.slice(5)) / 3);
@@ -315,10 +345,11 @@ function DealTable({ deals, shared }: { deals: Deal[]; shared: boolean }) {
       {deals.map((d) => (
         <div key={d.id} className={`dt-row ${d.status === "completed" ? "done" : ""}`} onClick={() => openDeal(d.id)} role="button">
           <span className="dt-brand"><b>{d.brand_name}</b><small>{[dealTypeLabel(d.deal_type), d.deliverables].filter(Boolean).join(" · ")}{shared && d.added_by ? ` · ${d.added_by.initials}` : ""}</small></span>
-          <span className="dt-amt"><b>{money(d.amount_usd)}</b>{d.status === "completed" ? <CheckCircle2 /> : null}</span>
+          <span className="dt-amt"><b>{money(d.amount_usd)}</b>{isCollected(d) ? <CheckCircle2 /> : null}</span>
           <span onClick={(e) => e.stopPropagation()}><StageButton deal={d} onPick={(s) => void moveDeal(d, s)} /></span>
           <span className="muted">{d.payment_method_ref?.label ?? "—"}</span>
-          <span className="muted">{d.status === "completed" && d.paid_at ? monDayYear(d.paid_at) : monDayYear(d.updated_at)}</span>
+          {isLanding(d) ? <span className="landing-text">{landsLabel(landsOn(d)!)}</span>
+            : <span className="muted">{d.status === "completed" && d.paid_at ? monDayYear(d.paid_at) : monDayYear(d.updated_at)}</span>}
         </div>
       ))}
       {deals.length === 0 ? <div className="empty-state">No deals here yet.</div> : null}
@@ -381,8 +412,8 @@ export function smartDeals(view: SmartView, deals: Deal[]) {
   week.setDate(week.getDate() + 7);
   const inAWeek = week.toISOString().slice(0, 10);
   if (view === "due") return deals.filter((d) => isDraftPending(d.status) && d.draft_due_at && d.draft_due_at <= inAWeek).sort((a, b) => a.draft_due_at!.localeCompare(b.draft_due_at!));
-  // As the Dashboard and the website count it: deals in Pending Payment.
-  if (view === "awaiting") return deals.filter((d) => d.status === "pending_payment");
+  // As the Dashboard and the website count it: deals in Pending Payment, and paid ones still to land.
+  if (view === "awaiting") return deals.filter((d) => d.status === "pending_payment" || isLanding(d));
   if (view === "paid") return paidThisWeek(deals);
   return deals.filter((d) => d.deal_type === "retainer" && d.status !== "completed");
 }
@@ -395,12 +426,12 @@ export function smartDeals(view: SmartView, deals: Deal[]) {
 export function paidThisWeek(deals: Deal[]) {
   const from = addDaysIso(localToday(), -6);
   return deals
-    .filter((d) => d.status === "completed" && d.paid_at && dayOf(d.paid_at) >= from)
+    .filter((d) => isCollected(d) && dayOf(d.paid_at!) >= from)
     .sort((a, b) => new Date(b.paid_at!).getTime() - new Date(a.paid_at!).getTime());
 }
 export const SMART_LABELS: Record<SmartView, { title: string; sub: string }> = {
   due: { title: "Due this week", sub: "Drafts due in the next 7 days, and any overdue" },
-  awaiting: { title: "Awaiting payment", sub: "Deals in Pending payment: delivered, and the money hasn't come in yet" },
+  awaiting: { title: "Awaiting payment", sub: "Deals in Pending payment, and paid ones still to land: the money hasn't come in yet" },
   paid: { title: "Paid this week", sub: "Deals marked Completed with a paid date in the last 7 days" },
   retainers: { title: "Retainers", sub: "Your ongoing retainer deals" },
 };

@@ -6,19 +6,22 @@ import { ch } from "../../lib/bridge";
 import { openLink } from "../../lib/html";
 import { api, queryClient } from "../../lib/api";
 import {
-  BOARD_LABELS, DEAL_STATUSES, STATUS_LABELS, boardOf, daysBetween, dealTypeLabel, deleteDeal, isDeliveredOrLater, isDraftPending, localToday, monDay,
+  BOARD_LABELS, DEAL_STATUSES, STATUS_LABELS, boardOf, daysBetween, dealTypeLabel, deleteDeal, isDeliveredOrLater, isDraftPending, landsLabel, landsOn, localToday, monDay,
   monDayYear, nextStatus, shortDay, staleText, unpaidText, useDeal, useDeals, withTz, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { bytes, money } from "../../lib/format";
 import { nav } from "../../lib/nav";
-import { Monogram, StagePill, moveDeal, useLayer } from "./parts";
+import { Monogram, StagePill, changePaidOn, moveDeal, useLayer } from "./parts";
 import { openDealForm } from "./DealForm";
 import { InvoiceSection } from "./Invoices";
 
 interface Brief { id: string; filename: string; kind: "pdf" | "word" | "image" | "link"; sizeBytes: number | null; site: string | null; url: string | null; createdAt: string }
 
-function urgency(deal: Deal) {
+function urgency(deal: Deal): { text: string; late: boolean; landing?: boolean } | null {
   const today = localToday();
+  // Paid for a day still ahead: not collected until then.
+  const lands = landsOn(deal);
+  if (lands) return { text: landsLabel(lands), late: false, landing: true };
   // Delivered and not paid: how long ago, red once it's overdue (14+ days), unless an expected payment day says more.
   const unpaid = deal.unpaid_days != null ? { text: unpaidText(deal.unpaid_days), late: Boolean(deal.payment_overdue) } : null;
   if (deal.status === "pending_payment") {
@@ -231,6 +234,7 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
 
   const next = deal.status === "pending_payment" ? "completed" : nextStatus(deal.status);
   const u = urgency(deal);
+  const lands = landsOn(deal);
   const index = DEAL_STATUSES.indexOf(deal.status);
   const started = monDay(deal.created_at);
   const daysIn = daysBetween(deal.created_at, localToday());
@@ -281,7 +285,7 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
       <div className="dp-cols">
         <div className="dp-main scroll">
           <div className="faint">{dealTypeLabel(deal.deal_type)} · started {started} · {daysIn} {daysIn === 1 ? "day" : "days"} in</div>
-          <div className="dp-amount"><b>{money(deal.amount_usd)}</b>{u ? <span className={`urgent ${u.late ? "late" : ""}`}><Clock />{u.text}</span> : null}{deal.payment_overdue ? <span className="tag-s late">Overdue</span> : null}</div>
+          <div className="dp-amount"><b>{money(deal.amount_usd)}</b>{u ? <span className={`urgent ${u.late ? "late" : ""} ${u.landing ? "landing" : ""}`}><Clock />{u.text}</span> : null}{deal.payment_overdue ? <span className="tag-s late">Overdue</span> : null}</div>
           <div className="dp-actions">
             {next ? (
               <button className="btn honey lg" disabled={moving} onClick={() => void moveTo(next)}>
@@ -317,7 +321,18 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
               {deal.payment_expected_at ? <Row label="Expected">{monDay(deal.payment_expected_at)}</Row> : null}
               {deal.payment_terms_days != null ? <Row label="Terms">{deal.payment_terms_days === 0 ? "Due on receipt" : `Net ${deal.payment_terms_days}`}</Row> : null}
               {deal.payment_method_ref ? <Row label="Via">{deal.payment_method_ref.label}</Row> : null}
-              {deal.status === "completed" ? <Row label="Paid on">{deal.paid_at ? monDayYear(deal.paid_at) : <button className="link" onClick={() => openDealForm({ deal })}>Unknown · Edit to add it</button>}</Row> : null}
+              {/* Paid for a day still ahead reads "Lands on", and counts from then; either way the day can change here. */}
+              {deal.status === "completed" ? (
+                <Row label={lands ? "Lands on" : "Paid on"}>
+                  {deal.paid_at ? (
+                    <span className="paid-on">
+                      <span className={lands ? "landing-text" : ""}>{monDayYear(deal.paid_on ?? deal.paid_at)}</span>
+                      <button className="link" onClick={() => void changePaidOn(deal)}>Change</button>
+                      {lands ? <small className="landing-text">Counts in Cash from then</small> : null}
+                    </span>
+                  ) : <button className="link" onClick={() => void changePaidOn(deal)}>Unknown · Add it</button>}
+                </Row>
+              ) : null}
             </section>
           ) : null}
           {deal.contact_name || deal.contact_email || deal.contact_phone ? (

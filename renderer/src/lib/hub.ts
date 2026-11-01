@@ -80,6 +80,9 @@ export interface Deal {
   deliverables_count: number | null;
   status: DealStatus;
   paid_at: string | null;
+  /* The paid day in the member's zone, and the same day while it's still ahead ("Lands Nov 4"). Completed deals only; older servers leave them out. */
+  paid_on?: string | null;
+  lands_on?: string | null;
   /* The day it was delivered, its last stage change, and what the server works out from them (lib/hub/timing.ts on the website). Older servers leave them out. */
   delivered_at?: string | null;
   stage_changed_at?: string;
@@ -158,7 +161,12 @@ export interface Cash {
   tier: Tier;
   ladder: { key: string; name: string; minimum: number; unlocked: boolean; current: boolean }[];
   by_person: { id: string; name: string; initials: string; collected_usd: number }[];
-  activity: { collected_this_month_usd: number; previous_month_collected_usd: number };
+  activity: {
+    collected_this_month_usd: number;
+    previous_month_collected_usd: number;
+    /* Marked paid for a day still ahead, soonest first. Older servers leave it out. */
+    landing?: { id: string; brand_name: string; amount_usd: number; lands_on: string }[];
+  };
 }
 
 export function useCash() {
@@ -169,7 +177,8 @@ export function useCash() {
 /* ---------- Money ---------- */
 
 const sum = (deals: Deal[]) => deals.reduce((total, d) => total + (d.amount_usd || 0), 0);
-export const contracted = (deals: Deal[]) => deals.filter((d) => MONEY_IN_PLAY_STATUSES.includes(d.status));
+/* Secured and not collected yet: a money-in-play stage, or paid for a day still ahead. */
+export const contracted = (deals: Deal[]) => deals.filter((d) => MONEY_IN_PLAY_STATUSES.includes(d.status) || isLanding(d));
 export const potential = (deals: Deal[]) => deals.filter((d) => POTENTIAL_STATUSES.includes(d.status));
 export const active = (deals: Deal[]) => deals.filter((d) => d.status !== "completed");
 export const total = sum;
@@ -200,6 +209,36 @@ export const monDayYear = (value: string) => new Date(`${dayOf(value)}T12:00:00`
 
 /** "Oct 20", with the year only when it isn't this one ("Oct 20, 2025"). */
 export const shortDay = (value: string) => (dayOf(value).slice(0, 4) === localToday().slice(0, 4) ? monDay(value) : monDayYear(value));
+
+/* ---------- Landing: paid for a day still ahead (the website's lib/hub/landing.ts) ---------- */
+
+/*
+  Linda's request (Nov 1): a deal can be marked paid on a day still ahead, the
+  day the money reaches the bank. Until then it shows "Lands Nov 4" and counts
+  as Contracted, not collected. The server says so in `lands_on`; a server
+  without it, or a deal from a list that leaves it out, falls back on the
+  website's rule: an entered day is stored as noon, so the day has started
+  once paid_at is no more than 12 hours ahead.
+*/
+const LANDING_GRACE_MS = 12 * 3_600_000;
+/** The furthest ahead a paid day may be (the server's limit). */
+export const MAX_PAID_DAYS_AHEAD = 366;
+
+/** The day the money lands while that's still ahead, else null. */
+export function landsOn(deal: { status: string; paid_at: string | null; lands_on?: string | null }) {
+  // The server's answer, until its day comes round while the list is still on screen.
+  if (deal.lands_on !== undefined) return deal.lands_on && deal.lands_on > localToday() ? deal.lands_on : null;
+  if (deal.status !== "completed" || !deal.paid_at) return null;
+  const at = Date.parse(deal.paid_at);
+  return Number.isFinite(at) && at > Date.now() + LANDING_GRACE_MS ? dayOf(deal.paid_at) : null;
+}
+export const isLanding = (deal: Deal) => landsOn(deal) !== null;
+/** Paid and landed: what a collected figure counts. */
+export const isCollected = (deal: Deal) => deal.status === "completed" && Boolean(deal.paid_at) && !isLanding(deal);
+/** "Lands Nov 4", with the year only when it isn't this one. */
+export const landsLabel = (day: string) => `Lands ${shortDay(day)}`;
+/** "Wednesday, Nov 4". */
+export const longDay = (day: string) => new Date(`${dayOf(day)}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
 
 /* ---------- Timing words (the website's lib/hub/timing.ts; the server counts the days) ---------- */
 
@@ -279,7 +318,7 @@ export function errorText(error: unknown) {
   // The server's field codes ("invalid contact_email"), in words.
   const words: Record<string, string> = {
     "invalid contact_email": "That contact email doesn't look right.",
-    "paid_on can't be in the future": "The paid date can't be in the future.",
+    "paid_on is too far ahead": "The paid date can be up to a year from today.",
     "invalid paid_on": "That paid date doesn't look right.",
     "delivered_on can't be in the future": "The delivered date can't be in the future.",
     "invalid delivered_on": "That delivered date doesn't look right.",

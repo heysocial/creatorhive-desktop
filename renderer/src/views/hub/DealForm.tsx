@@ -3,7 +3,7 @@ import { Check, FileText, Link2, Loader2, Paperclip, Pencil, Plus, Trash2, X } f
 import { api, ApiError, queryClient } from "../../lib/api";
 import { bytes } from "../../lib/format";
 import {
-  DEAL_STATUSES, DEAL_TYPES, STATUS_LABELS, createDeal, dayOf, createOption, deleteOption, errorText, isDeliveredOrLater, localToday, patchDeal, renameOption, useIndustries,
+  DEAL_STATUSES, DEAL_TYPES, MAX_PAID_DAYS_AHEAD, STATUS_LABELS, addDaysIso, createDeal, dayOf, landsLabel, longDay, createOption, deleteOption, errorText, isDeliveredOrLater, localToday, patchDeal, renameOption, useIndustries,
   usePaymentMethods, useSources, withTz, type Deal, type DealStatus, type DealType, type Option, type OptionKind,
 } from "../../lib/hub";
 import { Modal, celebrate, hubToast, useLayer } from "./parts";
@@ -249,7 +249,7 @@ function initial(start: FormStart): Values {
     industry: d?.industry_ref?.id ?? null,
     type: d?.deal_type ?? "ugc",
     status: dup ? "pitching" : d?.status ?? start.status ?? "pitching",
-    paidOn: d?.paid_at && !dup ? dayOf(d.paid_at) : "",
+    paidOn: d?.paid_at && !dup ? d.paid_on ?? dayOf(d.paid_at) : "",
     paidTouched: false,
     deliveredOn: d?.delivered_at && !dup ? dayOf(d.delivered_at) : "",
     deliveredTouched: false,
@@ -295,8 +295,19 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
     return (id: string) => map.get(id) ?? id;
   }, [sources, industries]);
 
+  /*
+    The paid day goes only when it says something: a day other than today on
+    the way into Completed (today is the server's own stamp, the moment), or a
+    changed day on a deal that was already paid. Empty clears it.
+  */
+  function paidOn() {
+    if (v.status !== "completed") return {};
+    const wasPaid = editing && start.deal!.status === "completed";
+    if (wasPaid) return v.paidTouched && v.paidOn !== initial(start).paidOn ? { paid_on: v.paidOn || null } : {};
+    return v.paidOn === localToday() ? {} : { paid_on: v.paidOn || null };
+  }
+
   function body() {
-    const completed = v.status === "completed";
     return {
       brand_name: v.brand.trim(),
       amount_usd: Number(v.amount.replace(/\D/g, "") || 0),
@@ -314,7 +325,7 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
       payment_expected_at: v.paymentExpected,
       payment_terms_days: v.terms,
       deliverables_count: v.count,
-      ...(completed && (v.paidTouched || !editing) ? { paid_on: v.paidOn || null } : {}),
+      ...paidOn(),
       // Only when the member set it (or cleared it): otherwise the server stamps today on the move to Delivered.
       ...(isDeliveredOrLater(v.status) && (editing ? v.deliveredTouched : v.deliveredOn) ? { delivered_on: v.deliveredOn || null } : {}),
     };
@@ -439,8 +450,11 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
         {v.status === "completed" ? (
           <>
             <label className="flabel">Paid on</label>
-            <input className="field narrow" type="date" max={today} value={v.paidOn} onChange={(e) => setV((c) => ({ ...c, paidOn: e.target.value, paidTouched: true }))} />
-            <p className="hint">{!v.paidOn ? "Not counted in any month until you add the day it was paid." : v.paidOn === today ? "Today, unless you pick another day." : "Counts toward that month in Cash."}</p>
+            {/* A day ahead is fine: the day the money reaches the bank. It shows "Lands Nov 4" until then. */}
+            <input className="field narrow" type="date" min="2000-01-01" max={addDaysIso(today, MAX_PAID_DAYS_AHEAD)} value={v.paidOn} aria-label="Paid on" onChange={(e) => setV((c) => ({ ...c, paidOn: e.target.value, paidTouched: true }))} />
+            <p className={`hint ${v.paidOn > today ? "landing-text" : ""}`}>{!v.paidOn ? "Not counted in any month until you add the day it was paid."
+              : v.paidOn > today ? `Shows as "${landsLabel(v.paidOn)}" and counts toward Cash from ${longDay(v.paidOn)}.`
+              : v.paidOn === today ? "Counts toward Cash today, unless you pick another day." : "Counts toward that month in Cash."}</p>
           </>
         ) : null}
         {isDeliveredOrLater(v.status) ? (
