@@ -6,20 +6,20 @@ import { ch } from "../../lib/bridge";
 import { openLink } from "../../lib/html";
 import { api, queryClient } from "../../lib/api";
 import {
-  ADVANCE_STATUSES, BOARD_LABELS, STATUS_LABELS, boardOf, closedUnpaidLine, daysBetween, dealTypeLabel, deleteDeal, isDeliveredOrLater, isDraftPending, landsLabel, landsOn, localToday, monDay,
+  ADVANCE_STATUSES, BOARD_LABELS, STATUS_LABELS, boardOf, closedUnpaidLine, daysBetween, dealTypeLabel, deleteDeal, isActiveDeal, isClosedOutStatus, isDeliveredOrLater, isDraftPending, landsLabel, landsOn, localToday, monDay,
   monDayYear, nextStatus, shortDay, staleText, unpaidText, useDeal, useDeals, withTz, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { bytes, money } from "../../lib/format";
 import { nav } from "../../lib/nav";
-import { Monogram, StagePill, changePaidOn, editUnpaidReason, moveDeal, pickStage as pickStageMenu, useLayer } from "./parts";
+import { Monogram, StagePill, changePaidOn, editNotContractedNote, editUnpaidReason, moveDeal, pickStage as pickStageMenu, useLayer } from "./parts";
 import { openDealForm } from "./DealForm";
 import { InvoiceSection } from "./Invoices";
 
 interface Brief { id: string; filename: string; kind: "pdf" | "word" | "image" | "link"; sizeBytes: number | null; site: string | null; url: string | null; createdAt: string }
 
 function urgency(deal: Deal): { text: string; late: boolean; landing?: boolean } | null {
-  // Closed – Unpaid has its own banner, and is never stale or overdue.
-  if (deal.status === "closed_unpaid") return null;
+  // The closed-out stages have their own banner, and are never stale or overdue.
+  if (isClosedOutStatus(deal.status)) return null;
   const today = localToday();
   // Paid for a day still ahead: not collected until then.
   const lands = landsOn(deal);
@@ -238,7 +238,10 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
   const u = urgency(deal);
   const lands = landsOn(deal);
   const index = ADVANCE_STATUSES.indexOf(deal.status);
-  const closed = deal.status === "closed_unpaid";
+  const unpaidClosed = deal.status === "closed_unpaid";
+  const notContracted = deal.status === "closed_not_contracted";
+  // Either closed stage: kept, greyed, counted in no total, no stage story.
+  const closed = unpaidClosed || notContracted;
   const started = monDay(deal.created_at);
   const daysIn = daysBetween(deal.created_at, localToday());
 
@@ -289,7 +292,18 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
         <div className="dp-main scroll">
           <div className="faint">{dealTypeLabel(deal.deal_type)} · started {started} · {daysIn} {daysIn === 1 ? "day" : "days"} in</div>
           <div className={`dp-amount ${closed ? "closed-unpaid" : ""}`}><b>{money(deal.amount_usd)}</b>{closed ? <span className="muted">Expected · not counted in any total</span> : null}{u ? <span className={`urgent ${u.late ? "late" : ""} ${u.landing ? "landing" : ""}`}><Clock />{u.text}</span> : null}{deal.payment_overdue && !closed ? <span className="tag-s late">Overdue</span> : null}</div>
-          {closed ? (
+          {notContracted ? (
+            /* It fell through in negotiation: the note, and the way back is Move stage. No They paid, no invoice offer. */
+            <div className="closed-banner not-contracted">
+              <b>{closedUnpaidLine(deal)}</b>
+              {deal.unpaid_note ? <p className="selectable">“{deal.unpaid_note}”</p> : null}
+              <div className="row">
+                <button className="btn" disabled={moving} onClick={() => void editNotContractedNote(deal)}>Edit note</button>
+              </div>
+              <small className="faint">If talks pick up again, pick a stage under Move stage.</small>
+            </div>
+          ) : null}
+          {unpaidClosed ? (
             /* Why it closed, and the ways out: they paid after all (the Paid on question, then Completed, counted as normal), or Move stage to reopen it. */
             <div className="closed-banner">
               <b>{closedUnpaidLine(deal)}</b>
@@ -309,6 +323,13 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
             ) : null}
             <button className="btn lg" onClick={() => void pickStage()}>Move stage<ChevronDown /></button>
           </div>
+          {isActiveDeal(deal.status) ? (
+            /* As on the website: an open deal can end in either closed stage on purpose. */
+            <div className="dp-close-links">
+              <button className="link" disabled={moving} onClick={() => void moveTo("closed_unpaid")}>Close as unpaid…</button>
+              <button className="link" disabled={moving} onClick={() => void moveTo("closed_not_contracted")}>Close as not contracted…</button>
+            </div>
+          ) : null}
           {!closed ? (
             <>
               <div className="story">
@@ -332,7 +353,7 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
         </div>
         <div className="dp-side scroll">
           <InvoiceSection deal={deal} />
-          {deal.payment_expected_at || deal.payment_terms_days != null || deal.payment_method_ref || deal.paid_at || isDeliveredOrLater(deal.status) ? (
+          {deal.payment_expected_at || deal.payment_terms_days != null || deal.payment_method_ref || deal.paid_at || isDeliveredOrLater(deal.status) || closed ? (
             <section className="dp-sec">
               <span className="section-label">Payment</span>
               {/* Set by the server on the move to Delivered; changed or cleared in Edit deal, like the other dates. */}
@@ -340,7 +361,8 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
               {deal.payment_expected_at ? <Row label="Expected">{monDay(deal.payment_expected_at)}</Row> : null}
               {deal.payment_terms_days != null ? <Row label="Terms">{deal.payment_terms_days === 0 ? "Due on receipt" : `Net ${deal.payment_terms_days}`}</Row> : null}
               {deal.payment_method_ref ? <Row label="Via">{deal.payment_method_ref.label}</Row> : null}
-              {closed && deal.closed_unpaid_at ? <Row label="Closed unpaid">{shortDay(deal.closed_unpaid_at)} · {deal.unpaid_reason === "declined" ? "Declined" : "Unresolved"}</Row> : null}
+              {notContracted && deal.closed_unpaid_at ? <Row label="Not contracted">{shortDay(deal.closed_unpaid_at)} · Fell through</Row> : null}
+              {unpaidClosed && deal.closed_unpaid_at ? <Row label="Closed unpaid">{shortDay(deal.closed_unpaid_at)} · {deal.unpaid_reason === "declined" ? "Declined" : "Unresolved"}</Row> : null}
               {/* Paid for a day still ahead reads "Lands on", and counts from then; either way the day can change here. */}
               {deal.status === "completed" ? (
                 <Row label={lands ? "Lands on" : "Paid on"}>

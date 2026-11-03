@@ -330,6 +330,8 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
       ...paidOn(),
       // Closed – Unpaid: why, and the note; sent only while that stage is picked (any other stage clears them).
       ...(v.status === "closed_unpaid" ? { unpaid_reason: v.unpaidReason, unpaid_note: v.unpaidNote.trim() || null } : {}),
+      // Closed – Not contracted: only the note (it fell through in negotiation; there's no reason to pick).
+      ...(v.status === "closed_not_contracted" ? { unpaid_note: v.unpaidNote.trim() || null } : {}),
       // Only when the member set it (or cleared it): otherwise the server stamps today on the move to Delivered.
       ...(isDeliveredOrLater(v.status) && (editing ? v.deliveredTouched : v.deliveredOn) ? { delivered_on: v.deliveredOn || null } : {}),
     };
@@ -470,6 +472,14 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
             <p className="hint">Keeps its amount. Counts in no total until you move it out.</p>
           </>
         ) : null}
+        {v.status === "closed_not_contracted" ? (
+          <>
+            <label className="flabel">Note · optional</label>
+            <input className="field" value={v.unpaidNote} maxLength={500} placeholder="e.g. They went with another creator" aria-label="Note" onChange={(e) => set("unpaidNote", e.target.value)} />
+            <p className="hint">Fell through in negotiation. Keeps its amount; counts in no total until you move it out.</p>
+          </>
+        ) : null}
+        {/* Not Closed – Not contracted: it fell through before anything was delivered. */}
         {isDeliveredOrLater(v.status) ? (
           <>
             <label className="flabel">Delivered on · optional</label>

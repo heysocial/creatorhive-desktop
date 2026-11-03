@@ -5,7 +5,7 @@ import { InvoiceDetailsForm, useInvoiceProfile } from "./InvoiceDetails";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
-import { allDeals, isCollected, localToday, monDay, useDeals, type Deal } from "../../lib/hub";
+import { allDeals, isClosedOutStatus, isCollected, localToday, monDay, useDeals, type Deal } from "../../lib/hub";
 import { money } from "../../lib/format";
 import { Modal, Monogram } from "./parts";
 import { openDeal } from "./Deals";
@@ -49,8 +49,8 @@ type State = "draft" | "sent" | "overdue" | "paid";
 function stateOf(invoice: Invoice, deal: Deal | undefined): State {
   // Not paid while the money is still to land.
   if (deal && isCollected(deal)) return "paid";
-  // Closed – Unpaid is never overdue: she's stopped chasing it.
-  if (invoice.status === "sent" && invoice.sentAt) return invoice.dueOn && invoice.dueOn < localToday() && deal?.status !== "closed_unpaid" ? "overdue" : "sent";
+  // The closed-out stages are never overdue: she's stopped chasing it.
+  if (invoice.status === "sent" && invoice.sentAt) return invoice.dueOn && invoice.dueOn < localToday() && !(deal && isClosedOutStatus(deal.status)) ? "overdue" : "sent";
   return "draft";
 }
 function stateLine(invoice: Invoice, deal: Deal | undefined) {

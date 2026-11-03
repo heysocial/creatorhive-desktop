@@ -3,9 +3,9 @@ import { ArrowUpRight, CalendarClock, ChartNoAxesColumn, ChartNoAxesCombined, Ch
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import {
-  BOARDS, BOARD_LABELS, BOARD_STATUSES, STATUS_LABELS, UNPAID_REASON_LABELS, active, addDaysIso, allDeals, closedUnpaidLine, contracted, dayOf, daysBetween, dealTypeLabel,
-  isActiveDeal, isCollected, isDraftPending, isLanding, landsLabel, landsOn, localToday, monDay, monDayYear, potential, timingLine, total, useCash, useDeals,
-  type Board, type Cash, type ClosedUnpaidSummary, type Deal, type DealStatus,
+  BOARDS, BOARD_LABELS, BOARD_STATUSES, CLOSED_OUT_TOTAL_LABELS, STATUS_LABELS, UNPAID_REASON_LABELS, active, addDaysIso, allDeals, closedUnpaidLine, contracted, dayOf, daysBetween, dealTypeLabel,
+  isActiveDeal, isClosedOutStatus, isCollected, isDraftPending, isLanding, landsLabel, landsOn, localToday, monDay, monDayYear, potential, timingLine, total, useCash, useDeals,
+  type Board, type Cash, type ClosedOutSummary, type ClosedUnpaidSummary, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { money, plural } from "../../lib/format";
 import { nav } from "../../lib/nav";
@@ -100,6 +100,7 @@ export function Overview({ deals }: { deals: Deal[] }) {
         </div>
       ) : null}
       <DidntPayOut summary={cash?.activity.closed_unpaid} />
+      <FellThrough summary={cash?.activity.closed_not_contracted} />
       {open === "contracted" ? <DealListDialog title="Contracted" deals={inPlay} onClose={() => setOpen(null)} /> : null}
       {open === "potential" ? <DealListDialog title="Potential" deals={pot} onClose={() => setOpen(null)} /> : null}
     </div>
@@ -126,6 +127,24 @@ function DidntPayOut({ summary }: { summary: ClosedUnpaidSummary | undefined }) 
   );
 }
 
+/*
+  This year's Closed – Not contracted: deals that fell through in negotiation.
+  Its own figure, never added to Didn't pay out or any total above. Nothing
+  when there's none (or the server is older and leaves it out).
+*/
+function FellThrough({ summary }: { summary: ClosedOutSummary | undefined }) {
+  if (!summary?.count) return null;
+  return (
+    <div className="didnt-pay fell-through">
+      <div className="dpo-head">
+        <span><span className="section-label">Fell through · {summary.count}</span><small className="muted">{plural(summary.count, "deal")} · Expected, closed as not contracted in {summary.since.slice(0, 4)}. Not in any total above.</small></span>
+        <b>{money(summary.amount_usd)} <small>expected</small></b>
+      </div>
+      <button className="link" onClick={() => nav.open({ kind: "hub", page: "deals", board: "payment" }, "hub", "ch")}>See these deals<ChevronRight /></button>
+    </div>
+  );
+}
+
 /* ---------- Cards ---------- */
 
 export function openDeal(id: string) {
@@ -147,8 +166,8 @@ function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared:
   const payment = deal.payment_method_ref?.label;
   const lands = landsOn(deal);
   const timing = lands ? null : timingLine(deal);
-  // Closed – Unpaid: dashed, the amount grey (expected, never counted), and why instead of any timing.
-  const closed = deal.status === "closed_unpaid";
+  // Closed – Unpaid and Closed – Not contracted: dashed, the amount grey (expected, never counted), and why instead of any timing.
+  const closed = isClosedOutStatus(deal.status);
   return (
     <div className={`deal-card ${closed ? "closed-unpaid" : ""} ${dragging ? "ghost" : ""}`} onPointerDown={(e) => onDragStart(e, deal)} onClick={() => openDeal(deal.id)}
       role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") openDeal(deal.id); }}>
@@ -320,8 +339,8 @@ function StageGroup({ status, deals, shared, drag, start }: { status: DealStatus
       <span className={`stage-pill s-${status}`}>{STATUS_LABELS[status]} <b>{deals.length}</b></span>
       {/* Laid over the group, so nothing moves under the pointer while dragging. */}
       {over ? <div className="drop-hint" aria-label={`Drop in ${STATUS_LABELS[status]}`}>Drop here</div> : null}
-      {status === "closed_unpaid" && deals.length ? (
-        <div className="month closed-sum"><b>Didn't pay out</b><span className="muted">{plural(deals.length, "deal")}</span><span className="m-amt">{money(total(deals))} expected</span></div>
+      {isClosedOutStatus(status) && deals.length ? (
+        <div className={`month closed-sum s-${status}`}><b>{CLOSED_OUT_TOTAL_LABELS[status]}</b><span className="muted">{plural(deals.length, "deal")}</span><span className="m-amt">{money(total(deals))} expected</span></div>
       ) : null}
       {status === "completed" ? <CompletedLane deals={deals} shared={shared} onDragStart={start} draggingId={drag?.deal.id ?? null} /> : (
         <div className="sg-cards">
@@ -371,13 +390,13 @@ function DealTable({ deals, shared }: { deals: Deal[]; shared: boolean }) {
     <div className="deal-table">
       <div className="dt-row head"><span>Brand / details</span><span>Amount</span><span>Status</span><span>Payment</span><span>Updated / paid</span></div>
       {deals.map((d) => (
-        <div key={d.id} className={`dt-row ${d.status === "completed" ? "done" : d.status === "closed_unpaid" ? "done closed" : ""}`} onClick={() => openDeal(d.id)} role="button">
+        <div key={d.id} className={`dt-row ${d.status === "completed" ? "done" : isClosedOutStatus(d.status) ? "done closed" : ""}`} onClick={() => openDeal(d.id)} role="button">
           <span className="dt-brand"><b>{d.brand_name}</b><small>{[dealTypeLabel(d.deal_type), d.deliverables].filter(Boolean).join(" · ")}{shared && d.added_by ? ` · ${d.added_by.initials}` : ""}</small></span>
           <span className="dt-amt"><b>{money(d.amount_usd)}</b>{isCollected(d) ? <CheckCircle2 /> : null}</span>
           <span onClick={(e) => e.stopPropagation()}><StageButton deal={d} onPick={(s) => void moveDeal(d, s)} /></span>
           <span className="muted">{d.payment_method_ref?.label ?? "—"}</span>
           {isLanding(d) ? <span className="landing-text">{landsLabel(landsOn(d)!)}</span>
-            : d.status === "closed_unpaid" ? <span className="muted">{closedUnpaidLine(d)}</span>
+            : isClosedOutStatus(d.status) ? <span className="muted">{closedUnpaidLine(d)}</span>
             : <span className="muted">{d.status === "completed" && d.paid_at ? monDayYear(d.paid_at) : monDayYear(d.updated_at)}</span>}
         </div>
       ))}

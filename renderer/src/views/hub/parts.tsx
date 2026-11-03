@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronDown, X } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import {
-  BOARDS, BOARD_LABELS, BOARD_STATUSES, MAX_PAID_DAYS_AHEAD, STATUS_LABELS, UNPAID_REASON_LABELS, addDaysIso, dayOf, errorText, isLanding, landsLabel, localToday, longDay, patchDeal,
+  BOARDS, BOARD_LABELS, BOARD_STATUSES, CLOSED_OUT_HINTS, CLOSED_OUT_STATUSES, MAX_PAID_DAYS_AHEAD, STATUS_LABELS, UNPAID_REASON_LABELS, addDaysIso, dayOf, errorText, isClosedOutStatus, isLanding, landsLabel, localToday, longDay, patchDeal,
   type Deal, type DealStatus, type Payday, type UnpaidReason,
 } from "../../lib/hub";
 import type { NativeMenuItem } from "../../lib/bridge";
@@ -15,17 +15,18 @@ export function StagePill({ status, small = false }: { status: DealStatus; small
 }
 
 /**
-  Every stage, grouped by board, with Closed – Unpaid apart at the bottom: a
-  deal ends there on purpose, from any stage, never as the next step.
+  Every stage, grouped by board, with the two closed stages apart at the
+  bottom (Closed – Unpaid, then Closed – Not contracted): a deal ends in one on
+  purpose, from any stage, never as the next step.
   The card's, the table's and the pop-up's Move stage all use it.
 */
 export async function pickStage(current: DealStatus): Promise<DealStatus | null> {
   const items: NativeMenuItem[] = BOARDS.flatMap((board, i) => [
     ...(i ? [{ type: "separator" as const }] : []),
     { id: `h-${board}`, label: BOARD_LABELS[board], enabled: false },
-    ...BOARD_STATUSES[board].filter((s) => s !== "closed_unpaid").map((s) => ({ id: s, label: STATUS_LABELS[s], checked: s === current })),
+    ...BOARD_STATUSES[board].filter((s) => !isClosedOutStatus(s)).map((s) => ({ id: s, label: STATUS_LABELS[s], checked: s === current })),
   ]);
-  items.push({ type: "separator" }, { id: "closed_unpaid", label: STATUS_LABELS.closed_unpaid, sublabel: "Ended without being paid", checked: current === "closed_unpaid" });
+  items.push({ type: "separator" }, ...CLOSED_OUT_STATUSES.map((s) => ({ id: s, label: STATUS_LABELS[s], sublabel: CLOSED_OUT_HINTS[s], checked: current === s })));
   const choice = await ch.menu.popup(items);
   return choice && !choice.startsWith("h-") && choice !== current ? (choice as DealStatus) : null;
 }
@@ -118,6 +119,7 @@ type Dialog =
   | { kind: "payment-date"; deal: Deal; status: DealStatus; resolve: (fields: Record<string, unknown> | null) => void }
   | { kind: "paid-on"; deal: Deal; change: boolean; resolve: (fields: Record<string, unknown> | null) => void }
   | { kind: "closed-unpaid"; deal: Deal; edit: boolean; resolve: (fields: Record<string, unknown> | null) => void }
+  | { kind: "not-contracted"; deal: Deal; edit: boolean; resolve: (fields: Record<string, unknown> | null) => void }
   | { kind: "payday"; deal: Deal; payday: Payday }
   | null;
 
@@ -129,9 +131,13 @@ export const hubToast = (text: string) => toast(text);
 /**
   Before moving to Delivered or Pending Payment without a payment date: ask for one.
   Before moving to Completed: ask the day it was paid. Before closing it
-  unpaid: ask why. Null means cancelled.
+  unpaid: ask why. Before closing it as not contracted: only the note (that it
+  fell through is the reason). Null means cancelled.
 */
 function askPaymentDate(deal: Deal, status: DealStatus) {
+  if (status === "closed_not_contracted" && deal.status !== "closed_not_contracted") {
+    return new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "not-contracted", deal, edit: false, resolve }));
+  }
   if (status === "closed_unpaid" && deal.status !== "closed_unpaid") {
     return new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "closed-unpaid", deal, edit: false, resolve }));
   }
@@ -181,6 +187,41 @@ export async function editUnpaidReason(deal: Deal) {
   } catch (error) {
     toast(`${deal.brand_name}'s reason wasn't changed: ${errorText(error)}`);
   }
+}
+
+/** "Edit note" on a Closed – Not contracted deal: just the note, and the deal stays where it is. */
+export async function editNotContractedNote(deal: Deal) {
+  const fields = await new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "not-contracted", deal, edit: true, resolve }));
+  if (!fields) return;
+  try {
+    await patchDeal(deal.id, fields);
+  } catch (error) {
+    toast(`${deal.brand_name}'s note wasn't changed: ${errorText(error)}`);
+  }
+}
+
+/*
+  A deal that fell through in negotiation (Tara's follow-up): no reason to
+  pick, only an optional note. It keeps its amount and counts toward nothing,
+  not even Didn't pay out; Cancel leaves the deal where it was.
+*/
+function NotContractedPrompt({ deal, edit, resolve, close }: { deal: Deal; edit: boolean; resolve: (f: Record<string, unknown> | null) => void; close: () => void }) {
+  const [note, setNote] = useState(deal.unpaid_note ?? "");
+  const done = (value: Record<string, unknown> | null) => { resolve(value); close(); };
+  const save = () => done({ unpaid_note: note.trim() || null });
+  return (
+    <Modal title={edit ? `Note on ${deal.brand_name}` : `Close ${deal.brand_name} as not contracted?`} onClose={() => done(null)} width={460}
+      foot={<>
+        <button className="btn" onClick={() => done(null)}>Cancel</button>
+        <button className="btn unpaid not-contracted" onClick={save}>{edit ? "Save" : "Close as not contracted"}</button>
+      </>}>
+      <p className="muted">It fell through in negotiation. It keeps its {money(deal.amount_usd)} but stops counting toward your money, tier and stats.</p>
+      <label className="flabel">Note (optional)</label>
+      <input className="field" value={note} maxLength={500} placeholder="e.g. They went with another creator" aria-label="Note" autoFocus
+        onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }} />
+      <p className="unpaid-tip">If talks pick up again, open the deal and move it back to a stage.</p>
+    </Modal>
+  );
 }
 
 const REASON_HINTS: Record<UnpaidReason, string> = {
@@ -348,6 +389,7 @@ export function HubDialogs() {
       {dialog?.kind === "payment-date" ? <PaymentDatePrompt deal={dialog.deal} status={dialog.status} resolve={dialog.resolve} close={() => setDialog(null)} /> : null}
       {dialog?.kind === "paid-on" ? <PaidOnPrompt deal={dialog.deal} change={dialog.change} resolve={dialog.resolve} close={() => setDialog(null)} /> : null}
       {dialog?.kind === "closed-unpaid" ? <ClosedUnpaidPrompt deal={dialog.deal} edit={dialog.edit} resolve={dialog.resolve} close={() => setDialog(null)} /> : null}
+      {dialog?.kind === "not-contracted" ? <NotContractedPrompt deal={dialog.deal} edit={dialog.edit} resolve={dialog.resolve} close={() => setDialog(null)} /> : null}
       {dialog?.kind === "payday" ? <PaydayDialog deal={dialog.deal} payday={dialog.payday} close={() => setDialog(null)} /> : null}
       {message ? <div className="toast" role="status">{message}<button className="iconbtn" onClick={() => setMessage(null)}><X /></button></div> : null}
     </>

@@ -16,8 +16,9 @@ interface DashDeal { id: string; brandName: string; amount: number; status: Deal
 interface Dash {
   range: Range;
   rangeLabel: string;
-  /* closedUnpaid: Closed – Unpaid deals closed in the range, in no other figure; `declined` is that reason's share. Older servers leave it out. */
-  headline: { collected: Figure; moneyInPlay: Figure; potential: Figure; totalDeals: Figure; averageDeal: Figure; closedUnpaid?: Figure & { declined?: number } };
+  /* closedUnpaid: Closed – Unpaid deals closed in the range, in no other figure; `declined` is that reason's share. Older servers leave it out.
+     closedNotContracted: Closed – Not contracted ("Fell through"), its own figure, never added to closedUnpaid. Older servers leave it out. */
+  headline: { collected: Figure; moneyInPlay: Figure; potential: Figure; totalDeals: Figure; averageDeal: Figure; closedUnpaid?: Figure & { declined?: number }; closedNotContracted?: Figure };
   trend: { date: string; label: string; amount: number; count: number }[];
   revenueBySource: Breakdown[];
   revenueByIndustry: Breakdown[];
@@ -182,6 +183,7 @@ export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
   const brands = d ? topBrands(d) : [];
   const overdueCount = d?.attention.overdueCount ?? 0;
   const unpaid = d?.headline.closedUnpaid;
+  const fell = d?.headline.closedNotContracted;
 
   return (
     <div className="page dash-page">
@@ -229,6 +231,14 @@ export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
                   <span className="muted">Didn't pay out</span><b>{money(unpaid.value)}</b>
                   <small className="muted">{[`${plural(unpaid.count ?? 0, "deal")} ${when}`, ...([["Declined", unpaid.declined ?? 0], ["Unresolved", unpaid.value - (unpaid.declined ?? 0)]] as const)
                     .filter(([, amount]) => amount > 0).map(([label, amount]) => `${label} ${money(amount)}`)].join(" · ")}</small>
+                  <ChevronRight />
+                </button>
+              ) : null}
+              {/* Closed – Not contracted: its own figure, never added to Didn't pay out; shown only when there is some. */}
+              {fell && fell.value > 0 ? (
+                <button className="dh-unpaid fell-through" onClick={() => setDrill({ title: "Fell through", figure: money(fell.value), ids: fell.dealIds ?? [] })}>
+                  <span className="muted">Fell through</span><b>{money(fell.value)}</b>
+                  <small className="muted">{plural(fell.count ?? 0, "deal")} {when} · fell through in negotiation</small>
                   <ChevronRight />
                 </button>
               ) : null}

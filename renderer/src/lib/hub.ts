@@ -11,7 +11,7 @@ import { api, ApiError, queryClient } from "./api";
 export const DEAL_STATUSES = [
   "pitching", "deliverables_contract", "deal_secured",
   "waiting_product", "production", "post_production", "revisions",
-  "delivered", "pending_payment", "case_study", "completed", "closed_unpaid",
+  "delivered", "pending_payment", "case_study", "completed", "closed_unpaid", "closed_not_contracted",
 ] as const;
 export type DealStatus = (typeof DEAL_STATUSES)[number];
 export type Board = "outreach" | "campaigns" | "payment";
@@ -20,8 +20,9 @@ export const BOARDS: Board[] = ["outreach", "campaigns", "payment"];
 export const BOARD_STATUSES: Record<Board, DealStatus[]> = {
   outreach: ["pitching", "deliverables_contract", "deal_secured"],
   campaigns: ["waiting_product", "production", "post_production", "revisions"],
-  // Closed – Unpaid closes the Payment board out: a deal that ended without the money. Never a "next" stage; it's chosen on purpose.
-  payment: ["delivered", "pending_payment", "case_study", "completed", "closed_unpaid"],
+  // The two closed stages close the Payment board out: Closed – Unpaid, a deal that ended without the money, and Closed – Not
+  // contracted, one that fell through in negotiation. Neither is ever a "next" stage; each is chosen on purpose.
+  payment: ["delivered", "pending_payment", "case_study", "completed", "closed_unpaid", "closed_not_contracted"],
 };
 export const BOARD_LABELS: Record<Board, string> = { outreach: "Outreach", campaigns: "Campaigns", payment: "Payment" };
 
@@ -38,6 +39,7 @@ export const STATUS_LABELS: Record<DealStatus, string> = {
   case_study: "Case Study / Testimonial",
   completed: "Completed",
   closed_unpaid: "Closed – Unpaid",
+  closed_not_contracted: "Closed – Not contracted",
 };
 
 /*
@@ -48,22 +50,35 @@ export const STATUS_LABELS: Record<DealStatus, string> = {
 */
 export type UnpaidReason = "declined" | "unresolved";
 export const UNPAID_REASON_LABELS: Record<UnpaidReason, string> = { declined: "Declined", unresolved: "Unresolved / still pending" };
-/** The stages a deal advances through, in order: every one but Closed – Unpaid. */
-export const ADVANCE_STATUSES: DealStatus[] = DEAL_STATUSES.filter((s) => s !== "closed_unpaid");
-/** Finished: paid, or closed unpaid. Neither is open work. */
-export const isClosedStatus = (s: DealStatus) => s === "completed" || s === "closed_unpaid";
+/*
+  Closed – Not contracted (Tara's follow-up, Nov 3) is its twin for a deal
+  that fell through in negotiation: no reason, an optional note, and a total
+  of its own ("Fell through"), never added to Didn't pay out.
+*/
+export const CLOSED_OUT_STATUSES = ["closed_unpaid", "closed_not_contracted"] as const satisfies readonly DealStatus[];
+export type ClosedOutStatus = (typeof CLOSED_OUT_STATUSES)[number];
+/** Closed – Unpaid or Closed – Not contracted: kept, counted in no total. */
+export const isClosedOutStatus = (s: DealStatus): s is ClosedOutStatus => (CLOSED_OUT_STATUSES as readonly DealStatus[]).includes(s);
+/** What each closed-out stage's own total is called, on the overview, the Dashboard and the lane. */
+export const CLOSED_OUT_TOTAL_LABELS: Record<ClosedOutStatus, string> = { closed_unpaid: "Didn't pay out", closed_not_contracted: "Fell through" };
+/** The hint under each in the stage menu. */
+export const CLOSED_OUT_HINTS: Record<ClosedOutStatus, string> = { closed_unpaid: "Ended without being paid", closed_not_contracted: "Fell through before a contract" };
+/** The stages a deal advances through, in order: every one but the closed-out ones. */
+export const ADVANCE_STATUSES: DealStatus[] = DEAL_STATUSES.filter((s) => !isClosedOutStatus(s));
+/** Finished: paid, or closed out without pay. None is open work. */
+export const isClosedStatus = (s: DealStatus) => s === "completed" || isClosedOutStatus(s);
 export const isActiveDeal = (s: DealStatus) => !isClosedStatus(s);
 
 export const MONEY_IN_PLAY_STATUSES: DealStatus[] = ["deal_secured", "waiting_product", "production", "post_production", "revisions", "delivered", "pending_payment", "case_study"];
 export const POTENTIAL_STATUSES: DealStatus[] = ["pitching", "deliverables_contract"];
 const DRAFT_PENDING = new Set<DealStatus>(["pitching", "deliverables_contract", "deal_secured", "waiting_product", "production", "post_production", "revisions"]);
 export const isDraftPending = (s: DealStatus) => DRAFT_PENDING.has(s);
-/** Delivered or later: the stages a deal can have a "Delivered on" day. */
+/** Delivered or later: the stages a deal can have a "Delivered on" day. Not Closed – Not contracted: nothing was delivered. */
 export const DELIVERED_STATUSES: DealStatus[] = ["delivered", "pending_payment", "case_study", "completed", "closed_unpaid"];
 export const isDeliveredOrLater = (s: DealStatus) => DELIVERED_STATUSES.includes(s);
 
 export const boardOf = (status: DealStatus): Board => BOARDS.find((b) => BOARD_STATUSES[b].includes(status)) ?? "outreach";
-/** The stage after this one; none after Completed, and none into or out of Closed – Unpaid. */
+/** The stage after this one; none after Completed, and none into or out of the closed-out stages. */
 export function nextStatus(status: DealStatus): DealStatus | null {
   const i = ADVANCE_STATUSES.indexOf(status);
   return i >= 0 && i < ADVANCE_STATUSES.length - 1 ? ADVANCE_STATUSES[i + 1] : null;
@@ -106,7 +121,7 @@ export interface Deal {
   stale_days?: number | null;
   unpaid_days?: number | null;
   payment_overdue?: boolean;
-  /* Closed – Unpaid only: why, an optional note, and when it closed. Older servers leave them out. */
+  /* The closed-out stages: why (Closed – Unpaid only), an optional note, and when it closed. Older servers leave them out. */
   unpaid_reason?: UnpaidReason | null;
   unpaid_note?: string | null;
   closed_unpaid_at?: string | null;
@@ -186,6 +201,13 @@ export interface ClosedUnpaidSummary {
   unresolved: { count: number; amount_usd: number };
 }
 
+/** Closed – Not contracted this calendar year: its own figure, never added to Didn't pay out. */
+export interface ClosedOutSummary {
+  since: string;
+  count: number;
+  amount_usd: number;
+}
+
 export interface Cash {
   tier: Tier;
   ladder: { key: string; name: string; minimum: number; unlocked: boolean; current: boolean }[];
@@ -197,6 +219,8 @@ export interface Cash {
     landing?: { id: string; brand_name: string; amount_usd: number; lands_on: string }[];
     /* Closed – Unpaid this calendar year, by reason; in no other figure. Older servers leave it out. */
     closed_unpaid?: ClosedUnpaidSummary;
+    /* Closed – Not contracted this calendar year; in no other figure, Didn't pay out included. Older servers leave it out. */
+    closed_not_contracted?: ClosedOutSummary;
   };
 }
 
@@ -278,16 +302,16 @@ export const deliveredAgo = (days: number) => (days <= 0 ? "Delivered today" : d
 export const unpaidText = (days: number) => `${deliveredAgo(days)} · not paid yet`;
 export const staleText = (days: number) => `No stage change in ${days} ${days === 1 ? "day" : "days"}`;
 
-/** "Declined · closed Oct 28". */
+/** "Declined · closed Oct 28", or "Fell through · closed Nov 3" for Closed – Not contracted. */
 export function closedUnpaidLine(deal: Deal) {
-  const reason = deal.unpaid_reason === "declined" ? "Declined" : "Unresolved";
+  const reason = deal.status === "closed_not_contracted" ? "Fell through" : deal.unpaid_reason === "declined" ? "Declined" : "Unresolved";
   return deal.closed_unpaid_at ? `${reason} · closed ${shortDay(deal.closed_unpaid_at)}` : reason;
 }
 
 /** A card's one timing line: unpaid since delivery (maybe overdue), else the delivered day, else why it's stale. */
 export function timingLine(deal: Deal): { text: string; overdue: boolean } | null {
   // Finished without the money: never stale or overdue, whatever an older server says.
-  if (deal.status === "closed_unpaid") return null;
+  if (isClosedOutStatus(deal.status)) return null;
   if (deal.unpaid_days != null) return { text: unpaidText(deal.unpaid_days), overdue: Boolean(deal.payment_overdue) };
   if (deal.delivered_at) return { text: `Delivered ${shortDay(deal.delivered_at)}`, overdue: false };
   if (deal.stale_days != null) return { text: staleText(deal.stale_days), overdue: false };
