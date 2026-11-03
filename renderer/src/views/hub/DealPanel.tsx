@@ -14,6 +14,7 @@ import { nav } from "../../lib/nav";
 import { Monogram, StagePill, changePaidOn, editNotContractedNote, editUnpaidReason, moveDeal, pickStage as pickStageMenu, useLayer } from "./parts";
 import { openDealForm } from "./DealForm";
 import { InvoiceSection } from "./Invoices";
+import { DealUpdates, Linkified } from "./DealUpdates";
 
 interface Brief { id: string; filename: string; kind: "pdf" | "word" | "image" | "link"; sizeBytes: number | null; site: string | null; url: string | null; createdAt: string }
 
@@ -346,9 +347,10 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
               {deal.deliverables ? <div className="dp-box selectable">{deal.deliverables}</div> : null}
             </section>
           ) : null}
+          <DealUpdates dealId={deal.id} />
           <section className="dp-sec">
             <div className="dp-sec-head"><span className="section-label">Notes</span><span className="acts"><button className="btn" onClick={() => openDealForm({ deal })}>Edit</button></span></div>
-            {deal.notes ? <div className="dp-box selectable" style={{ whiteSpace: "pre-wrap" }}>{deal.notes}</div> : <p className="faint dp-empty">No notes yet.</p>}
+            {deal.notes ? <div className="dp-box selectable" style={{ whiteSpace: "pre-wrap" }}><Linkified text={deal.notes} /></div> : <p className="faint dp-empty">No notes yet.</p>}
           </section>
         </div>
         <div className="dp-side scroll">
