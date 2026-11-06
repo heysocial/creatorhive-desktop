@@ -49,7 +49,7 @@ const PREF_ROWS: [keyof Prefs, string, string][] = [
   ["mentions", "Mentions", "@you, @everyone and @channel"],
   ["channelMessages", "Thread replies", "Threads you started or replied in"],
   ["postComments", "Comments on your posts", "When someone comments on or replies to your post"],
-  ["postReactions", "Reactions to your posts", "When someone reacts to your post"],
+  ["postReactions", "Likes and reactions", "When someone reacts to your post or message, or likes your comment"],
   ["announcements", "Announcements", "Important CreatorHive updates"],
   ["eventReminders", "Events", "10 minutes before, with a Join button"],
   ["hubReminders", "Deal reminders", "Drafts and payments due today"],

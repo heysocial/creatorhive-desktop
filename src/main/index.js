@@ -543,8 +543,39 @@ function isViewing(payload) {
   return viewing === about;
 }
 
+/*
+  Something a person did carries `sender` (the website's lib/push.ts): their
+  name leads, what they did sits beneath as the subtitle, and their photo is
+  the notification's picture — WhatsApp's and Messages' look, as far as macOS
+  lets an app go (the CreatorHive icon stays on the left). The photo is a
+  small PNG from /api/push/avatar, fetched once per URL; slow or missing,
+  the notification shows without it rather than waiting.
+*/
+const avatarImages = new Map();
+
+async function senderImage(url) {
+  if (typeof url !== "string" || !url.startsWith(ORIGIN)) return null;
+  if (avatarImages.has(url)) return avatarImages.get(url);
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
+    if (!response.ok) return null;
+    const image = nativeImage.createFromBuffer(Buffer.from(await response.arrayBuffer()));
+    if (image.isEmpty()) return null;
+    if (avatarImages.size > 200) avatarImages.clear();
+    avatarImages.set(url, image);
+    return image;
+  } catch {
+    return null;
+  }
+}
+
 function showNotification(payload) {
   if (!payload || typeof payload.title !== "string") return;
+  const sender = payload.sender && typeof payload.sender.name === "string" ? payload.sender : null;
+  if (sender && !locked && !payload.senderImageTried) {
+    void senderImage(sender.avatar).then((image) => showNotification({ ...payload, senderImageTried: true, senderImage: image }));
+    return;
+  }
   if (!settings.notifications || notificationsPaused() || isViewing(payload)) {
     debug("notification skipped", payload.title);
     return;
@@ -558,8 +589,13 @@ function showNotification(payload) {
     : null;
   // Locked with Touch ID: say something arrived, not who or what, and no Reply (as iPhone does with previews hidden).
   const hidden = locked;
+  const person = sender && !hidden;
   const notification = new Notification({
-    title: hidden ? (IS_PREVIEW ? "CreatorHive Preview" : "CreatorHive") : payload.title,
+    title: hidden ? (IS_PREVIEW ? "CreatorHive Preview" : "CreatorHive") : person ? sender.name : payload.title,
+    ...(person && typeof payload.subtitle === "string" && payload.subtitle ? { subtitle: payload.subtitle } : {}),
+    ...(person && payload.senderImage ? { icon: payload.senderImage } : {}),
+    // One stack per conversation, post or thread in Notification Center, as on iPhone.
+    ...(typeof data.threadKey === "string" ? { groupId: data.threadKey } : payload.tag ? { groupId: payload.tag } : {}),
     body: hidden ? (data.conversationId || data.channelId ? "New message" : "New notification") : typeof payload.body === "string" ? payload.body : "",
     hasReply: Boolean(replyTarget) && !hidden,
     replyPlaceholder: "Reply…",
