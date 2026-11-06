@@ -620,6 +620,13 @@ function showNotification(payload) {
   notification.on("close", () => {
     if (payload.tag && shownByTag.get(payload.tag) === notification) shownByTag.delete(payload.tag);
   });
+  // macOS refused it (an image it couldn't attach, say): show it again without the photo.
+  if (person && payload.senderImage) {
+    notification.on("failed", (_event, error) => {
+      debug("notification with photo failed, showing without", error);
+      showNotification({ ...payload, senderImage: null });
+    });
+  }
   // A tag replaces the earlier notification for the same thing, as on iPhone.
   if (payload.tag) {
     shownByTag.get(payload.tag)?.close();
