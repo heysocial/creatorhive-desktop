@@ -44,6 +44,8 @@ const errors = require("./errors");
 
 /* Must match DESKTOP_NOTIFICATION_EVENT in the web app's lib/realtime/channels.ts. */
 const DESKTOP_NOTIFICATION_EVENT = "notification:desktop";
+/* Must match LIVE_POPUP_EVENT in the web app's lib/popups/types.ts. */
+const LIVE_POPUP_EVENT = "popup:new";
 
 /*
   How often to look for a new version. Every 4 hours meant a Mac left open
@@ -569,6 +571,22 @@ async function senderImage(url) {
   }
 }
 
+/*
+  Live popups (renderer/src/shell/LivePopups.tsx): the card in the top right of
+  the main window when something happens while CreatorHive is open. The same
+  switches as a notification — Notifications on, not paused — and never on
+  the lock screen, which would show who and what.
+*/
+const popupsShowing = () => Boolean(
+  settings.notifications && !notificationsPaused() && !locked
+  && mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized(),
+);
+
+function showPopup(popup) {
+  if (!popup || typeof popup.id !== "string" || !popupsShowing()) return;
+  send("popup:show", popup);
+}
+
 function showNotification(payload) {
   if (!payload || typeof payload.title !== "string") return;
   const sender = payload.sender && typeof payload.sender.name === "string" ? payload.sender : null;
@@ -578,6 +596,11 @@ function showNotification(payload) {
   }
   if (!settings.notifications || notificationsPaused() || isViewing(payload)) {
     debug("notification skipped", payload.title);
+    return;
+  }
+  // CreatorHive is in front: its popup says this, so no banner as well. In the background, the banner as always.
+  if (payload.popup === true && popupsShowing() && mainWindow.isFocused()) {
+    debug("notification shown as a popup", payload.title);
     return;
   }
   if (!Notification.isSupported()) return;
@@ -641,6 +664,7 @@ function configureRealtime() {
   realtime.on("message", (message) => {
     if (message.channel.startsWith("user:")) {
       if (message.name === DESKTOP_NOTIFICATION_EVENT) showNotification(message.data);
+      if (message.name === LIVE_POPUP_EVENT) showPopup(message.data);
       // Every signal on this channel can move the unread count.
       refreshBadgeSoon();
     }

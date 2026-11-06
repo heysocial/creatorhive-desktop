@@ -6,6 +6,7 @@ import { App } from "./App";
 import { Popout } from "./Popout";
 import { ErrorBoundary, installErrorReporting, onUncaughtError } from "./lib/errors";
 import "./styles/app.css";
+import "./styles/popups.css";
 
 /* A pop-out window loads this same page with #popout/<kind>/<id>. */
 const popout = /^#popout\/(dm|channel|thread|deal|lesson|settings|huddle)\/(.+)$/.exec(location.hash);

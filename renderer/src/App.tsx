@@ -25,6 +25,7 @@ import { DEFAULT_THEME, refreshHs, themeCss, useHsSidebar } from "./lib/heysocia
 import { api } from "./lib/api";
 import { usePresence } from "./lib/realtime";
 import { SupportWidget } from "./shell/Support";
+import { LivePopups } from "./shell/LivePopups";
 
 type Auth = { state: "loading" } | { state: "offline" } | { state: "signedOut" } | { state: "signedIn"; user: SessionUser };
 type Overlay = null | "quick-open" | "shortcuts" | "new-message";
@@ -274,7 +275,7 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       <SupportWidget />
       {toast ? <div className="toast" role="status">{toast}</div> : null}
       {updateReady && !updateLater ? <UpdateBanner version={updateReady} onLater={() => setUpdateLater(true)} /> : null}
-      {locked ? <LockScreen /> : null}
+      {locked ? <LockScreen /> : <LivePopups />}
       <HubDialogs />
       <DealFormHost />
       <ExportHost />

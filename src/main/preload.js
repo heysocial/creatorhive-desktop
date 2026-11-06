@@ -69,6 +69,8 @@ contextBridge.exposeInMainWorld("ch", {
     unlock: () => ipcRenderer.invoke("app:unlock"),
     unlockWithPassword: (password) => ipcRenderer.invoke("app:unlockWithPassword", password),
     onLocked: listen("app:locked"),
+    /** A live popup to show in the top right (main window only). */
+    onPopup: listen("popup:show"),
     onRelay: listen("app:relay"),
     onNavigateView: listen("navigate:view"),
   },
