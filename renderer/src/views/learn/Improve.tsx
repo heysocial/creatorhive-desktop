@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api, queryClient } from "../../lib/api";
 import { useImprove, useImproveResources, type Improve as ImproveData, type Milestone } from "../../lib/learn";
 import { nav } from "../../lib/nav";
+import { StarterImprove } from "./StarterImprove";
 
 function Ring({ pct }: { pct: number }) {
   const r = 46;
@@ -66,6 +67,8 @@ export function ImprovePage() {
   const resources = useImproveResources().data;
   const calls = useQuery({
     queryKey: ["improve", "calls"],
+    // Group coaching calls are the Academy's; the route is locked on UGC Starter.
+    enabled: Boolean(data) && !data?.starter,
     retry: false,
     queryFn: async () => { try { return (await api<{ calls: { groupCount: number; privateCount: number; privateByCoach: { name: string; count: number }[] } }>("/api/improve/calls")).calls; } catch { return null; } },
   }).data;
@@ -79,7 +82,8 @@ export function ImprovePage() {
       <div className="scroll page-body improve-body">
         {isLoading ? <div className="empty-state">Loading…</div> : null}
         {isError ? <div className="empty-state">Couldn't load Improve.</div> : null}
-        {data ? (
+        {data?.starter ? <StarterImprove track={data.starter} resources={resources} /> : null}
+        {data && !data.starter ? (
           <div className="card grade">
             <Ring pct={data.grade.overallPercentage} />
             <div className="grade-text">
@@ -94,7 +98,7 @@ export function ImprovePage() {
             </div>
           </div>
         ) : null}
-        {resources ? (
+        {resources && data && !data.starter ? (
           <section>
             <div className="sec-head"><h2>Resources</h2><span className="muted">Tools, scripts, and manuals to move faster.</span></div>
             <div className="res-grid">
@@ -108,7 +112,7 @@ export function ImprovePage() {
             {resources.length > 3 ? <button className="show-more" onClick={() => setAllResources(!allResources)}>{allResources ? "Show fewer" : `Show all ${resources.length} resources`}</button> : null}
           </section>
         ) : null}
-        {data ? (
+        {data && !data.starter ? (
           <section>
             <div className="sec-head"><h2>Milestones</h2><span className="muted">Your journey from first video to $5K months · {data.completedStages}/{data.activationPoints.length} complete</span></div>
             <div className="ms-list">

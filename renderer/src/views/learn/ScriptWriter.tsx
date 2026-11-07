@@ -6,6 +6,9 @@ import { api, queryClient, rateLimitMessage } from "../../lib/api";
 import { shortTime } from "../../lib/format";
 import { Markdown } from "../../lib/html";
 import { nav } from "../../lib/nav";
+import { useImprove } from "../../lib/learn";
+import { resetsLabel } from "../../lib/starter";
+import "../../styles/starter.css";
 
 interface ChatSummary { id: string; title: string | null; adType: string | null; replies: number; updatedAt: string }
 interface ChatMessage { id: string; role: "user" | "assistant"; body: string; linkUrl: string | null; status: "complete" | "stopped" | "failed" | "declined" | "streaming" }
@@ -27,6 +30,9 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
   const [showLink, setShowLink] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // UGC Starter: 10 new scripts a month; over it, the server's sentence and Upgrade.
+  const [limit, setLimit] = useState<{ message: string; upgradeUrl: string } | null>(null);
+  const allowance = useImprove().data?.starter?.scriptWriter ?? null;
   const scroller = useRef<HTMLDivElement>(null);
   const activeChat = useRef<string | undefined>(chatId);
   const startedHere = useRef<string | null>(null);
@@ -38,6 +44,7 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
     startedHere.current = null;
     activeChat.current = chatId;
     setError(null);
+    setLimit(null);
     if (!chatId) { setMessages([]); return; }
     void api<{ chat: { messages: ChatMessage[] } }>(`/api/improve/script-writer/chats/${chatId}`).then((r) => setMessages(r.chat.messages)).catch(() => setError("Couldn't open this chat."));
   }, [chatId]);
@@ -48,6 +55,7 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
     if ((!body.trim() && !link.trim()) || busy) return;
     setBusy(true);
     setError(null);
+    setLimit(null);
     const pending: ChatMessage = { id: `u-${Date.now()}`, role: "user", body: body.trim(), linkUrl: link.trim() || null, status: "complete" };
     const reply: ChatMessage = { id: `a-${Date.now()}`, role: "assistant", body: "", linkUrl: null, status: "streaming" };
     setMessages((m) => [...m, pending, reply]);
@@ -67,7 +75,13 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
       if (event.type === "done") { gotDone = true; setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, status: event.status ?? "complete" } : x))); }
       if (event.type === "error") { gotDone = true; setError(event.message ?? "The Script Writer couldn't answer."); setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, status: "failed" } : x))); }
     });
-    if (!result.ok) {
+    const limitData = result.data as { code?: string; error?: string; upgradeUrl?: string } | undefined;
+    if (!result.ok && limitData?.code === "MONTHLY_LIMIT") {
+      setLimit({ message: limitData.error ?? "You've used this month's scripts.", upgradeUrl: limitData.upgradeUrl ?? "https://cal.com/team/creatorhive/skool" });
+      // Take the unsent message back out of the chat; it's still in the box to send later.
+      setMessages((m) => m.filter((x) => x.id !== reply.id && x.id !== pending.id));
+      setText(body);
+    } else if (!result.ok) {
       const code = (result.data as { error?: string } | undefined)?.error ?? result.error;
       // Over the daily limit: the website's own sentence ("…It resets tomorrow.").
       const limited = rateLimitMessage(result);
@@ -78,6 +92,7 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
     }
     setBusy(false);
     void queryClient.invalidateQueries({ queryKey: ["script-writer", "chats"] });
+    if (allowance) void queryClient.invalidateQueries({ queryKey: ["improve"], exact: true });
   }
 
   async function stop() {
@@ -86,7 +101,7 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
 
   return (
     <div className="page sw">
-      <div className="mhead"><h1><Sparkles />AI Script Writer</h1><span className="sub">Scripts, hooks and shot lists for your next brand video</span>
+      <div className="mhead"><h1><Sparkles />AI Script Writer</h1><span className="sub">{allowance ? `${allowance.remaining} of ${allowance.limit} scripts left this month · resets ${resetsLabel(allowance.resetsAt)}` : "Scripts, hooks and shot lists for your next brand video"}</span>
         <div className="acts"><button className="btn" onClick={() => nav.open({ kind: "script-writer" }, "learn", "ch")}><Plus />New chat</button></div></div>
       <div className="sw-body">
         <aside className="sw-chats scroll">
@@ -131,6 +146,12 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
             ))}
           </div>
           {error ? <div className="sw-error">{error}</div> : null}
+          {limit ? (
+            <div className="sw-error sw-limit">
+              <span>{limit.message}</span>
+              <button className="btn honey" onClick={() => ch.app.openExternal(limit.upgradeUrl)}>Upgrade</button>
+            </div>
+          ) : null}
           <div className="composer sw-composer">
             {showLink ? <input className="field sw-link" placeholder="https:// product page" value={link} onChange={(e) => setLink(e.target.value)} /> : null}
             <textarea rows={2} value={text} placeholder="Describe the product and the video you need…" maxLength={10000} onChange={(e) => setText(e.target.value)}

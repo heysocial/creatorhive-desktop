@@ -28,6 +28,7 @@ export type View =
   | { kind: "resource"; id: string }
   | { kind: "improve-resource"; slug: string }
   | { kind: "script-writer"; chatId?: string }
+  | { kind: "starter-videos" }
   | { kind: "threads" }
   | { kind: "mentions" }
   | { kind: "saved" }

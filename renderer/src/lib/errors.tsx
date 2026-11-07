@@ -38,6 +38,7 @@ export function screenFor(location: Location): string {
     case "resource": return "Learn → Resource";
     case "improve-resource": return "Improve → Guide";
     case "script-writer": return "Script Writer";
+    case "starter-videos": return "Improve → Submit your 3 videos";
     case "threads": return "Hey Social → Threads";
     case "mentions": return "Hey Social → Mentions";
     case "saved": return "Hey Social → Saved";

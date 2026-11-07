@@ -19,6 +19,7 @@ import { Invoices } from "./hub/Invoices";
 import { DealOverlay } from "./hub/DealPanel";
 import { Courses, CoursePage } from "./learn/Courses";
 import { ImprovePage } from "./learn/Improve";
+import { StarterVideos } from "./learn/StarterVideos";
 import { Resources } from "./learn/Resources";
 import { ScriptWriter } from "./learn/ScriptWriter";
 import { ImproveResource } from "./learn/ImproveResource";
@@ -69,6 +70,8 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
       return <Resources pageId={view.id} />;
     case "script-writer":
       return <ScriptWriter chatId={view.chatId} />;
+    case "starter-videos":
+      return <StarterVideos />;
     case "improve-resource":
       return <ImproveResource key={view.slug} slug={view.slug} />;
     case "activity":

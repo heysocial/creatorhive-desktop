@@ -34,7 +34,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const ACADEMY_INCLUDES = ["All courses, not just New Bee", "Group coaching calls and events", "Every channel and the full feed", "DM any creator in the hive"];
 
 /** A locked course: what the UGC Academy adds, as the website's upgrade dialog says it. */
-function UpgradeDialog({ onClose }: { onClose: () => void }) {
+export function UpgradeDialog({ onClose }: { onClose: () => void }) {
   const access = useQuery({ queryKey: ["me", "access"], staleTime: 300_000, queryFn: () => api<{ access: { upgradeUrl: string | null } }>("/api/me/access") });
   const url = access.data?.access.upgradeUrl ?? "https://cal.com/team/creatorhive/skool";
   return (

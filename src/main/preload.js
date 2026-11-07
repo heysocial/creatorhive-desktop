@@ -6,7 +6,7 @@
   notifications and native menus all live in the main process.
 */
 
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 function listen(channel) {
   return (callback) => {
@@ -82,6 +82,16 @@ contextBridge.exposeInMainWorld("ch", {
     uploadForm: (request) => ipcRenderer.invoke("files:uploadForm", request),
     clipboardImage: () => ipcRenderer.invoke("clipboard:image"),
     putVideo: (url, type, bytes) => ipcRenderer.invoke("files:putVideo", { url, type, bytes }),
+    /** UGC Starter's 3 videos: pick or drop a file, then stream it from disk to a presigned URL. */
+    pickVideo: () => ipcRenderer.invoke("files:pickVideo"),
+    videoInfo: (file) => {
+      let filePath = "";
+      try { filePath = webUtils.getPathForFile(file); } catch { /* not a file on disk */ }
+      return ipcRenderer.invoke("files:videoInfo", filePath);
+    },
+    putFile: (request) => ipcRenderer.invoke("files:putFile", request),
+    cancelPut: (id) => ipcRenderer.send("files:putCancel", id),
+    onPutProgress: listen("files:putProgress"),
   },
   errors: {
     /** An error this window hit, for Admin → Bugs (sent by the main process; deduped and capped there). */

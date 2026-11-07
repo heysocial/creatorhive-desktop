@@ -132,6 +132,74 @@ async function toTemp(url, name) {
   return file;
 }
 
+const VIDEO_EXT = new Set(["mov", "mp4", "m4v", "webm", "hevc", "3gp", "mkv", "avi"]);
+const activePuts = new Map();
+
+function videoFileInfo(filePath) {
+  try {
+    const file = String(filePath || "");
+    const ext = path.extname(file).slice(1).toLowerCase();
+    if (!file || !VIDEO_EXT.has(ext)) return null;
+    const stat = fs.statSync(file);
+    if (!stat.isFile()) return null;
+    return { path: file, name: path.basename(file), size: stat.size };
+  } catch {
+    return null;
+  }
+}
+
+function putFile(sender, id, url, type, filePath) {
+  return new Promise((resolve) => {
+    let target;
+    try {
+      target = new URL(String(url));
+    } catch {
+      resolve({ ok: false, error: "bad_url" });
+      return;
+    }
+    if (target.protocol !== "https:" || !target.hostname.endsWith(".r2.cloudflarestorage.com")) {
+      resolve({ ok: false, error: "bad_url" });
+      return;
+    }
+    const info = videoFileInfo(filePath);
+    if (!info) {
+      resolve({ ok: false, error: "no_file" });
+      return;
+    }
+    const https = require("node:https");
+    const request = https.request(target, {
+      method: "PUT",
+      headers: { "Content-Type": String(type || "application/octet-stream"), "Content-Length": info.size },
+    }, (response) => {
+      response.resume();
+      response.on("end", () => {
+        activePuts.delete(id);
+        resolve({ ok: response.statusCode >= 200 && response.statusCode < 300, status: response.statusCode });
+      });
+    });
+    activePuts.set(id, request);
+    let sent = 0;
+    let lastReport = 0;
+    const stream = fs.createReadStream(info.path, { highWaterMark: 1024 * 1024 });
+    stream.on("data", (chunk) => {
+      sent += chunk.length;
+      const now = Date.now();
+      if (now - lastReport > 150 || sent === info.size) {
+        lastReport = now;
+        if (!sender.isDestroyed()) sender.send("files:putProgress", { id, sent, total: info.size });
+      }
+    });
+    request.on("error", (error) => {
+      stream.destroy();
+      activePuts.delete(id);
+      debug("file put failed", error?.message);
+      resolve({ ok: false, error: error?.message === "cancelled" ? "cancelled" : "failed" });
+    });
+    stream.on("error", () => request.destroy(new Error("read_failed")));
+    stream.pipe(request);
+  });
+}
+
 function configure(ipcMain) {
   ipcMain.handle("files:upload", (_event, request) => upload(request));
 
@@ -146,6 +214,28 @@ function configure(ipcMain) {
       debug("video put failed", error?.message);
       return { ok: false, error: "failed" };
     }
+  });
+
+  /*
+    UGC Starter's "Submit your 3 videos": the original file, streamed from disk
+    to the presigned R2 URL the server handed out (never read into memory,
+    never re-encoded). Progress goes back as `files:putProgress`.
+  */
+  ipcMain.handle("files:pickVideo", async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const result = await dialog.showOpenDialog(win, {
+      title: "Choose a video",
+      properties: ["openFile"],
+      filters: [{ name: "Videos", extensions: ["mov", "mp4", "m4v", "webm", "hevc", "3gp", "mkv", "avi"] }],
+    });
+    if (result.canceled || !result.filePaths[0]) return null;
+    return videoFileInfo(result.filePaths[0]);
+  });
+  ipcMain.handle("files:videoInfo", (_event, filePath) => videoFileInfo(filePath));
+  ipcMain.handle("files:putFile", (event, { id, url, type, filePath } = {}) => putFile(event.sender, String(id), url, type, filePath));
+  ipcMain.on("files:putCancel", (_event, id) => {
+    const request = activePuts.get(String(id));
+    if (request) request.destroy(new Error("cancelled"));
   });
 
   ipcMain.handle("files:quickLook", async (event, { url, name } = {}) => {

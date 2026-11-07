@@ -118,6 +118,11 @@ export interface Bridge {
     clipboardImage(): Promise<Uint8Array | null>;
     putVideo(url: string, type: string, bytes: ArrayBuffer): Promise<{ ok: boolean; status?: number; error?: string }>;
     uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer; fields?: Record<string, string> }): Promise<{ ok: boolean; status?: number; error?: string; data?: unknown }>;
+    pickVideo(): Promise<LocalVideoFile | null>;
+    videoInfo(file: File): Promise<LocalVideoFile | null>;
+    putFile(request: { id: string; url: string; type: string; filePath: string }): Promise<{ ok: boolean; status?: number; error?: string }>;
+    cancelPut(id: string): void;
+    onPutProgress: Listen<{ id: string; sent: number; total: number }>;
   };
   errors: {
     /** An error for Admin → Bugs; the main process dedupes, caps and sends it (lib/errors.tsx). */
@@ -138,3 +143,6 @@ declare global {
 }
 
 export const ch = window.ch;
+
+/** A video on this Mac, picked or dropped, by path (its bytes stay on disk until the upload streams them). */
+export interface LocalVideoFile { path: string; name: string; size: number }

@@ -126,6 +126,8 @@ export function lastLessonIn(courseId: string) {
 export interface MilestoneItem { id: string; label: string; mode: "manual" | "auto"; completed: boolean }
 export interface Milestone { id: string; number: string; title: string; beeLabel: string | null; completed: boolean; current: boolean; locked: boolean; completedCount: number; totalCount: number; items: MilestoneItem[] }
 export interface Improve {
+  /** UGC Starter only (creatorhive-app docs/starter-track.md); null or missing for everyone else. */
+  starter?: import("./starter").StarterTrack | null;
   grade: { overallPercentage: number; coursePercentage: number; apPercentage: number; completedLessons: number; totalLessons: number; completedItems: number; totalItems: number };
   activationPoints: Milestone[];
   completedStages: number;

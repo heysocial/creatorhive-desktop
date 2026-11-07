@@ -183,7 +183,9 @@ function Hub() {
 
 function Learn() {
   const courses = useCourses().data ?? [];
-  const grade = useImprove().data?.grade.overallPercentage;
+  const improve = useImprove().data;
+  // UGC Starter's grade is the track's letter; everyone else's is the percentage.
+  const grade = improve?.starter ? (improve.starter.overallGrade === "–" ? undefined : improve.starter.overallGrade) : improve?.grade.overallPercentage;
   const access = useResourcesAccess().data;
   const mine = useResourcePages(access === true).data ?? [];
   const guides = useImproveResources().data ?? [];
@@ -194,7 +196,7 @@ function Learn() {
       <ActivityRows />
       <div className="sb-scroll">
         <SidebarItem icon={<GraduationCap />} label="Courses" view={{ kind: "learn", page: "courses" }} meta={courses.length ? String(courses.length) : undefined} />
-        <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} meta={grade !== undefined ? `${grade}%` : undefined} />
+        <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} meta={grade === undefined ? undefined : typeof grade === "number" ? `${grade}%` : `Grade ${grade}`} />
         <SidebarItem icon={<BookOpen />} label="Resources" view={{ kind: "learn", page: "resources" }} />
         <SidebarItem icon={<Spark />} label="AI Script Writer" view={{ kind: "script-writer" }} meta="Flagship" />
         {inProgress.length ? (
