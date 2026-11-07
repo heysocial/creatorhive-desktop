@@ -1,10 +1,11 @@
-import { useState, type DragEvent } from "react";
+import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { Check, ChevronLeft, Upload } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import { nav } from "../../lib/nav";
 import {
   cancelSlot,
   dismissSlotError,
+  readVideoMeta,
   formatBytes,
   submitForEditing,
   uploadToSlot,
@@ -31,22 +32,32 @@ function Slot({ slot, video, locked }: { slot: number; video: SubmissionVideo | 
   const [over, setOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function choose() {
+  const input = useRef<HTMLInputElement>(null);
+
+  // A File (chosen or dropped) gives both its path on disk, for the upload, and its length and size.
+  async function take(file: File | undefined) {
+    if (!file || locked) return;
+    const info = await ch.files.videoInfo(file);
+    if (!info) { setError("That file isn't a video. Pick a MOV or MP4."); return; }
     setError(null);
-    const file = await ch.files.pickVideo();
-    if (file) void uploadToSlot(slot, file);
+    const meta = await readVideoMeta(file);
+    void uploadToSlot(slot, info, meta);
+  }
+  function choose() {
+    setError(null);
+    input.current?.click();
+  }
+  function picked(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    void take(file);
   }
   async function drop(event: DragEvent) {
     event.preventDefault();
     setOver(false);
-    if (locked) return;
-    const file = event.dataTransfer.files[0];
-    if (!file) return;
-    const info = await ch.files.videoInfo(file);
-    if (!info) { setError("That file isn't a video. Drop a MOV or MP4."); return; }
-    setError(null);
-    void uploadToSlot(slot, info);
+    void take(event.dataTransfer.files[0]);
   }
+  const fileInput = <input ref={input} type="file" accept="video/*,.mov,.mp4,.m4v,.webm,.hevc,.3gp,.mkv,.avi" hidden onChange={picked} />;
 
   const dropProps = locked ? {} : {
     onDragOver: (event: DragEvent) => { event.preventDefault(); setOver(true); },
@@ -62,7 +73,7 @@ function Slot({ slot, video, locked }: { slot: number; video: SubmissionVideo | 
         <div className="st-slot-foot">
           <div><b>Video {slot}</b><span className="muted">{up.name} · {formatBytes(up.size)}</span></div>
           {up.status === "failed"
-            ? <button className="btn" onClick={() => { dismissSlotError(slot); void uploadToSlot(slot, up.file); }}>Try again</button>
+            ? <button className="btn" onClick={() => { dismissSlotError(slot); void uploadToSlot(slot, up.file, up.meta); }}>Try again</button>
             : <button className="btn" onClick={() => cancelSlot(slot)}>Cancel</button>}
         </div>
         {up.status === "failed" ? <span className="st-error">{up.error}</span> : (
@@ -81,7 +92,7 @@ function Slot({ slot, video, locked }: { slot: number; video: SubmissionVideo | 
         <Thumb video={video} height={300} />
         <div className="st-slot-foot">
           <div><b>Video {slot}</b><span className="muted">{video.fileName} · {formatBytes(video.sizeBytes)}</span></div>
-          {locked ? null : <button className="btn" onClick={() => void choose()}>Replace</button>}
+          {locked ? null : <button className="btn" onClick={choose}>Replace</button>}{fileInput}
         </div>
         <span className="st-ok"><Check />Uploaded</span>
         {error ? <span className="st-error">{error}</span> : null}
@@ -94,7 +105,7 @@ function Slot({ slot, video, locked }: { slot: number; video: SubmissionVideo | 
       <span className="st-drop-ico"><Upload /></span>
       <b>Drop video {slot} here</b>
       <span className="muted">MOV or MP4, up to 5 GB</span>
-      <button className="btn" onClick={() => void choose()}>Choose a file</button>
+      <button className="btn" onClick={choose}>Choose a file</button>{fileInput}
       {error ? <span className="st-error">{error}</span> : null}
     </div>
   );

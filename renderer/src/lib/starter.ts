@@ -111,6 +111,7 @@ export interface SlotUpload {
   size: number;
   sent: number;
   status: "uploading" | "finishing" | "failed";
+  meta?: VideoMeta;
   error: string | null;
   videoId: string | null;
   file: LocalVideoFile;
@@ -149,15 +150,47 @@ function messageOf(error: unknown, fallback: string) {
   return fallback;
 }
 
-export async function uploadToSlot(slot: number, file: LocalVideoFile) {
+export interface VideoMeta { durationSeconds: number | null; width: number | null; height: number | null }
+
+/** Length and size from the file itself, as the website reads them: best effort, 4 s at most. */
+export function readVideoMeta(file: File): Promise<VideoMeta> {
+  return new Promise((resolve) => {
+    const empty = { durationSeconds: null, width: null, height: null };
+    let url: string;
+    try { url = URL.createObjectURL(file); } catch { resolve(empty); return; }
+    const video = document.createElement("video");
+    let settled = false;
+    const finish = (meta: VideoMeta) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(url);
+      resolve(meta);
+    };
+    const timer = setTimeout(() => finish(empty), 4000);
+    video.preload = "metadata";
+    video.muted = true;
+    video.onloadedmetadata = () => finish({
+      durationSeconds: Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null,
+      width: video.videoWidth || null,
+      height: video.videoHeight || null,
+    });
+    video.onerror = () => finish(empty);
+    video.src = url;
+  });
+}
+
+export async function uploadToSlot(slot: number, file: LocalVideoFile, meta?: VideoMeta) {
   hookProgress();
   if (uploads[slot]?.status === "uploading") return;
-  update(slot, { slot, name: file.name, size: file.size, sent: 0, status: "uploading", error: null, videoId: null, file });
+  update(slot, { slot, name: file.name, size: file.size, sent: 0, status: "uploading", error: null, videoId: null, file, meta });
   let videoId: string | null = null;
   try {
     const { ticket } = await api<{ ticket: { videoId: string; uploadUrl: string; contentType: string } }>("/api/improve/videos/uploads", {
       method: "POST",
-      body: { slot, fileName: file.name, mimeType: "", sizeBytes: file.size },
+      body: { slot, fileName: file.name, mimeType: "", sizeBytes: file.size, ...(meta ?? {}) },
     });
     videoId = ticket.videoId;
     if (!uploads[slot]) {
