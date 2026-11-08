@@ -15,6 +15,7 @@ const path = require("node:path");
 const { app, BrowserWindow, dialog, shell } = require("electron");
 const { siteFetch, signedOut } = require("./site");
 const { ORIGIN, debug } = require("./config");
+const { retryOnce } = require("./network");
 
 const UPLOAD_ROUTES = [
   /^\/api\/upload(\/(feed-attachments|hey-social))?$/,
@@ -86,11 +87,14 @@ async function download(url) {
   if (origin !== ORIGIN && (protocol !== "https:" || !FILE_HOSTS.some((host) => host.test(hostname)))) {
     throw new Error("bad url");
   }
-  const response = origin === ORIGIN
-    ? await siteFetch(target.slice(ORIGIN.length), { headers: { Accept: "*/*" } })
-    : await fetch(target);
-  if (!response.ok) throw new Error(`download ${response.status}`);
-  return Buffer.from(await response.arrayBuffer());
+  // A connection that drops (before or during the bytes) is tried once more.
+  return retryOnce(async () => {
+    const response = origin === ORIGIN
+      ? await siteFetch(target.slice(ORIGIN.length), { headers: { Accept: "*/*" } })
+      : await fetch(target);
+    if (!response.ok) throw new Error(`download ${response.status}`);
+    return Buffer.from(await response.arrayBuffer());
+  }, 1000);
 }
 
 /*

@@ -34,6 +34,7 @@ const {
 } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const { ORIGIN, IS_PREVIEW, RENDERER_URL, debug, devEnv } = require("./config");
+const { transient } = require("./network");
 const site = require("./site");
 const google = require("./google");
 const realtime = require("./realtime");
@@ -55,6 +56,7 @@ const LIVE_POPUP_EVENT = "popup:new";
 */
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 const UPDATE_RECHECK_AFTER_MS = 15 * 60 * 1000;
+const UPDATE_RETRY_AFTER_MS = 60 * 1000;
 const BADGE_POLL_FOCUSED_MS = 30 * 1000;
 const BADGE_POLL_HIDDEN_MS = 5 * 60 * 1000;
 const PAUSE_MS = 60 * 60 * 1000;
@@ -559,7 +561,13 @@ async function senderImage(url) {
   if (typeof url !== "string" || !url.startsWith(ORIGIN)) return null;
   if (avatarImages.has(url)) return avatarImages.get(url);
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(2500) });
+    // A dropped connection gets one quick second try; a timeout doesn't (the banner has waited enough).
+    const get = () => fetch(url, { signal: AbortSignal.timeout(2500) });
+    const response = await get().catch(async (error) => {
+      if (!transient(error) || error?.name === "TimeoutError") throw error;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return fetch(url, { signal: AbortSignal.timeout(1500) });
+    });
     if (!response.ok) return null;
     const image = nativeImage.createFromBuffer(Buffer.from(await response.arrayBuffer()));
     if (image.isEmpty()) return null;
@@ -915,7 +923,7 @@ function checkForUpdatesSoon() {
   void checkForUpdates(false);
 }
 
-async function checkForUpdates(fromMenu) {
+async function checkForUpdates(fromMenu, isRetry = false) {
   if (!app.isPackaged) {
     if (fromMenu) void dialog.showMessageBox({ message: "Updates are only checked in the installed app." });
     return;
@@ -924,6 +932,7 @@ async function checkForUpdates(fromMenu) {
   lastUpdateCheck = Date.now();
   try {
     const result = await autoUpdater.checkForUpdates();
+    watchDownload(result?.downloadPromise, isRetry);
     if (!fromMenu) return;
     const available = result?.isUpdateAvailable;
     void dialog.showMessageBox({
@@ -940,7 +949,36 @@ async function checkForUpdates(fromMenu) {
       });
     }
     console.error("[update] check failed", error?.message ?? error);
+    if (!fromMenu && !isRetry) retryUpdateCheckOnce(error);
   }
+}
+
+/*
+  With autoDownload, electron-updater starts the download itself and hands
+  back its promise; nothing else catches it, so a download cut off mid-way
+  (net::ERR_HTTP2_PROTOCOL_ERROR from GitHub's CDN, Admin → Bugs 01e98c3e)
+  was an unhandled rejection. The "error" event above already logs it; here
+  it's caught, and a dropped connection is tried again once, a minute later.
+  Anything else waits for the next regular check.
+*/
+function watchDownload(downloadPromise, isRetry) {
+  if (!downloadPromise || typeof downloadPromise.catch !== "function") return;
+  downloadPromise.catch((error) => {
+    downloadingUpdate = false;
+    console.error("[update] download failed", error?.message ?? error);
+    if (!isRetry) retryUpdateCheckOnce(error);
+  });
+}
+
+let updateRetryTimer = null;
+
+/* One more try after a dropped connection; a retry that fails too waits for the next regular check. */
+function retryUpdateCheckOnce(error) {
+  if (!transient(error) || updateRetryTimer) return;
+  updateRetryTimer = setTimeout(() => {
+    updateRetryTimer = null;
+    void checkForUpdates(false, true);
+  }, UPDATE_RETRY_AFTER_MS);
 }
 
 function installUpdate() {

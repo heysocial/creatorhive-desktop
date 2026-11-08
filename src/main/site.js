@@ -9,6 +9,7 @@
 
 const { app, session } = require("electron");
 const { ORIGIN, PREVIEW_BYPASS, PARTITION, debug } = require("./config");
+const { retryOnce } = require("./network");
 
 const appSession = () => session.fromPartition(PARTITION);
 
@@ -76,11 +77,13 @@ async function apiRequest({ method = "GET", path, body } = {}) {
   if (!allowedApiPath(path)) return { ok: false, status: 400, data: null, error: "bad_path" };
   if (!METHODS.has(method)) return { ok: false, status: 400, data: null, error: "bad_method" };
   try {
-    const response = await siteFetch(path, {
+    const send = () => siteFetch(path, {
       method,
       headers: body === undefined ? {} : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+    // A read whose connection dropped is asked again once; a write isn't (it may have arrived).
+    const response = method === "GET" ? await retryOnce(send) : await send();
     if (signedOut(response)) return { ok: false, status: 401, data: null, signedOut: true };
     const data = await response.json().catch(() => null);
     return { ok: response.ok, status: response.status, data };

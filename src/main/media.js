@@ -11,6 +11,7 @@
 const { protocol, session } = require("electron");
 const { ORIGIN, debug } = require("./config");
 const { appSession } = require("./site");
+const { retryOnce } = require("./network");
 
 const SCHEME = "chmedia";
 
@@ -30,7 +31,8 @@ function handle() {
       // Seeking in audio and video needs ranges passed through.
       const range = request.headers.get("range");
       if (range) headers.Range = range;
-      return await appSession().fetch(target, { headers });
+      // A dropped connection gets one more try before the picture shows as broken.
+      return await retryOnce(() => appSession().fetch(target, { headers }), 300);
     } catch (error) {
       debug("media failed", target, error?.message);
       return new Response(null, { status: 502 });

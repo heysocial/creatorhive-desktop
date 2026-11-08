@@ -14,6 +14,9 @@
     - at most MAX_PER_SESSION reports per launch;
     - noise is dropped (ResizeObserver loops, aborted requests, network
       failures while the Mac is offline);
+    - a request that only died on the way (net::ERR_HTTP2_PROTOCOL_ERROR,
+      ERR_NETWORK_CHANGED, a timeout: network.js) is never a bug, online or
+      not; it's logged here and that's all;
     - a failed send is only logged: never retried, never reported, so a
       server that's down can't make a loop;
     - query strings, bearer tokens and connection strings are taken out, as
@@ -25,6 +28,7 @@
 const { app, net } = require("electron");
 const { ORIGIN, IS_PREVIEW, debug } = require("./config");
 const site = require("./site");
+const { transient } = require("./network");
 
 const DEDUPE_MS = 5 * 60 * 1000;
 const MAX_PER_SESSION = 30;
@@ -86,6 +90,10 @@ function report(input) {
     if (sending > 0 && stack?.includes("errors.js")) return "loop";
     if (NOISE.some((re) => re.test(message))) return "noise";
     if (NETWORK.test(message) && !net.isOnline()) return "offline";
+    if (transient(message)) {
+      debug("network error not reported", kind, message);
+      return "network";
+    }
     const key = `${message}\n${stack ?? ""}`;
     const now = Date.now();
     const last = recent.get(key);
