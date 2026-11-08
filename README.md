@@ -69,6 +69,12 @@ npm run preview:dist      # the same without publishing
    notarizes it, and publishes a GitHub release with the .dmg, .zip and `latest-mac.yml`.
    Installed apps pick it up within a few hours; the download page within five minutes.
 
+   Publishing (`scripts/publish-release.sh`) tags HEAD, creates the release as a
+   hidden draft, uploads every file one at a time, checks each one's size and
+   checksum, and only then makes it Latest. If it stops partway, the draft stays
+   hidden and running it again carries on. `npm run release:dry-run` builds for
+   real and prints what publishing would do.
+
 Signing uses the "Developer ID Application: Simon Choucroun (Y76C9NAS53)" identity
 in the login keychain. Notarization uses the App Store Connect API key in
 `~/.creatorhive-desktop-signing/` (never commit it). `npm run dist` builds without

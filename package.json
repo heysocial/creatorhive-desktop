@@ -14,8 +14,10 @@
     "typecheck": "tsc -p renderer/tsconfig.json --noEmit",
     "dist": "scripts/build.sh",
     "release": "scripts/build.sh release",
+    "release:dry-run": "scripts/build.sh release --dry-run",
     "preview:dist": "scripts/build.sh preview",
-    "preview:release": "scripts/build.sh preview release"
+    "preview:release": "scripts/build.sh preview release",
+    "preview:release:dry-run": "scripts/build.sh preview release --dry-run"
   },
   "dependencies": {
     "@vercel/blob": "2.6.1",
