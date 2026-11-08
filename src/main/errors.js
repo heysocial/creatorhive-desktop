@@ -14,6 +14,9 @@
     - at most MAX_PER_SESSION reports per launch;
     - noise is dropped (ResizeObserver loops, aborted requests, network
       failures while the Mac is offline);
+    - Squirrel's "Cannot update while running on a read-only volume" (the
+      app opened from the disk image or Downloads) isn't a bug: the app asks
+      to be moved to Applications instead (index.js);
     - a request that only died on the way (net::ERR_HTTP2_PROTOCOL_ERROR,
       ERR_NETWORK_CHANGED, a timeout: network.js) is never a bug, online or
       not; it's logged here and that's all;
@@ -65,6 +68,7 @@ const NOISE = [
   /\bAbortError\b/,
   /^Script error\.?$/i,
 ];
+const NOT_INSTALLED = /Cannot update while running on a read-only volume/i;
 const NETWORK = /Failed to fetch|NetworkError|Load failed|net::ERR_|ERR_INTERNET_DISCONNECTED|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|^offline$/i;
 
 /** The macOS version ("26.1", not "26.1.0"), as the iPhone sends iOS's. */
@@ -89,6 +93,11 @@ function report(input) {
     // A failure inside the reporting itself is never reported again.
     if (sending > 0 && stack?.includes("errors.js")) return "loop";
     if (NOISE.some((re) => re.test(message))) return "noise";
+    // The app run from the disk image or Downloads: it asks to be moved to Applications instead (index.js).
+    if (NOT_INSTALLED.test(message)) {
+      debug("read-only volume error not reported", kind);
+      return "not-installed";
+    }
     if (NETWORK.test(message) && !net.isOnline()) return "offline";
     if (transient(message)) {
       debug("network error not reported", kind, message);

@@ -83,6 +83,7 @@ const settingsPath = () => path.join(app.getPath("userData"), "settings.json");
 const DEFAULT_SETTINGS = {
   notifications: !IS_PREVIEW, pausedUntil: 0, bounds: null,
   sound: "honey", badge: "mentions", keepRunning: true, theme: "system", zoom: 1, touchId: false, bounceDock: true,
+  moveDeclinedAt: 0,
 };
 
 /* Touch ID: when it's on, the window stays locked after launch, sleep or the Mac locking, until you unlock. */
@@ -896,6 +897,13 @@ function configureUpdates() {
     autoUpdater.allowPrerelease = true;
     autoUpdater.channel = "preview";
   }
+  // Run from the disk image or Downloads, Squirrel can't replace the app
+  // ("Cannot update while running on a read-only volume"): don't look until
+  // it's been moved to Applications (offerMoveToApplications below).
+  if (!inApplications()) {
+    debug("not in Applications; update checks off");
+    return;
+  }
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on("update-available", () => { downloadingUpdate = true; });
@@ -926,6 +934,10 @@ function checkForUpdatesSoon() {
 async function checkForUpdates(fromMenu, isRetry = false) {
   if (!app.isPackaged) {
     if (fromMenu) void dialog.showMessageBox({ message: "Updates are only checked in the installed app." });
+    return;
+  }
+  if (!inApplications()) {
+    if (fromMenu) void offerMoveToApplications({ asked: true });
     return;
   }
   if (!fromMenu && (updateReady || downloadingUpdate)) return;
@@ -987,6 +999,61 @@ function installUpdate() {
   autoUpdater.quitAndInstall();
 }
 ipcMain.on("update:install", installUpdate);
+
+/* ---------- Applications folder ---------- */
+
+/*
+  Admin → Bugs d2d06b4f (2.0.28): opened straight from the disk image or from
+  Downloads (where macOS runs it from a read-only copy), the app can never
+  update itself. At launch it offers to move itself to Applications and
+  relaunch from there. "Not Now" is remembered: it asks again on a launch at
+  least MOVE_ASK_AGAIN_MS later, not every time. Check for Updates asks
+  straight away.
+*/
+const MOVE_ASK_AGAIN_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** /Applications or ~/Applications (Electron checks both). Development and other platforms count as in. */
+function inApplications() {
+  if (!IS_MAC || !app.isPackaged) return true;
+  try {
+    return app.isInApplicationsFolder();
+  } catch {
+    return true;
+  }
+}
+
+async function offerMoveToApplications({ asked = false } = {}) {
+  if (inApplications()) return;
+  if (!asked && Date.now() - (settings.moveDeclinedAt || 0) < MOVE_ASK_AGAIN_MS) return;
+  const parent = mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() ? mainWindow : undefined;
+  const options = {
+    type: "info",
+    message: `Move ${app.name} to your Applications folder so it can update automatically`,
+    detail: `${app.name} is running from ${app.getAppPath().includes("/Volumes/") ? "the disk image" : "outside Applications"}, so it can't install new versions. It will move itself and reopen; you stay signed in.`,
+    buttons: ["Move to Applications", "Not Now"],
+    defaultId: 0,
+    cancelId: 1,
+  };
+  const { response } = await (parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options));
+  if (response !== 0) {
+    settings.moveDeclinedAt = Date.now();
+    saveSettings();
+    return;
+  }
+  try {
+    // Moves the app (replacing an older copy already in Applications), then quits and relaunches from there.
+    quitting = true;
+    if (!app.moveToApplicationsFolder({ conflictHandler: () => true })) quitting = false;
+  } catch (error) {
+    quitting = false;
+    console.error("[move] failed", error?.message ?? error);
+    void dialog.showMessageBox({
+      type: "warning",
+      message: `Couldn't move ${app.name} to Applications.`,
+      detail: `Quit ${app.name}, then drag it from the disk image or Downloads into the Applications folder in Finder and open it from there.`,
+    });
+  }
+}
 
 /* ---------- Text menu ---------- */
 
@@ -1110,6 +1177,8 @@ app.whenReady().then(async () => {
   if (user) setSignedIn(true);
   scheduleBadgePoll();
   configureUpdates();
+  // After the window, so the question appears over it.
+  setTimeout(() => void offerMoveToApplications(), 1500);
 
   lockIfNeeded();
   powerMonitor.on("lock-screen", lockIfNeeded);
