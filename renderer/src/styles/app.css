@@ -239,6 +239,8 @@ img { -webkit-user-drag: none; }
 /* The light-mode crimson is about 1.7:1 on dark glass; a lighter red reads. */
 @media (prefers-color-scheme: dark) { .signin-error { color: #FF8F8F; background: rgba(255, 99, 99, .14); } }
 .signin-foot { color: var(--ink-4); font-size: 12.5px; margin-top: 22px; text-align: center; }
+.signin-invite { width: 100%; margin-top: 12px; }
+.signin-note.plain { background: color-mix(in srgb, var(--line) 60%, transparent); }
 .divider { display: flex; align-items: center; gap: 12px; margin: 10px 0 2px; color: var(--ink-4); font-size: 12px; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line-strong); }
 .google { background: var(--card); }

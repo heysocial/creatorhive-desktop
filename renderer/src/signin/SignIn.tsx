@@ -49,8 +49,26 @@ function ForgotPassword({ initialEmail, onBack }: { initialEmail: string; onBack
   );
 }
 
-export function SignIn({ onSignedIn }: { onSignedIn: (user: SessionUser) => void }) {
-  const [email, setEmail] = useState("");
+/**
+ * "Have an invite?": the invite opens the app from the website, so this says
+ * where to click (the Mac button in the invite email, then "Open your invite").
+ */
+function InviteHelp({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="signin-form">
+      <div className="signin-note plain">
+        <b>Open your invite email on this Mac</b> and click <b>“Download the Mac app and set up”</b>.
+        On the page that opens, click <b>“Open your invite”</b>. CreatorHive opens on setup, with your email filled in.
+      </div>
+      <p className="signin-sub">Already clicked it? Go back to that page in your browser and click “Open your invite” again.</p>
+      <button type="button" className="btn lg" style={{ marginTop: 6 }} onClick={onBack}>Back to sign in</button>
+    </div>
+  );
+}
+
+export function SignIn({ onSignedIn, initialEmail = "" }: { onSignedIn: (user: SessionUser) => void; initialEmail?: string }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [inviteHelp, setInviteHelp] = useState(false);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +110,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: SessionUser) => void
         <h1>Welcome to CreatorHive</h1>
         <p>Sign in to your community, Hub and messages.</p>
 
-        {forgot ? <ForgotPassword initialEmail={email} onBack={() => setForgot(false)} /> : (
+        {inviteHelp ? <InviteHelp onBack={() => setInviteHelp(false)} /> : forgot ? <ForgotPassword initialEmail={email} onBack={() => setForgot(false)} /> : (
         <form className="signin-form" onSubmit={submit}>
           {googleOffered ? (
             <>
@@ -111,19 +129,22 @@ export function SignIn({ onSignedIn }: { onSignedIn: (user: SessionUser) => void
           ) : null}
 
           <label htmlFor="email">Email</label>
-          <input id="email" className="field" type="email" autoComplete="username" autoFocus value={email}
+          <input id="email" className="field" type="email" autoComplete="username" autoFocus={!initialEmail} value={email}
             onChange={(event) => setEmail(event.target.value)} />
           <label htmlFor="password">
             Password
             <button type="button" onClick={() => setForgot(true)}>Forgot password?</button>
           </label>
-          <input id="password" className="field" type="password" autoComplete="current-password" value={password}
+          <input id="password" className="field" type="password" autoComplete="current-password" autoFocus={Boolean(initialEmail)} value={password}
             onChange={(event) => setPassword(event.target.value)} />
           {error ? <div className="signin-error" role="alert">{error}</div> : null}
           <button type="submit" className="btn honey lg" style={{ marginTop: 10 }} disabled={busy || googleWaiting}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
+        )}
+        {inviteHelp || forgot ? null : (
+          <button type="button" className="btn lg signin-invite" onClick={() => setInviteHelp(true)}>Have an invite? Set up your account</button>
         )}
         <p className="signin-foot">Invite-only. Contact your CSM if you don't have access yet.</p>
       </div>

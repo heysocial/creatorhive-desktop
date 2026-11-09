@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ch, type SessionUser } from "./lib/bridge";
+import { ch, type AppLink, type SessionUser } from "./lib/bridge";
 import { queryClient, useHeySocialAccess } from "./lib/api";
 import { commands, type Command } from "./lib/commands";
 import { openPath } from "./lib/links";
 import { nav, useNav } from "./lib/nav";
 import { useRealtimeRefresh } from "./lib/realtime";
 import { SignIn } from "./signin/SignIn";
+import { AcceptInvite } from "./signin/AcceptInvite";
 import { TopBar } from "./shell/TopBar";
 import { UpdateBanner } from "./shell/UpdateBanner";
 import { Rail } from "./shell/Rail";
@@ -286,9 +287,39 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
   );
 }
 
+/** An invite opened while someone is signed in: it is for a new account, so sign out first. */
+function InviteWhileSignedIn({ user, onContinue, onCancel }: { user: SessionUser; onContinue: () => void; onCancel: () => void }) {
+  return (
+    <div className="signin">
+      <div className="signin-card">
+        <div className="mark"><img src="./ch-logo.svg" alt="" /></div>
+        <h1>Set up a new account?</h1>
+        <p>You’re signed in as {user.name || user.email}. This invite sets up a different account, so sign out first.</p>
+        <div className="signin-form">
+          <button type="button" className="btn honey lg" onClick={onContinue}>Sign out and set up the invite</button>
+          <button type="button" className="btn lg" style={{ marginTop: 6 }} onClick={onCancel}>Stay signed in</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const [auth, setAuth] = useState<Auth>({ state: "loading" });
   const [info, setInfo] = useState({ version: "", preview: false, fullscreen: false });
+  // A creatorhive:// link (the website's "Open your invite"): an invite to set up, or an email to sign in with.
+  const [link, setLink] = useState<AppLink | null>(null);
+  const [signInEmail, setSignInEmail] = useState("");
+
+  useEffect(() => {
+    const take = () => void ch.links.take().then((next) => {
+      if (!next) return;
+      if (next.kind === "sign-in") setSignInEmail(next.email);
+      setLink(next);
+    });
+    take();
+    return ch.links.onArrived(take);
+  }, []);
 
   useEffect(() => {
     void ch.info().then(setInfo);
@@ -320,6 +351,24 @@ export function App() {
 
   if (auth.state === "loading") return <div className="signin" />;
   if (auth.state === "offline") return <Offline onSession={(user) => setAuth(user ? { state: "signedIn", user } : { state: "signedOut" })} />;
-  if (auth.state === "signedOut") return <SignIn onSignedIn={(user) => setAuth({ state: "signedIn", user })} />;
+  const signedIn = (user: SessionUser) => {
+    setLink(null);
+    setAuth({ state: "signedIn", user });
+  };
+  if (link?.kind === "invite" && auth.state === "signedIn") {
+    return <InviteWhileSignedIn user={auth.user} onContinue={() => void ch.auth.signOut()} onCancel={() => setLink(null)} />;
+  }
+  if (link?.kind === "invite") {
+    return (
+      <AcceptInvite
+        key={link.token}
+        token={link.token}
+        onSignedIn={signedIn}
+        onSignIn={(email) => { setSignInEmail(email); setLink(null); }}
+      />
+    );
+  }
+  // The key gives a newly opened sign-in link a fresh form with its email.
+  if (auth.state === "signedOut") return <SignIn key={signInEmail} initialEmail={signInEmail} onSignedIn={signedIn} />;
   return <Workspace key={auth.user.id} user={auth.user} info={info} />;
 }

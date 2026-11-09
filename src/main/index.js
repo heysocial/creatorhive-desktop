@@ -42,6 +42,7 @@ const media = require("./media");
 const popouts = require("./popouts");
 const files = require("./files");
 const errors = require("./errors");
+const { createLinks } = require("./links");
 
 /* Must match DESKTOP_NOTIFICATION_EVENT in the web app's lib/realtime/channels.ts. */
 const DESKTOP_NOTIFICATION_EVENT = "notification:desktop";
@@ -68,6 +69,22 @@ if (devEnv("CREATORHIVE_USER_DATA")) app.setPath("userData", devEnv("CREATORHIVE
 if (!app.requestSingleInstanceLock()) {
   app.quit();
   process.exit(0);
+}
+
+/*
+  creatorhive://accept-invite?token=… and creatorhive://sign-in?email=… (links.js).
+  macOS hands them over through open-url, which can fire before the app is
+  ready when the link is what launched it, so the listener is registered here.
+*/
+const links = createLinks({ isPreview: IS_PREVIEW });
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  if (links.receive(url)) showWindow();
+});
+// Windows passes a link that launched the app as an argument.
+{
+  const launchLink = links.fromArgv(process.argv);
+  if (launchLink) links.receive(launchLink);
 }
 
 // From here on, this process's errors and the windows' crashes go to Admin → Bugs (errors.js).
@@ -396,6 +413,10 @@ function configureIpc() {
     setSignedIn(false);
     return { ok: true };
   });
+
+  // An app link waiting for the interface (links.js); handed over once.
+  ipcMain.handle("links:take", () => links.take());
+  links.onLink(() => sendWhenLoaded("links:arrived", null));
 
   ipcMain.handle("api:request", async (_event, request) => {
     const result = await site.apiRequest(request);
@@ -1100,7 +1121,11 @@ app.on("web-contents-created", (_event, contents) => {
 
 /* ---------- Lifecycle ---------- */
 
-app.on("second-instance", showWindow);
+app.on("second-instance", (_event, argv) => {
+  const link = links.fromArgv(argv);
+  if (link) links.receive(link);
+  showWindow();
+});
 app.on("activate", showWindow);
 app.on("before-quit", () => {
   quitting = true;
@@ -1164,6 +1189,10 @@ app.whenReady().then(async () => {
     callback({ requestHeaders: { ...details.requestHeaders, Referer: `${ORIGIN}/` } });
   });
   site.configureUserAgent();
+  // The website's "Open your invite" opens this app (links.js). A packaged app
+  // registers its scheme through Info.plist too; this also covers a copy that
+  // was moved after its first launch.
+  if (app.isPackaged) app.setAsDefaultProtocolClient(links.scheme);
   configureIpc();
   configureRealtime();
   createAppMenu();

@@ -7,6 +7,11 @@ productName: CreatorHive Preview
 # The app reads its own name to know it is the preview (src/main/config.js).
 extraMetadata:
   productName: CreatorHive Preview
+# The website's "Open your invite" opens creatorhive://accept-invite?token=… (src/main/links.js).
+protocols:
+  - name: CreatorHive Preview
+    schemes:
+      - creatorhive-preview
 mac:
   icon: build/icon-preview.icns
   artifactName: CreatorHive-Preview-${version}-mac.${ext}

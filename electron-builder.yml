@@ -22,6 +22,11 @@ electronFuses:
   enableNodeCliInspectArguments: false
   enableEmbeddedAsarIntegrityValidation: true
   onlyLoadAppFromAsar: true
+# The website's "Open your invite" opens creatorhive://accept-invite?token=… (src/main/links.js).
+protocols:
+  - name: CreatorHive
+    schemes:
+      - creatorhive
 mac:
   category: public.app-category.social-networking
   icon: build/icon.icns

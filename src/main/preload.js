@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld("ch", {
     onChanged: listen("auth:changed"),
   },
   api: (request) => ipcRenderer.invoke("api:request", request),
+  links: {
+    take: () => ipcRenderer.invoke("links:take"),
+    onArrived: listen("links:arrived"),
+  },
   apiStream: (request, onLine) => {
     const id = `${Date.now()}-${Math.random()}`;
     const handler = (_event, payload) => { if (payload?.id === id) onLine(payload.line); };

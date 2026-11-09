@@ -56,6 +56,9 @@ export type UploadResult =
 type Unsubscribe = () => void;
 type Listen<T> = (callback: (payload: T) => void) => Unsubscribe;
 
+/** What a creatorhive:// link asks for (src/main/links.js). */
+export type AppLink = { kind: "invite"; token: string } | { kind: "sign-in"; email: string };
+
 export interface Bridge {
   info(): Promise<{ version: string; preview: boolean; platform: string; origin: string; fullscreen: boolean }>;
   auth: {
@@ -72,6 +75,11 @@ export interface Bridge {
     onChanged: Listen<null>;
   };
   api<T>(request: { method?: string; path: string; body?: unknown }): Promise<ApiResult<T>>;
+  /** creatorhive:// links (the website's "Open your invite"): taken once each. */
+  links: {
+    take(): Promise<AppLink | null>;
+    onArrived: Listen<null>;
+  };
   /** A streamed POST (newline-delimited JSON); each line arrives in onLine. Resolves with the status when done. */
   apiStream(request: { path: string; body: unknown }, onLine: (line: string) => void): Promise<{ ok: boolean; status: number; error?: string; data?: unknown }>;
   realtime: {
