@@ -21,6 +21,7 @@ import { percent, useCourses, useImprove, useImproveResources } from "../lib/lea
 import { useResourcePages, useResourcesAccess } from "../views/learn/Resources";
 import { HeySocialSidebar } from "./HeySocialSidebar";
 import { AdminSidebar } from "./AdminSidebar";
+import { SoonTag, soonLast } from "../views/messages/ComingSoon";
 
 const byRecent = (a: Conversation, b: Conversation) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? "");
 
@@ -36,7 +37,7 @@ function dmAvatar(conversation: Conversation, size = 20) {
 function ChannelList({ workspace }: { workspace: Workspace }) {
   const { data, isLoading, isError } = useChannels(workspace);
   const channels = useMemo(
-    () => (data ?? []).filter((c) => c.joined || !c.isPrivate).sort((a, b) => channelName(a.name).localeCompare(channelName(b.name))),
+    () => soonLast((data ?? []).filter((c) => c.joined || !c.isPrivate).sort((a, b) => channelName(a.name).localeCompare(channelName(b.name))), (c) => c, data),
     [data],
   );
   return (
@@ -45,8 +46,9 @@ function ChannelList({ workspace }: { workspace: Workspace }) {
       {isError ? <div className="sb-empty">Couldn't load channels.</div> : null}
       {!isLoading && !isError && channels.length === 0 ? <div className="sb-empty">No channels yet.</div> : null}
       {channels.map((channel) => (
-        <SidebarItem key={channel.id} icon={channel.isPrivate ? <Lock /> : <Hash />} label={channelName(channel.name)}
-          view={{ kind: "channel", id: channel.id }} count={channel.mentionCount} unread={channel.unreadCount > 0} />
+        <SidebarItem key={channel.id} icon={channel.isPrivate && !channel.comingSoon ? <Lock /> : <Hash />} label={channelName(channel.name)}
+          tag={channel.comingSoon ? <SoonTag /> : undefined} view={{ kind: "channel", id: channel.id }}
+          count={channel.comingSoonLocked ? 0 : channel.mentionCount} unread={!channel.comingSoonLocked && channel.unreadCount > 0} />
       ))}
     </SidebarSection>
   );

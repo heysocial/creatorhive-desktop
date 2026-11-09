@@ -92,7 +92,7 @@ export function useRealtimeRefresh(userId: string, { sidebar = true }: { sidebar
     const syncHeard = () => {
       const names = new Map<string, "ch" | "hs">();
       if (sidebar) {
-        for (const c of queryClient.getQueryData<Channel[]>(keys.channels("creatorhive")) ?? []) if (c.joined || !c.isPrivate) names.set(`channel:${c.id}`, "ch");
+        for (const c of queryClient.getQueryData<Channel[]>(keys.channels("creatorhive")) ?? []) if ((c.joined || !c.isPrivate) && !c.comingSoonLocked) names.set(`channel:${c.id}`, "ch");
         for (const c of queryClient.getQueryData<HsSidebar>(HS_KEY)?.channels ?? []) if (c.joined && !c.muted) names.set(`channel:${c.id}`, "hs");
       }
       for (const [name, list] of names) {

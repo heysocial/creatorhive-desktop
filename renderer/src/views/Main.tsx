@@ -5,6 +5,7 @@ import { ErrorBoundary, screenFor } from "../lib/errors";
 import { type Workspace } from "../lib/api";
 import { useNav, type Location } from "../lib/nav";
 import { Conversation } from "./messages/Conversation";
+import { ChannelGate } from "./messages/ComingSoon";
 import { Home } from "./home/Home";
 import { TodayPage } from "./home/Today";
 import { AnnouncementPage } from "./home/Announcement";
@@ -48,6 +49,11 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
     case "profile":
       return <ProfilePage key={view.id} id={view.id} user={user} />;
     case "channel":
+      return (
+        <ChannelGate key={`channel:${view.id}`} id={view.id} workspace={workspace}>
+          <Conversation where={{ kind: "channel", id: view.id }} user={user} workspace={workspace} threadId={view.threadId} messageId={view.messageId} />
+        </ChannelGate>
+      );
     case "dm":
       return <Conversation key={`${view.kind}:${view.id}`} where={{ kind: view.kind, id: view.id }} user={user} workspace={workspace} threadId={view.threadId} messageId={view.messageId} />;
     case "threads":

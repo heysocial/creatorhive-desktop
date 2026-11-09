@@ -22,9 +22,11 @@ export function SidebarHead({ title, action, actionLabel = "New message" }: { ti
 }
 
 /** One row. Knows whether it's the open view, and offers a native right-click menu. */
-export function SidebarItem({ icon, label, view, count, quietCount, honeyCount = false, meta, unread = false, extraMenu = [], onMenu }: {
+export function SidebarItem({ icon, label, tag, view, count, quietCount, honeyCount = false, meta, unread = false, extraMenu = [], onMenu }: {
   icon: ReactNode;
   label: string;
+  /** Drawn right after the label (a coming-soon channel's "Soon"). */
+  tag?: ReactNode;
   view: View;
   count?: number;
   quietCount?: number;
@@ -65,6 +67,7 @@ export function SidebarItem({ icon, label, view, count, quietCount, honeyCount =
     >
       {icon}
       <span className="label">{label}</span>
+      {tag}
       {count ? <span className="cnt">{count > 99 ? "99+" : count}</span> : null}
       {!count && quietCount ? <span className={`cnt quiet ${honeyCount ? "honey" : ""}`}>{quietCount}</span> : null}
       {!count && !quietCount && meta ? <span className="meta">{meta}</span> : null}

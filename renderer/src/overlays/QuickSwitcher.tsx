@@ -10,6 +10,7 @@ import { commands } from "../lib/commands";
 import { openPath } from "../lib/links";
 import { nav, type Location } from "../lib/nav";
 import { Avatar, channelName } from "../lib/ui";
+import { soonLast } from "../views/messages/ComingSoon";
 
 interface Row {
   id: string;
@@ -92,12 +93,14 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
         run: go({ ws, section: nav.get().ws === ws && nav.get().section === "dms" ? "dms" : "home", view: { kind: "dm", id: c.id } }),
       }));
 
-    const channels = ranked([...chChannels.map((c) => ({ c, ws: "ch" as const })), ...hsChannels.map((c) => ({ c, ws: "hs" as const }))]
-      .filter(({ c }) => c.joined || !c.isPrivate), (x) => channelName(x.c.name), q ? 6 : 0)
+    // Coming-soon channels after the others; a locked one opens its locked screen.
+    const channels = soonLast(ranked([...chChannels.map((c) => ({ c, ws: "ch" as const })), ...hsChannels.map((c) => ({ c, ws: "hs" as const }))]
+      .filter(({ c }) => c.joined || !c.isPrivate), (x) => channelName(x.c.name), q ? 6 : 0), (x) => x.c, chChannels)
       .map<Row>(({ c, ws }) => ({
         id: `channel:${c.id}`, group: "Channels", title: channelName(c.name),
-        sub: ws === "hs" ? "Hey Social Inc." : c.description ?? undefined,
-        glyph: glyph(c.isPrivate ? <Lock /> : <Hash />),
+        sub: ws === "hs" ? "Hey Social Inc." : c.comingSoonLocked ? c.comingSoonMessage || "Coming soon" : c.description ?? undefined,
+        glyph: glyph(c.isPrivate && !c.comingSoon ? <Lock /> : <Hash />),
+        hint: c.comingSoon ? "Soon" : undefined,
         run: go({ ws, section: "home", view: { kind: "channel", id: c.id } }),
       }));
 

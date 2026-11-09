@@ -16,6 +16,12 @@ export interface Channel {
   memberCount: number;
   joined: boolean;
   lastMessageAt: string | null;
+  /** CreatorHive: listed with a "Soon" tag, after every other channel (views/messages/ComingSoon.tsx). */
+  comingSoon?: boolean;
+  /** Coming soon and locked for this member (everyone but the owner): the locked screen, nothing loaded. */
+  comingSoonLocked?: boolean;
+  /** The locked screen's headline, e.g. "Coming soon by the end of November". */
+  comingSoonMessage?: string | null;
 }
 
 export interface Participant {
@@ -110,7 +116,8 @@ export function useChannels(workspace: Workspace, enabled = true) {
   return useQuery({
     queryKey: keys.channels(workspace),
     enabled,
-    queryFn: async () => (await api<{ channels: Channel[] }>(`/api/channels?workspace=${workspace}`)).channels,
+    // Only CreatorHive's list asks for coming-soon channels: this app draws their locked screen.
+    queryFn: async () => (await api<{ channels: Channel[] }>(`/api/channels?workspace=${workspace}${workspace === "creatorhive" ? "&comingSoon=1" : ""}`)).channels,
   });
 }
 

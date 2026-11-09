@@ -4,6 +4,7 @@ import { ch, type SessionUser } from "./lib/bridge";
 import { queryClient, useChannels, useConversations, useHeySocialAccess } from "./lib/api";
 import { useRealtimeRefresh } from "./lib/realtime";
 import { Conversation, ThreadPanel } from "./views/messages/Conversation";
+import { ChannelGate } from "./views/messages/ComingSoon";
 import { DealPanel, PromptHost } from "./views/hub/DealPanel";
 import { HubDialogs } from "./views/hub/parts";
 import { DealFormHost } from "./views/hub/DealForm";
@@ -68,7 +69,9 @@ function PopoutBody({ kind, id, user }: { kind: string; id: string; user: Sessio
   return (
     <div className="popout-shell">
       <main className="main popout-main">
-        <Conversation where={{ kind, id }} user={user} workspace={workspace} popout />
+        {kind === "channel" ? (
+          <ChannelGate id={id} workspace={workspace}><Conversation where={{ kind, id }} user={user} workspace={workspace} popout /></ChannelGate>
+        ) : <Conversation where={{ kind, id }} user={user} workspace={workspace} popout />}
       </main>
     </div>
   );

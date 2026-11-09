@@ -2045,3 +2045,26 @@ html.is-popout body { background: var(--card); }
 .dp-close-links { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-top: -4px; }
 .dp-close-links .link { font-size: 13px; color: var(--ink-3); }
 .dp-close-links .link:hover { color: var(--ink-2); }
+
+/* ---------- Coming-soon channels (views/messages/ComingSoon.tsx; website comingSoon.module.css) ---------- */
+.soon-tag { display: inline-flex; flex: none; align-items: center; gap: 3px; padding: 0 6px 0 5px; border-radius: 999px; box-shadow: inset 0 0 0 .5px var(--line-strong);
+  color: var(--ink-3); font-size: 10.5px; font-weight: 600; line-height: 16px; letter-spacing: .02em; }
+.soon-tag svg, .mhead h1 .soon-tag svg, .sb-item .soon-tag svg { width: 10px; height: 10px; color: currentColor; stroke-width: 2.25; }
+.mhead h1 .soon-tag { margin-left: 3px; }
+.sb-item .label:has(+ .soon-tag) { flex: 0 1 auto; }
+.sb-item .soon-tag { margin-right: auto; }
+.sb-item.unread .soon-tag, .sb-item.on .soon-tag { font-weight: 600; }
+.soon-screen { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 32px 20px; background: var(--card-2); }
+.soon-card { width: 100%; max-width: 400px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 48px 28px; text-align: center;
+  background: var(--card); border-radius: 16px; box-shadow: inset 0 0 0 .5px var(--line-strong), 0 1px 2px rgba(0,0,0,.04); }
+.soon-icon { width: 52px; height: 52px; margin-bottom: 4px; display: grid; place-items: center; border-radius: 16px; background: var(--honey); color: var(--on-honey);
+  box-shadow: 0 8px 24px -8px rgba(255, 204, 4, .55), inset 0 0 0 .5px rgba(255, 255, 255, .2); }
+.soon-icon svg { width: 22px; height: 22px; stroke-width: 1.75; }
+.soon-name { color: var(--ink-3); font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+.soon-message { color: var(--ink); font-size: 17px; font-weight: 700; letter-spacing: -.01em; line-height: 1.3; text-wrap: balance; }
+.soon-description { max-width: 320px; color: var(--ink-3); font-size: 13px; line-height: 1.5; text-wrap: pretty; user-select: text; }
+.soon-owner { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 16px 0; padding: 8px 8px 8px 12px; border-radius: 10px;
+  background: var(--card-2); box-shadow: inset 0 0 0 .5px var(--line-strong); color: var(--ink-3); font-size: 13px; line-height: 1.4; }
+.soon-owner > svg { width: 14px; height: 14px; flex: none; }
+.soon-owner-text { flex: 1; min-width: 180px; }
+.soon-owner-text strong { color: var(--ink); font-weight: 650; }

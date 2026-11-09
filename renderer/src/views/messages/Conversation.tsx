@@ -19,6 +19,7 @@ import { RichText } from "../../lib/html";
 import { HS_KEY, huddleFor, setPrefs, toggleSaved, useHsSidebar, useHuddles } from "../../lib/heysocial";
 import { HuddleButton } from "../heysocial/Huddle";
 import { ChannelMembers } from "./ChannelMembers";
+import { ComingSoonOwnerBar, SoonTag } from "./ComingSoon";
 
 const GROUP_GAP_MS = 5 * 60_000;
 
@@ -431,7 +432,8 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
       {where.kind === "channel" ? (
         <h1>
           {heySocial && prefs ? <button className={`star ${prefs.starred ? "on" : ""}`} title={prefs.starred ? "Unstar" : "Star"} onClick={() => void setPrefs("channel", where.id, { starred: !prefs.starred })}><Star /></button> : null}
-          {channel?.isPrivate && !(channel as { workspaceOpen?: boolean }).workspaceOpen ? <Lock /> : <Hash />}{title}
+          {channel?.isPrivate && !channel.comingSoon && !(channel as { workspaceOpen?: boolean }).workspaceOpen ? <Lock /> : <Hash />}{title}
+          {channel?.comingSoon ? <SoonTag /> : null}
           {heySocial && prefs ? <button className="mute-btn" title="Mute: only @mentions notify you" onClick={() => void setPrefs("channel", where.id, { muted: !prefs.muted })}>{prefs.muted ? <BellOff /> : <Bell />}{prefs.muted ? "Muted" : ""}</button> : null}
         </h1>
       ) : (
@@ -477,6 +479,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
       onDragEnter={(event) => event.dataTransfer.types.includes("Files") && setDragging(true)}>
       <div className="convo-main">
         {head}
+        {channel?.comingSoon && !channel.comingSoonLocked ? <ComingSoonOwnerBar channelId={channel.id} /> : null}
         <MessageList where={where} actions={actions} header={intro} empty={null}
           jumpTo={threadId ? null : jump} onJumped={() => setJump(null)} />
         <div className="typing">{typingLine(typing)}</div>
