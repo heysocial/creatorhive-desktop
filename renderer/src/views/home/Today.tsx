@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useHubReady } from "../../lib/access";
 import { AtSign, Calendar, Flame, Sun, Video } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api, useChannels, useConversations } from "../../lib/api";
@@ -19,6 +20,7 @@ interface HubToday {
 export function useHubToday() {
   return useQuery({
     queryKey: ["hub", "today"],
+    enabled: useHubReady(),
     queryFn: () => api<HubToday>(`/api/hub/today?tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`),
   });
 }

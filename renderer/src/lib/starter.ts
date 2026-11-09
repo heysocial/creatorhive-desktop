@@ -26,6 +26,8 @@ export interface StarterStep {
 }
 
 export interface StarterTrack {
+  /** The heading: "Your first 3 videos" on The Weekend Starter (two steps; no Hub). Older servers leave it out. */
+  title?: string;
   steps: StarterStep[];
   overallGrade: StarterGrade;
   currentStep: number;

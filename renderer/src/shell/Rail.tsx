@@ -1,4 +1,5 @@
 import { Bell, Bookmark, GraduationCap, House, MessageCircle, Shield, Sparkles, type LucideIcon } from "lucide-react";
+import { useHubHidden } from "../lib/access";
 import { ch, type SessionUser } from "../lib/bridge";
 import { useChannels, useConversations, useHeySocialAccess } from "../lib/api";
 import { commands } from "../lib/commands";
@@ -39,6 +40,8 @@ export function Rail({ user }: { user: SessionUser }) {
   const other = current.ws === "hs" ? chUnread : hsUnread;
   const hsCounts = useHsSidebar(heySocial && current.ws === "hs").data?.counts;
   const admin = useAdminAccess().data;
+  // The Weekend Starter has no Creator Hub: no rail item at all.
+  const hubHidden = useHubHidden();
   const canAdmin = adminPages(admin).length > 0;
   const openReports = useOpenReports(Boolean(admin?.tabs.includes("moderation"))).data ?? 0;
   const supportUnread = useSupportUnread(Boolean(admin?.tabs.includes("support"))).data ?? 0;
@@ -70,7 +73,7 @@ export function Rail({ user }: { user: SessionUser }) {
         </button>
       ) : null}
       <div className="rdiv" />
-      {SECTIONS[current.ws].filter((section) => section !== "admin" || canAdmin).map((section) => {
+      {SECTIONS[current.ws].filter((section) => (section !== "admin" || canAdmin) && (section !== "hub" || !hubHidden)).map((section) => {
         const meta = SECTION_META[section];
         const Icon = meta.icon;
         const count = section === "dms" ? here.dms : section === "activity" ? hsCounts?.activity ?? 0 : section === "admin" ? openReports + supportUnread : 0;

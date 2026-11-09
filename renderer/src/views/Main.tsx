@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { HubLocked } from "./hub/HubLocked";
+import { useHubHidden } from "../lib/access";
 import { MessageCircle } from "lucide-react";
 import { ch, type SessionUser } from "../lib/bridge";
 import { ErrorBoundary, screenFor } from "../lib/errors";
@@ -33,6 +35,7 @@ import { Admin } from "./admin/Admin";
 function Built({ location, user }: { location: Location; user: SessionUser }) {
   const workspace: Workspace = location.ws === "hs" ? "heysocial" : "creatorhive";
   const { view } = location;
+  const hubHidden = useHubHidden();
   switch (view.kind) {
     case "feed":
       return <Home user={user} openPostId={view.postId ?? null} commentId={view.commentId} />;
@@ -65,6 +68,7 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
     case "hs-people":
       return <HsPeople />;
     case "hub": {
+      if (hubHidden) return <HubLocked />;
       const page = view.page === "dashboard" ? <Dashboard /> : view.page === "clients" ? <Clients /> : view.page === "invoices" ? <Invoices /> : <Deals board={view.board} smart={view.smart} />;
       return <>{page}{view.dealId ? <DealOverlay key={view.dealId} id={view.dealId} /> : null}</>;
     }

@@ -32,10 +32,12 @@ export interface RowActions {
   onSave?: (message: Message, saved: boolean) => void;
 }
 
-export function Badge({ badge, role }: { badge?: { kind: string; label: string } | null; role?: string }) {
+export function Badge({ badge, role }: { badge?: { kind: string; label: string; colorKey?: string } | null; role?: string }) {
   const label = badge?.label ?? (role === "owner" ? "Owner" : role === "team" ? "Team" : null);
   if (!label) return null;
-  return <span className={`badge-pill k-${badge?.kind ?? role}`}>{label}</span>;
+  // The Weekend Starter's badge is rose, as on the website and the phones (k-weekend in app.css).
+  const weekend = badge?.label === "Weekend Starter";
+  return <span className={`badge-pill k-${badge?.kind ?? role}${weekend ? " k-weekend" : ""}`}>{label}</span>;
 }
 
 function ReactionChips({ reactions, onToggle }: { reactions?: Reactions; onToggle: (emoji: string) => void }) {

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useHubHidden } from "../lib/access";
 import {
   Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
   Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen,
@@ -224,6 +225,7 @@ function Learn() {
 
 export function Sidebar({ user }: { user: SessionUser }) {
   const { current } = useNav();
+  const hubHidden = useHubHidden();
   const workspace: Workspace = current.ws === "hs" ? "heysocial" : "creatorhive";
   let content;
   switch (current.section) {
@@ -231,7 +233,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
       content = <DirectMessages workspace={workspace} user={user} />;
       break;
     case "hub":
-      content = <Hub />;
+      content = hubHidden ? null : <Hub />;
       break;
     case "learn":
       content = <Learn />;

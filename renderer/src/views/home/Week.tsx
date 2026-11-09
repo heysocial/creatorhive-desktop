@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useHubReady } from "../../lib/access";
 import { ArrowRight, CalendarPlus, Check } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import { eventIcs, toggleRsvp, useEvents, type CommunityEvent } from "../../lib/events";
@@ -158,12 +159,14 @@ function ThisWeek({ events, isLoading, calendarUnavailable, now }: { events: Com
 
 function YourWeek() {
   const deals = useDeals();
+  const hubReady = useHubReady();
   const points = usePoints();
   const list = allDeals(deals.data);
   const paid = paidThisWeek(list);
   const awaiting = smartDeals("awaiting", list);
   // No Hub on the member's plan (or it didn't load): the money tiles go, the streak stays.
-  const hub = !deals.isError;
+  // No Hub tiles on a plan without the Hub (The Weekend Starter), or before the plan is known.
+  const hub = hubReady && !deals.isError;
   const streak = points.data?.currentStreak ?? 0;
   if (!hub && !points.data) return null;
   return (

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useHubReady } from "../../lib/access";
 import { ArrowUp, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
@@ -52,6 +53,7 @@ const tz = () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 export function useGlance() {
   return useQuery({
     queryKey: ["hub", "glance"],
+    enabled: useHubReady(),
     queryFn: async () => (await api<{ glance: Glance }>(`/api/hub/glance?tz=${encodeURIComponent(tz())}`)).glance,
   });
 }

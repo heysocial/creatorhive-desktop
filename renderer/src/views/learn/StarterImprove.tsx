@@ -164,7 +164,7 @@ function Summary({ track }: { track: StarterTrack }) {
     <div className="card st-summary">
       <span className="st-ring">{track.overallGrade}</span>
       <div>
-        <b>{track.allDone ? "All 5 milestones done" : `Milestone ${track.currentStep} of 5`} · overall {track.overallGrade}</b>
+        <b>{track.allDone ? `All ${track.steps.length} milestones done` : `Milestone ${Math.min(track.currentStep, track.steps.length)} of ${track.steps.length}`} · overall {track.overallGrade}</b>
         <span className="st-bars">{track.steps.map((s) => <i key={s.id} className={s.state} />)}</span>
       </div>
     </div>
@@ -200,7 +200,7 @@ export function StarterImprove({ track, resources }: { track: StarterTrack; reso
       {upgrade ? <UpgradeDialog onClose={() => setUpgrade(false)} /> : null}
       <section className="st-track">
         <div className="st-track-head">
-          <div><span className="st-eyebrow">{track.plan === "first3" ? "The Weekend Starter" : "UGC Starter"}</span><h2>Your path to your first paid deal</h2></div>
+          <div><span className="st-eyebrow">{track.plan === "first3" ? "The Weekend Starter" : "UGC Starter"}</span><h2>{track.title ?? "Your path to your first paid deal"}</h2></div>
           <Summary track={track} />
         </div>
         <div className="st-cols">

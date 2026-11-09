@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import { useHubReady } from "./access";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, queryClient } from "./api";
 
@@ -168,7 +169,9 @@ export const sourcePath = (src: HubSourceValue, path: string) => {
 
 export function useDeals() {
   const src = useHubSource();
-  return useQuery({ queryKey: [...src.key, "deals"], queryFn: () => api<DealsResponse>(sourcePath(src, "/deals")) });
+  // Not before the plan is known, and never on a plan without the Hub (The Weekend Starter).
+  const enabled = useHubReady();
+  return useQuery({ queryKey: [...src.key, "deals"], queryFn: () => api<DealsResponse>(sourcePath(src, "/deals")), enabled });
 }
 
 export const allDeals = (data: DealsResponse | undefined) => (data ? [...data.outreach, ...data.campaigns, ...data.payment] : []);
@@ -226,7 +229,8 @@ export interface Cash {
 
 export function useCash() {
   const src = useHubSource();
-  return useQuery({ queryKey: [...src.key, "cash"], queryFn: () => api<Cash>(sourcePath(src, "/cash?range=30")) });
+  const enabled = useHubReady();
+  return useQuery({ queryKey: [...src.key, "cash"], queryFn: () => api<Cash>(sourcePath(src, "/cash?range=30")), enabled });
 }
 
 /* ---------- Money ---------- */
