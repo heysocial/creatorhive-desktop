@@ -332,3 +332,4 @@
 .admx .md-resolution svg { flex: 0 0 auto; color: var(--color-success); }
 .admx .md-resolution span { flex: 1; }
 .admx .md-resolution small { color: var(--text-subtle); }
+.admx .mx-nudge-more { padding-top: 10px; border-top: 1px solid var(--border); font-size: 12.5px; }

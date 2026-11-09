@@ -24,6 +24,8 @@ type MetricsRange = "7d" | "launch" | "90d";
 type SortKey = "time" | "last" | "completion";
 
 const COMPLETION_ITEMS = ["Photo", "Bio", "Hub deal", "Invoice details", "Notifications"] as const;
+/** "Who needs a nudge" shows this many until Show all, as on the website. */
+const NUDGES_SHOWN = 5;
 
 interface MetricsMember {
   id: string;
@@ -136,6 +138,7 @@ export function AdminMetrics(_props: { id?: string }) {
 function MetricsDashboard({ metrics, onRange, onTeam }: { metrics: AppMetrics; onRange: (range: MetricsRange) => void; onTeam: (team: boolean) => void }) {
   const [sort, setSort] = useState<SortKey>("time");
   const [showAll, setShowAll] = useState(false);
+  const [allNudges, setAllNudges] = useState(false);
   const now = Date.parse(metrics.generatedAt);
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const { kpis, members } = metrics;
@@ -256,7 +259,10 @@ function MetricsDashboard({ metrics, onRange, onTeam }: { metrics: AppMetrics; o
       <aside className="mx-card mx-nudge">
         <h3>Who needs a nudge <span>{nudges.length} {nudges.length === 1 ? who.slice(0, -1) : who}</span></h3>
         <p className="mx-note">Inactive 7+ days, or 40% complete or less.</p>
-        {nudges.length === 0 ? <p className="mx-empty">Nobody right now.</p> : nudges.map((member) => <NudgeRow key={member.id} member={member} now={now} />)}
+        {nudges.length === 0 ? <p className="mx-empty">Nobody right now.</p> : (allNudges ? nudges : nudges.slice(0, NUDGES_SHOWN)).map((member) => <NudgeRow key={member.id} member={member} now={now} />)}
+        {nudges.length > NUDGES_SHOWN ? <div className="mx-nudge-more">
+          <button type="button" className="mx-link" aria-expanded={allNudges} onClick={() => setAllNudges((v) => !v)}>{allNudges ? "Show less" : `Show all ${nudges.length}`}</button>
+        </div> : null}
       </aside>
     </section>
   </div>;
