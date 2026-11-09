@@ -30,7 +30,7 @@ export const isStaff = (role?: string) => role === "owner" || role === "team";
 
 /** The directory row as the owner gets it: the plan and badge controls ride along. */
 export interface AdminMember extends Member {
-  accessAdmin?: { level: "academy" | "starter"; endsAt: string | null } | null;
+  accessAdmin?: { level: "academy" | "starter" | "first3"; endsAt: string | null } | null;
   badgeAdmin?: { titleId: string | null; beeTierOverride: BeeTierKey | null; automaticBadge: MemberBadge } | null;
 }
 
@@ -42,7 +42,8 @@ interface PendingInvite {
   email: string;
   role: "student" | "team";
   /** The plan the account starts on; absent on invites made before plans. */
-  accessLevel?: "academy" | "starter";
+  /** "first3" = The Weekend Starter, from a Whop purchase. */
+  accessLevel?: "academy" | "starter" | "first3";
   expiresAt: string;
   invitedByName: string;
   link: string;
@@ -54,6 +55,7 @@ const INVITES_KEY = ["members", "invites"] as const;
 
 function planLabel(role: PendingInvite["role"], accessLevel: PendingInvite["accessLevel"]) {
   if (role === "team") return "Team";
+  if (accessLevel === "first3") return "Student · The Weekend Starter";
   return accessLevel === "starter" ? "Student · UGC Starter" : "Student · UGC Academy";
 }
 
@@ -558,7 +560,7 @@ const fmtDay = (iso: string) => new Date(iso).toLocaleDateString(undefined, { mo
  */
 export function ManageAccessDialog({ member, onClose }: { member: AdminMember; onClose: () => void }) {
   const current = member.accessAdmin ?? { level: "academy" as const, endsAt: null };
-  const [level, setLevel] = useState<"academy" | "starter">(current.level);
+  const [level, setLevel] = useState<"academy" | "starter" | "first3">(current.level);
   const [endsOn, setEndsOn] = useState(() => {
     const end = current.endsAt ? new Date(current.endsAt) : (() => { const d = new Date(); d.setMonth(d.getMonth() + 6); return d; })();
     // The local day (the website takes the UTC one, a day late in the Americas).
@@ -569,6 +571,8 @@ export function ManageAccessDialog({ member, onClose }: { member: AdminMember; o
   const ended = current.level === "starter" && current.endsAt != null && new Date(current.endsAt).getTime() <= Date.now();
 
   async function save() {
+    // The Weekend Starter comes from a Whop purchase; keeping it changes nothing.
+    if (level === "first3") return onClose();
     setSaving(true);
     setError(null);
     try {
@@ -605,13 +609,16 @@ export function ManageAccessDialog({ member, onClose }: { member: AdminMember; o
     >
       <div className="mad-dialog">
         <p className="mad-desc">
-          {current.level === "starter"
+          {current.level === "first3"
+            ? `${member.name} is on The Weekend Starter (bought on Whop). Moving them to the UGC Academy or UGC Starter keeps what they bought.`
+            : current.level === "starter"
             ? `${member.name} is on UGC Starter${current.endsAt ? `, ${ended ? "ended" : "ending"} ${fmtDay(current.endsAt)}` : ""}.`
             : `${member.name} has the full UGC Academy.`}
         </p>
         <label className="mad-field">
           <span>Plan</span>
-          <select className="field" value={level} onChange={(event) => setLevel(event.target.value as "academy" | "starter")}>
+          <select className="field" value={level} onChange={(event) => setLevel(event.target.value as "academy" | "starter" | "first3")}>
+            {current.level === "first3" ? <option value="first3">The Weekend Starter — keep as is</option> : null}
             <option value="academy">UGC Academy — everything</option>
             <option value="starter">UGC Starter — limited</option>
           </select>

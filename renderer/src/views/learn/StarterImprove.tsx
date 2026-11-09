@@ -200,7 +200,7 @@ export function StarterImprove({ track, resources }: { track: StarterTrack; reso
       {upgrade ? <UpgradeDialog onClose={() => setUpgrade(false)} /> : null}
       <section className="st-track">
         <div className="st-track-head">
-          <div><span className="st-eyebrow">UGC Starter</span><h2>Your path to your first paid deal</h2></div>
+          <div><span className="st-eyebrow">{track.plan === "first3" ? "The Weekend Starter" : "UGC Starter"}</span><h2>Your path to your first paid deal</h2></div>
           <Summary track={track} />
         </div>
         <div className="st-cols">

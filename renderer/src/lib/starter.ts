@@ -32,6 +32,8 @@ export interface StarterTrack {
   allDone: boolean;
   scriptWriter: { used: number; limit: number; remaining: number; resetsAt: string };
   upgradeUrl: string;
+  /** Which plan the track is for: UGC Starter, or The Weekend Starter ("first3" inside). Older servers leave it out. */
+  plan?: "starter" | "first3";
 }
 
 export const STARTER_GRADE_HELP = "A: done on pace · B: done, a bit slower · C: in progress, behind pace · –: not started yet.";
