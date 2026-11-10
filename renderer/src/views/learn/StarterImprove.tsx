@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { ArrowUpRight, Check, Lock, Plus, Sparkles, Upload } from "lucide-react";
+import { ArrowUpRight, Check, Lock, PlayCircle, Plus, Sparkles, Upload } from "lucide-react";
 import { ch } from "../../lib/bridge";
-import type { ImproveResource } from "../../lib/learn";
+import { useCourses, type ImproveResource } from "../../lib/learn";
+import { editorChat, firstName, shortDay } from "../../lib/videoEdits";
+import { EditorCard, WhereTracker } from "./EditorParts";
 import { nav } from "../../lib/nav";
 import {
+  formatBytes,
   formatDuration,
+  markCourseDone,
   markFirstVideo,
   resetsLabel,
   STARTER_GRADE_HELP,
@@ -35,7 +39,7 @@ export function Thumb({ video, height }: { video: SubmissionVideo; height: numbe
   const duration = formatDuration(video.durationSeconds);
   return (
     <span className="st-thumb" style={{ height }}>
-      <video src={`${video.previewUrl}#t=0.1`} preload="metadata" muted playsInline />
+      {video.thumbnailUrl ? <img src={video.thumbnailUrl} alt="" /> : <video src={`${video.previewUrl}#t=0.1`} preload="metadata" muted playsInline />}
       {duration ? <span className="st-dur">{duration}</span> : null}
     </span>
   );
@@ -62,14 +66,38 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
   const bySlot = new Map((state?.videos ?? []).map((v) => [v.slot, v]));
 
   if (step.state === "done" || state?.status === "submitted") {
+    const editing = state?.editing;
+    const editorName = editing?.editor ? firstName(editing.editor.name) : "our editor";
     return (
       <div className="card st-now">
-        <div className="st-row-head"><div><b className="st-title">{step.title}</b><span className="muted">{step.detail}</span></div><GradePill grade={step.grade} /></div>
-        <div className="st-sent">
-          <span className="st-sent-tick"><Check /></span>
-          <div><b>Submitted, our editor is on it</b><span>We'll message you here when your 3 edits are ready.</span></div>
+        <div className="st-row-head">
+          <div>
+            <b className="st-title">{track.plan === "first3" ? `Step ${step.number} · ` : ""}{step.title}{state?.submittedAt ? <span className="ve-done-pill"><Check />Submitted {shortDay(state.submittedAt)}</span> : null}</b>
+            <span className="muted">
+              {editing?.canReplace ? `You can still replace a video until ${editorName} starts editing.`
+                : editing ? <>Your originals are with {editorName}, at full quality. To swap a video now, <button className="ve-inline-link" onClick={() => editorChat.open()}>message him</button>.</>
+                : step.detail}
+            </span>
+          </div>
+          {track.plan === "first3" ? null : <GradePill grade={step.grade} />}
         </div>
-        <div className="st-slots">{[1, 2, 3].map((slot) => { const v = bySlot.get(slot); return v ? <Thumb key={slot} video={v} height={96} /> : <span key={slot} className="st-empty" style={{ height: 96 }} />; })}</div>
+        {editing ? null : (
+          <div className="st-sent">
+            <span className="st-sent-tick"><Check /></span>
+            <div><b>Submitted, our editor is on it</b><span>We'll message you here when your 3 edits are ready.</span></div>
+          </div>
+        )}
+        <div className="st-slots">{[1, 2, 3].map((slot) => {
+          const v = bySlot.get(slot);
+          if (!v) return <span key={slot} className="st-empty" style={{ height: 96 }} />;
+          return (
+            <div key={slot} className="ve-sub-slot">
+              <Thumb video={v} height={editing ? 150 : 96} />
+              {editing ? <span className="ve-sub-name"><b>{v.fileName}</b><small className="faint">{[formatDuration(v.durationSeconds), formatBytes(v.sizeBytes)].filter(Boolean).join(" · ")}</small></span> : null}
+              {editing?.canReplace ? <button className="btn" onClick={openVideos}>Replace</button> : null}
+            </div>
+          );
+        })}</div>
       </div>
     );
   }
@@ -103,8 +131,53 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
   );
 }
 
+/** The Weekend Starter's step 1: its course, with progress, Open the course and Mark as done. */
+function CourseCard({ step }: { step: StarterStep }) {
+  const [busy, setBusy] = useState(false);
+  const courses = useCourses().data;
+  const course = step.course;
+  const done = step.state === "done";
+  const summary = course ? courses?.find((c) => c.slug === course.slug) : undefined;
+  const lessons = course?.lessons || summary?.lessonCount || 0;
+  const completed = course?.completed ?? summary?.completedCount ?? 0;
+  const pct = done ? 100 : lessons ? Math.round((completed / lessons) * 100) : 0;
+  const line = course ? [course.title, lessons ? `${lessons} ${lessons === 1 ? "lesson" : "lessons"}` : null, course.minutes ? `${course.minutes} min` : null].filter(Boolean).join(" · ") : step.detail;
+  const toggle = (value: boolean) => { setBusy(true); void markCourseDone(value).finally(() => setBusy(false)); };
+  return (
+    <div className={`card st-now ${done ? "ve-done" : ""}`}>
+      <div className="st-row-head">
+        <div>
+          {done ? null : <span className="st-eyebrow">Now</span>}
+          <b className={`st-title ${done ? "" : "big"}`}>Step {step.number} · {step.title}{done && step.completedAt ? <span className="ve-done-pill"><Check />Done {shortDay(step.completedAt)}</span> : null}</b>
+          <span className="muted">{line}. Watch it before you film: it shows what brands want to see.</span>
+        </div>
+      </div>
+      <div className="st-progress"><span className="st-bar ve-green"><i style={{ width: `${pct}%` }} /></span>{lessons ? <b>{done && course?.markedDone && completed < lessons ? "Marked as done" : `${completed} of ${lessons} lessons`}</b> : null}</div>
+      <div className="ve-course-acts">
+        <button className={`btn ${done ? "" : "honey"}`} disabled={!summary} onClick={() => summary && nav.open({ kind: "course", id: summary.id }, "learn", "ch")}><PlayCircle />Open the course</button>
+        {done ? (course?.markedDone ? <button className="st-link" disabled={busy} onClick={() => toggle(false)}>Not done yet? Undo</button> : null)
+          : <button className="btn" disabled={busy} onClick={() => toggle(true)}><Check />Mark as done</button>}
+      </div>
+    </div>
+  );
+}
+
+/** The Weekend Starter's upload step, until the course is done. */
+function LockedCard({ step }: { step: StarterStep }) {
+  return (
+    <div className="card st-now ve-locked">
+      <div className="st-row-head">
+        <div><b className="st-title">Step {step.number} · {step.title}</b><span className="muted">Upload 3 videos and your editor cuts them for you.</span></div>
+        <span className="ve-lock-pill"><Lock />{step.locked}</span>
+      </div>
+    </div>
+  );
+}
+
 function CurrentCard({ step, track }: { step: StarterStep; track: StarterTrack }) {
   const [busy, setBusy] = useState(false);
+  if (step.id === "course") return <CourseCard step={step} />;
+  if (step.locked) return <LockedCard step={step} />;
   if (step.id === "three_videos") return <VideosCard step={step} track={track} />;
   const count = step.count;
   return (
@@ -144,6 +217,8 @@ function Timeline({ track }: { track: StarterTrack }) {
             </div>
             <div className="st-body">
               {step.state === "current" ? <CurrentCard step={step} track={track} />
+                : step.id === "course" ? <CourseCard step={step} />
+                : step.locked ? <LockedCard step={step} />
                 : step.id === "three_videos" && step.state === "done" ? <VideosCard step={step} track={track} />
                 : (
                   <div className="st-row-head">
@@ -195,16 +270,25 @@ function Resources({ resources, onLocked }: { resources: ImproveResource[]; onLo
 export function StarterImprove({ track, resources }: { track: StarterTrack; resources: ImproveResource[] | null | undefined }) {
   const [upgrade, setUpgrade] = useState(false);
   const sw = track.scriptWriter;
+  const editing = useSubmission().data?.state?.editing ?? null;
+  const weekend = track.plan === "first3";
   return (
     <>
       {upgrade ? <UpgradeDialog onClose={() => setUpgrade(false)} /> : null}
       <section className="st-track">
         <div className="st-track-head">
-          <div><span className="st-eyebrow">{track.plan === "first3" ? "The Weekend Starter" : "UGC Starter"}</span><h2>{track.title ?? "Your path to your first paid deal"}</h2></div>
+          <div>
+            <span className="st-eyebrow">{weekend ? "The Weekend Starter" : "UGC Starter"}</span><h2>{track.title ?? "Your path to your first paid deal"}</h2>
+            {weekend ? <p className="muted ve-track-sub">Watch the course, upload 3 videos, and {editing?.editor ? firstName(editing.editor.name) : "your editor"} edits them for you.</p> : null}
+          </div>
           <Summary track={track} />
         </div>
         <div className="st-cols">
-          <Timeline track={track} />
+          <div className="ve-main-col">
+            <Timeline track={track} />
+            {editing?.editor ? <EditorCard editor={editing.editor} /> : null}
+            {editing?.stage ? <WhereTracker editing={editing} /> : null}
+          </div>
           <aside className="st-side">
             <div className="card st-side-card">
               <span className="section-label">AI Script Writer</span>

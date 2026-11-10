@@ -23,6 +23,8 @@ import { DealOverlay } from "./hub/DealPanel";
 import { Courses, CoursePage } from "./learn/Courses";
 import { ImprovePage } from "./learn/Improve";
 import { StarterVideos } from "./learn/StarterVideos";
+import { VideoReview } from "./learn/VideoReview";
+import { VideoEditsBoard } from "./edits/VideoEdits";
 import { Resources } from "./learn/Resources";
 import { ScriptWriter } from "./learn/ScriptWriter";
 import { ImproveResource } from "./learn/ImproveResource";
@@ -73,7 +75,7 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
       return <>{page}{view.dealId ? <DealOverlay key={view.dealId} id={view.dealId} /> : null}</>;
     }
     case "learn":
-      return view.page === "improve" ? <ImprovePage /> : view.page === "resources" ? <Resources /> : <Courses />;
+      return view.page === "improve" ? <ImprovePage user={user} /> : view.page === "resources" ? <Resources /> : <Courses />;
     case "course":
       return <CoursePage key={view.id} id={view.id} lessonId={view.lessonId} />;
     case "resource":
@@ -81,7 +83,11 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
     case "script-writer":
       return <ScriptWriter chatId={view.chatId} />;
     case "starter-videos":
-      return <StarterVideos />;
+      return <StarterVideos user={user} />;
+    case "video-review":
+      return <VideoReview user={user} video={view.video} />;
+    case "video-edits":
+      return <VideoEditsBoard user={user} cardId={view.cardId} filter={view.filter} />;
     case "improve-resource":
       return <ImproveResource key={view.slug} slug={view.slug} />;
     case "activity":

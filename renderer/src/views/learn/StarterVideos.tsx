@@ -1,6 +1,9 @@
 import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { Check, ChevronLeft, Upload } from "lucide-react";
-import { ch } from "../../lib/bridge";
+import { Check, ChevronLeft, Lock, MessageCircle, Upload } from "lucide-react";
+import { ch, type SessionUser } from "../../lib/bridge";
+import { useImprove } from "../../lib/learn";
+import { editorChat, firstName, shortDay } from "../../lib/videoEdits";
+import { EditorChatDock } from "./EditorParts";
 import { nav } from "../../lib/nav";
 import {
   cancelSlot,
@@ -111,55 +114,81 @@ function Slot({ slot, video, locked }: { slot: number; video: SubmissionVideo | 
   );
 }
 
-export function StarterVideos() {
+export function StarterVideos({ user }: { user: SessionUser }) {
   const { data, isLoading, isError } = useSubmission();
   const uploads = useSlotUploads();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [brief, setBrief] = useState("");
   const state = data?.state ?? null;
+  const editing = state?.editing ?? null;
+  const editorName = editing?.editor ? firstName(editing.editor.name) : null;
   const bySlot = new Map((state?.videos ?? []).map((v) => [v.slot, v]));
   const submitted = state?.status === "submitted";
+  // After Submit, Replace stays open until the editor starts (`canReplace`).
+  const locked = submitted && !editing?.canReplace;
   const allIn = bySlot.size === 3 && Object.keys(uploads).length === 0;
+  // The Weekend Starter: step 2 waits for the course.
+  const courseFirst = useImprove().data?.starter?.steps.find((s) => s.id === "three_videos")?.locked ?? null;
 
   async function submit() {
     setSubmitting(true);
-    setError(await submitForEditing());
+    setError(await submitForEditing(brief));
     setSubmitting(false);
   }
 
   return (
+    <div className="ve-with-dock">
     <div className="page">
       <div className="mhead">
         <button className="btn ghost st-back" onClick={back}><ChevronLeft />Improve</button>
-        <h1>Submit your 3 videos</h1>
+        <h1>{submitted ? "Your 3 videos" : "Upload your 3 videos"}</h1>
+        {editing?.editor ? <div className="acts"><button className="btn" onClick={() => editorChat.open()}><MessageCircle />Message {editorName}</button></div> : null}
       </div>
       <div className="scroll page-body st-videos">
-        <p className="st-lede">Upload the 3 videos you filmed. Our editor cuts all 3 for you. We keep your original files at full quality.</p>
+        <p className="st-lede">Upload the 3 videos you filmed. {editorName ? `${editorName}, your video editor,` : "Our editor"} cuts all 3 for you. We keep your original files at full quality.</p>
         {isLoading ? <div className="empty-state">Loading…</div> : null}
         {isError ? <div className="empty-state">Couldn't load your videos.</div> : null}
         {data?.unavailable ? <div className="empty-state">{data.unavailable}</div> : null}
+        {courseFirst && !submitted ? (
+          <div className="card ve-locked-big"><Lock /><b>{courseFirst}</b><span className="muted">Go through the video course on Improve first, then your 3 uploads open here.</span></div>
+        ) : null}
         {state && submitted ? (
           <div className="st-sent big">
             <span className="st-sent-tick"><Check /></span>
-            <div><b>Submitted, our editor is on it</b><span>We'll message you here when your 3 edited videos are ready. Need to change one? Message us in DMs.</span></div>
-          </div>
-        ) : null}
-        {state ? (
-          <div className="st-slot-grid">
-            {[1, 2, 3].map((slot) => <Slot key={slot} slot={slot} video={bySlot.get(slot)} locked={submitted} />)}
-          </div>
-        ) : null}
-        {state && !submitted ? (
-          <div className="card st-submit">
             <div>
-              <b>{allIn ? "All 3 videos are in" : "Upload all 3 videos to submit"}</b>
-              <span className="muted">{allIn ? "Check they're the right takes. After you submit, they go straight to our editor." : `${bySlot.size} of 3 uploaded`}</span>
-              {error ? <span className="st-error">{error}</span> : null}
+              <b>Submitted{state.submittedAt ? ` ${shortDay(state.submittedAt)}` : ""}, {editorName ?? "our editor"} is on it</b>
+              <span>{editing?.canReplace ? `You can still replace a video until ${editorName ?? "your editor"} starts editing.`
+                : editing ? `Your originals are with ${editorName ?? "your editor"}, at full quality. To swap a video now, message him.`
+                : "We'll message you here when your 3 edited videos are ready. Need to change one? Message us in DMs."}</span>
             </div>
-            <button className="btn honey lg" disabled={!allIn || submitting} onClick={() => void submit()}>{submitting ? "Submitting…" : "Submit for editing"}</button>
+          </div>
+        ) : null}
+        {state && !(courseFirst && !submitted) ? (
+          <div className="st-slot-grid">
+            {[1, 2, 3].map((slot) => <Slot key={slot} slot={slot} video={bySlot.get(slot)} locked={locked} />)}
+          </div>
+        ) : null}
+        {state && !submitted && !courseFirst ? (
+          <div className="card st-submit ve-submit">
+            <label className="ve-brief-field">
+              <b>Notes for {editorName ?? "your editor"} <span className="faint">(optional)</span></b>
+              <textarea className="field area" maxLength={2000} rows={3} value={brief} onChange={(event) => setBrief(event.target.value)}
+                placeholder="What are they for? Music you like, captions, a part to cut…" />
+            </label>
+            <div className="ve-submit-row">
+              <div>
+                <b>{allIn ? "All 3 videos are in" : "Upload all 3 videos to submit"}</b>
+                <span className="muted">{allIn ? `Check they're the right takes. After you submit, they go straight to ${editorName ?? "our editor"}.` : `${bySlot.size} of 3 uploaded`}</span>
+                {error ? <span className="st-error">{error}</span> : null}
+              </div>
+              <button className="btn honey lg" disabled={!allIn || submitting} onClick={() => void submit()}>{submitting ? "Submitting…" : allIn ? "Submit for editing" : `Submit for editing · add video ${[1, 2, 3].find((n) => !bySlot.has(n)) ?? 3} first`}</button>
+            </div>
           </div>
         ) : null}
       </div>
+    </div>
+    <EditorChatDock editing={editing} user={user} />
     </div>
   );
 }

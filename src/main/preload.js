@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld("ch", {
     upload: (request) => ipcRenderer.invoke("files:upload", request),
     quickLook: (url, name) => ipcRenderer.invoke("files:quickLook", { url, name }),
     save: (url, name) => ipcRenderer.invoke("files:save", { url, name }),
+    saveMany: (items, title) => ipcRenderer.invoke("files:saveMany", { items, title }),
     addToCalendar: (ics, name) => ipcRenderer.invoke("files:addToCalendar", { ics, name }),
     uploadForm: (request) => ipcRenderer.invoke("files:uploadForm", request),
     clipboardImage: () => ipcRenderer.invoke("clipboard:image"),

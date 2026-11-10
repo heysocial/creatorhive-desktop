@@ -78,7 +78,35 @@ const FILE_HOSTS = [
   /(^|\.)videodelivery\.net$/,
   /\.cloudflarestream\.com$/,
   /^(media\d?|i)\.giphy\.com$/,
+  // The personal video editor's originals and edited versions (presigned links the site hands out).
+  /\.r2\.cloudflarestorage\.com$/,
 ];
+
+/*
+  Video files can be gigabytes: those stream to disk instead of being held in
+  memory. Same hosts rule as download().
+*/
+async function downloadToFile(url, filePath) {
+  const target = url.startsWith("/") ? `${ORIGIN}${url}` : url;
+  const { protocol, origin, hostname } = new URL(target);
+  if (origin === ORIGIN || protocol !== "https:" || !FILE_HOSTS.some((host) => host.test(hostname))) {
+    fs.writeFileSync(filePath, await download(url));
+    return;
+  }
+  const { Readable } = require("node:stream");
+  const { pipeline } = require("node:stream/promises");
+  const response = await fetch(target);
+  if (!response.ok || !response.body) throw new Error(`download ${response.status}`);
+  await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(filePath));
+}
+
+const isLargeFileHost = (url) => {
+  try {
+    return /\.r2\.cloudflarestorage\.com$/.test(new URL(String(url)).hostname);
+  } catch {
+    return false;
+  }
+};
 
 /** A site path or one of FILE_HOSTS over https, fetched with the member's cookies when it's the site. */
 async function download(url) {
@@ -258,7 +286,8 @@ function configure(ipcMain) {
       const win = BrowserWindow.fromWebContents(event.sender);
       const result = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath("downloads"), safeName(name)) });
       if (result.canceled || !result.filePath) return { ok: false, canceled: true };
-      fs.writeFileSync(result.filePath, await download(String(url)));
+      if (isLargeFileHost(url)) await downloadToFile(String(url), result.filePath);
+      else fs.writeFileSync(result.filePath, await download(String(url)));
       shell.showItemInFolder(result.filePath);
       return { ok: true };
     } catch (error) {
@@ -268,6 +297,33 @@ function configure(ipcMain) {
   });
 
   // The interface builds the .ics; Calendar opens it and asks where to add it.
+  // Several files into one folder, asked for once ("Download all 3 originals").
+  ipcMain.handle("files:saveMany", async (event, { items, title } = {}) => {
+    const list = Array.isArray(items) ? items.filter((item) => item && typeof item.url === "string").slice(0, 20) : [];
+    if (!list.length) return { ok: false };
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      const result = await dialog.showOpenDialog(win, {
+        title: typeof title === "string" ? title : "Choose a folder",
+        buttonLabel: "Save here",
+        defaultPath: app.getPath("downloads"),
+        properties: ["openDirectory", "createDirectory"],
+      });
+      if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+      const folder = result.filePaths[0];
+      let last = null;
+      for (const item of list) {
+        last = path.join(folder, safeName(item.name));
+        await downloadToFile(String(item.url), last);
+      }
+      if (last) shell.showItemInFolder(last);
+      return { ok: true };
+    } catch (error) {
+      debug("save many failed", error?.message);
+      return { ok: false };
+    }
+  });
+
   ipcMain.handle("files:addToCalendar", async (_event, { ics, name } = {}) => {
     if (typeof ics !== "string" || !ics.startsWith("BEGIN:VCALENDAR") || ics.length > 20_000) return { ok: false };
     const dir = makeTempDir();

@@ -10,7 +10,20 @@ import { ch, type LocalVideoFile } from "./bridge";
 */
 
 export type StarterGrade = "A" | "B" | "C" | "–";
-export type StarterStepId = "first_video" | "three_videos" | "applications" | "brand_reply" | "paid_deal";
+/** `course` is The Weekend Starter's step 1 ("Go through the video course"), from Nov 10. */
+export type StarterStepId = "course" | "first_video" | "three_videos" | "applications" | "brand_reply" | "paid_deal";
+
+/** The course behind The Weekend Starter's step 1. */
+export interface StarterCourseProgress {
+  slug: string;
+  title: string;
+  lessons: number;
+  completed: number;
+  /** Total minutes of the published lessons; null when they have no durations. */
+  minutes: number | null;
+  /** Ticked by hand ("Mark as done"). */
+  markedDone: boolean;
+}
 
 export interface StarterStep {
   id: StarterStepId;
@@ -23,6 +36,10 @@ export interface StarterStep {
   count: { value: number; target: number } | null;
   detail: string;
   stuck: string | null;
+  /** Step `course` only. */
+  course?: StarterCourseProgress | null;
+  /** Step `three_videos` on The Weekend Starter, until the course is done: "Finish the course first". */
+  locked?: string | null;
 }
 
 export interface StarterTrack {
@@ -49,6 +66,8 @@ export interface SubmissionVideo {
   width: number | null;
   height: number | null;
   previewUrl: string;
+  /** A still from the video (Mux, signed), once ready; older servers leave it out. */
+  thumbnailUrl?: string | null;
 }
 
 export interface VideoSubmissionState {
@@ -56,6 +75,8 @@ export interface VideoSubmissionState {
   submittedAt: string | null;
   videos: SubmissionVideo[];
   maxBytes: number;
+  /** The personal video editor (lib/videoEdits.ts); older servers leave it out. */
+  editing?: import("./videoEdits").StudentEditState;
 }
 
 export function formatBytes(bytes: number): string {
@@ -100,6 +121,16 @@ export function useSubmission(enabled = true) {
 function setSubmission(state: VideoSubmissionState) {
   queryClient.setQueryData(SUBMISSION_KEY, { state, unavailable: null });
   void queryClient.invalidateQueries({ queryKey: ["improve"], exact: true });
+}
+
+/** The Weekend Starter's step 1: "Mark as done" (or undo). */
+export async function markCourseDone(done: boolean) {
+  await api("/api/improve/starter/course", { method: "POST", body: { done } });
+  await queryClient.invalidateQueries({ queryKey: ["improve"], exact: true });
+}
+
+export function setSubmissionState(state: VideoSubmissionState) {
+  setSubmission(state);
 }
 
 export async function markFirstVideo(done: boolean) {
@@ -234,9 +265,11 @@ export function dismissSlotError(slot: number) {
   if (uploads[slot]?.status === "failed") update(slot, null);
 }
 
-export async function submitForEditing(): Promise<string | null> {
+/** `brief`: "Notes for Valentin" (optional, up to 2000 characters). */
+export async function submitForEditing(brief = ""): Promise<string | null> {
   try {
-    const { submission } = await api<{ submission: VideoSubmissionState }>("/api/improve/videos/submit", { method: "POST" });
+    const note = brief.trim().slice(0, 2000);
+    const { submission } = await api<{ submission: VideoSubmissionState }>("/api/improve/videos/submit", { method: "POST", body: note ? { brief: note } : {} });
     setSubmission(submission);
     return null;
   } catch (error) {

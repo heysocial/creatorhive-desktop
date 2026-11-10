@@ -6,7 +6,7 @@ import { nav } from "./nav";
   switch, pause and lock; shell/LivePopups.tsx shows it.
 */
 
-export type LivePopupKind = "reaction" | "comment" | "reply" | "mention" | "thread" | "dm";
+export type LivePopupKind = "reaction" | "comment" | "reply" | "mention" | "thread" | "dm" | "video";
 
 export interface LivePopup {
   id: string;

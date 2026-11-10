@@ -23,6 +23,10 @@ import { useResourcePages, useResourcesAccess } from "../views/learn/Resources";
 import { HeySocialSidebar } from "./HeySocialSidebar";
 import { AdminSidebar } from "./AdminSidebar";
 import { SoonTag, soonLast } from "../views/messages/ComingSoon";
+import { Clapperboard, Clock as ClockIcon, Eye, MessageCircle as Unread } from "lucide-react";
+import { EDIT_STAGE_LABELS, STAGE_CLASS, stageIndex, useStudentEditing, useVideoEditsBoard, type BoardCard } from "../lib/videoEdits";
+import { filterCards } from "../views/edits/VideoEdits";
+import { StudentLabel } from "../views/edits/StudentStrip";
 
 const byRecent = (a: Conversation, b: Conversation) => (b.lastMessageAt ?? "").localeCompare(a.lastMessageAt ?? "");
 
@@ -120,6 +124,7 @@ function DmList({ workspace, limit = 12 }: { workspace: Workspace; limit?: numbe
       {!isLoading && !isError && conversations.length === 0 ? <div className="sb-empty">No conversations yet.</div> : null}
       {conversations.map((conversation) => (
         <SidebarItem key={conversation.id} icon={dmAvatar(conversation)} label={conversation.displayName}
+          tag={workspace === "creatorhive" && !conversation.isGroup ? <StudentLabel memberId={conversation.other?.id} /> : undefined}
           view={{ kind: "dm", id: conversation.id }} count={conversation.unreadCount} />
       ))}
     </SidebarSection>
@@ -155,11 +160,21 @@ function DirectMessages({ workspace, user }: { workspace: Workspace; user: Sessi
   const { current } = useNav();
   const allContacts = useStarterContacts();
   const contacts = workspace === "creatorhive" ? allContacts : [];
+  // Staff: students with videos to edit get a label, and a chip to show only them.
+  const board = useVideoEditsBoard(workspace === "creatorhive").data;
+  const cardFor = useMemo(() => {
+    const byMember = new Map((board?.cards ?? []).map((c) => [c.member.id, c] as const));
+    return (conversation: Conversation): BoardCard | null => (conversation.isGroup ? null : byMember.get(conversation.other?.id) ?? null);
+  }, [board]);
+  const [studentsOnly, setStudentsOnly] = useState(false);
   const conversations = useMemo(() => {
     const q = filter.trim().toLowerCase();
     const pinned = pinnedIds(contacts, data ?? []);
-    return [...(data ?? [])].filter((c) => !pinned.has(c.id)).sort(byRecent).filter((c) => !q || c.displayName.toLowerCase().includes(q));
-  }, [data, filter, contacts]);
+    return [...(data ?? [])].filter((c) => !pinned.has(c.id)).sort(byRecent).filter((c) => !q || c.displayName.toLowerCase().includes(q))
+      .filter((c) => !studentsOnly || cardFor(c));
+  }, [data, filter, contacts, studentsOnly, cardFor]);
+  const studentCount = (data ?? []).filter((c) => cardFor(c)).length;
+  const allWeekend = (board?.cards ?? []).every((c) => c.member.plan === "first3");
 
   return (
     <>
@@ -170,6 +185,12 @@ function DirectMessages({ workspace, user }: { workspace: Workspace; user: Sessi
         <input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="Find a DM"
           style={{ border: 0, background: "none", outline: "none", flex: 1, fontSize: 13 }} />
       </label>
+      {workspace === "creatorhive" && board && studentCount > 0 ? (
+        <div className="ve-dm-chips" role="tablist">
+          <button role="tab" aria-selected={!studentsOnly} className={!studentsOnly ? "on" : ""} onClick={() => setStudentsOnly(false)}>All</button>
+          <button role="tab" aria-selected={studentsOnly} className={studentsOnly ? "on" : ""} onClick={() => setStudentsOnly(true)}><Clapperboard />{allWeekend ? "Weekend Starter" : "Starters"} · {studentCount}</button>
+        </div>
+      ) : null}
       <div className="sb-scroll">
         {contacts.length > 0 && !filter.trim() ? <PinnedContacts contacts={contacts} conversations={data ?? []} /> : null}
         {isLoading ? <Skeleton rows={6} /> : null}
@@ -190,7 +211,7 @@ function DirectMessages({ workspace, user }: { workspace: Workspace; user: Sessi
                   <span className="faint" style={{ fontSize: 11, fontWeight: 400 }}>{shortTime(conversation.lastMessageAt)}</span>
                 </span>
                 <span style={{ display: "block", fontSize: 12, color: "var(--ink-3)", fontWeight: conversation.unreadCount ? 600 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {preview}
+                  {cardFor(conversation) ? <><StudentLabel card={cardFor(conversation)} />{" "}</> : null}{preview}
                 </span>
               </span>
               {conversation.unreadCount ? <span className="cnt">{conversation.unreadCount}</span> : null}
@@ -253,6 +274,9 @@ function Learn() {
   const mine = useResourcePages(access === true).data ?? [];
   const guides = useImproveResources().data ?? [];
   const inProgress = courses.filter((c) => c.completedCount > 0 && c.completedCount < c.lessonCount);
+  // The personal video editor: once her edits are ready, the review screen has its own row.
+  const editing = useStudentEditing(Boolean(improve?.starter)).editing;
+  const reviewOpen = Boolean(editing?.stage && stageIndex(editing.stage) >= stageIndex("ready_to_review"));
   return (
     <>
       <SidebarHead title="Learn" />
@@ -260,6 +284,7 @@ function Learn() {
       <div className="sb-scroll">
         <SidebarItem icon={<GraduationCap />} label="Courses" view={{ kind: "learn", page: "courses" }} meta={courses.length ? String(courses.length) : undefined} />
         <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} meta={grade === undefined ? undefined : typeof grade === "number" ? `${grade}%` : `Grade ${grade}`} />
+        {reviewOpen ? <SidebarItem icon={<Eye />} label="Review your videos" view={{ kind: "video-review" }} meta={editing?.stage ? EDIT_STAGE_LABELS[editing.stage] : undefined} /> : null}
         <SidebarItem icon={<BookOpen />} label="Resources" view={{ kind: "learn", page: "resources" }} />
         <SidebarItem icon={<Spark />} label="AI Script Writer" view={{ kind: "script-writer" }} meta="Flagship" />
         {inProgress.length ? (
@@ -283,6 +308,33 @@ function Learn() {
   );
 }
 
+/** Staff: the video editing board's filters and every student on it. */
+function VideoEditing() {
+  const board = useVideoEditsBoard().data;
+  const cards = board?.cards ?? [];
+  const order = (c: BoardCard) => stageIndex(c.stage) * 1e9 + (c.dueOn ? Date.parse(c.dueOn) / 1e5 : 9e8);
+  return (
+    <>
+      <SidebarHead title="Video editing" />
+      <ActivityRows />
+      <div className="sb-scroll">
+        <SidebarItem icon={<Clapperboard />} label="Board" view={{ kind: "video-edits" }} meta={board ? String(cards.length) : undefined} />
+        <SidebarItem icon={<ClockIcon />} label="Due in 2 days" view={{ kind: "video-edits", filter: "due" }} meta={board ? String(filterCards(cards, "due").length) : undefined} />
+        <SidebarItem icon={<Unread />} label="Unread messages" view={{ kind: "video-edits", filter: "unread" }} count={filterCards(cards, "unread").length} />
+        {cards.length ? (
+          <SidebarSection id="edits-students" title="Students">
+            {[...cards].sort((a, b) => order(a) - order(b)).map((card) => (
+              <SidebarItem key={card.id} icon={<Avatar name={card.member.name} src={card.member.avatarUrl} seed={card.member.id} size={20} radius="6px" />}
+                label={card.member.name} view={{ kind: "video-edits", cardId: card.id }}
+                tag={<span className={`stage-pill sm ${STAGE_CLASS[card.stage]}`}>{EDIT_STAGE_LABELS[card.stage]}</span>} count={card.unread} />
+            ))}
+          </SidebarSection>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 export function Sidebar({ user }: { user: SessionUser }) {
   const { current } = useNav();
   const hubHidden = useHubHidden();
@@ -297,6 +349,9 @@ export function Sidebar({ user }: { user: SessionUser }) {
       break;
     case "learn":
       content = <Learn />;
+      break;
+    case "edits":
+      content = <VideoEditing />;
       break;
     case "activity":
       content = <HeySocialSidebar />;

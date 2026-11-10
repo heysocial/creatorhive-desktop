@@ -121,7 +121,9 @@ export interface Bridge {
   files: {
     upload(request: { route: string; name: string; type: string; bytes: ArrayBuffer; access?: "public" | "private"; clientPayload?: string }): Promise<UploadResult>;
     quickLook(url: string, name: string): Promise<{ ok: boolean }>;
-    save(url: string, name: string): Promise<{ ok: boolean }>;
+    save(url: string, name: string): Promise<{ ok: boolean; canceled?: boolean }>;
+    /** Several files into one folder the member picks once; video files stream to disk. */
+    saveMany(items: { url: string; name: string }[], title?: string): Promise<{ ok: boolean; canceled?: boolean }>;
     addToCalendar(ics: string, name: string): Promise<{ ok: boolean }>;
     clipboardImage(): Promise<Uint8Array | null>;
     putVideo(url: string, type: string, bytes: ArrayBuffer): Promise<{ ok: boolean; status?: number; error?: string }>;

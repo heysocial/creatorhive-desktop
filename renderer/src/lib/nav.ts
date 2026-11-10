@@ -8,7 +8,7 @@ import type { AdminPage } from "./admin";
 */
 
 export type WorkspaceKey = "ch" | "hs";
-export type Section = "home" | "dms" | "hub" | "learn" | "activity" | "later" | "admin";
+export type Section = "home" | "dms" | "hub" | "learn" | "edits" | "activity" | "later" | "admin";
 
 export type View =
   | { kind: "feed"; postId?: string; commentId?: string }
@@ -29,6 +29,10 @@ export type View =
   | { kind: "improve-resource"; slug: string }
   | { kind: "script-writer"; chatId?: string }
   | { kind: "starter-videos" }
+  /** The student's review of her edited videos (personal video editor). */
+  | { kind: "video-review"; video?: number }
+  /** Staff: the video editing board, with a card's panel open over it. */
+  | { kind: "video-edits"; cardId?: string; filter?: "all" | "due" | "unread" }
   | { kind: "threads" }
   | { kind: "mentions" }
   | { kind: "saved" }
@@ -44,7 +48,8 @@ export interface Location {
 export const SECTIONS: Record<WorkspaceKey, Section[]> = {
   // Admin only shows on the rail for people the website lets in (Rail.tsx).
   // CreatorHive's Activity lives in the sidebar (Activity and Threads rows), not on the rail.
-  ch: ["home", "dms", "hub", "learn", "admin"],
+  // "Video editing" only shows for the owner and the editors (Rail.tsx).
+  ch: ["home", "dms", "hub", "learn", "edits", "admin"],
   hs: ["home", "dms", "activity", "later"],
 };
 
@@ -54,6 +59,7 @@ const DEFAULT_VIEW: Record<WorkspaceKey, Partial<Record<Section, View>>> = {
     dms: { kind: "dms-home" },
     hub: { kind: "hub", page: "deals" },
     learn: { kind: "learn", page: "courses" },
+    edits: { kind: "video-edits" },
     admin: { kind: "admin", page: "metrics" },
   },
   hs: {
@@ -80,7 +86,7 @@ function initial(): State {
     if (saved?.current?.ws && saved?.current?.view) {
       // An open deal doesn't come back on the next launch; its page does. Nor does a jump to one message.
       // Activity's filters before the server list (comments, hub, announcements) are All now.
-      const clean = (v: View): View => (v.kind === "hub" ? { ...v, dealId: undefined } : v.kind === "channel" || v.kind === "dm" ? { ...v, messageId: undefined }
+      const clean = (v: View): View => (v.kind === "hub" ? { ...v, dealId: undefined } : v.kind === "video-edits" ? { ...v, cardId: undefined } : v.kind === "channel" || v.kind === "dm" ? { ...v, messageId: undefined }
         : v.kind === "feed" ? { ...v, commentId: undefined }
         : v.kind === "activity" && v.filter && !["all", "mentions", "threads", "reactions"].includes(v.filter) ? { ...v, filter: undefined } : v);
       const remembered = Object.fromEntries(Object.entries(saved.remembered ?? {}).map(([k, v]) => [k, clean(v as View)]));

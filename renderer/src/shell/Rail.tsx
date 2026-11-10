@@ -1,4 +1,4 @@
-import { Bell, Bookmark, GraduationCap, House, MessageCircle, Shield, Sparkles, type LucideIcon } from "lucide-react";
+import { Bell, Bookmark, Clapperboard, GraduationCap, House, MessageCircle, Shield, Sparkles, type LucideIcon } from "lucide-react";
 import { useHubHidden } from "../lib/access";
 import { ch, type SessionUser } from "../lib/bridge";
 import { useChannels, useConversations, useHeySocialAccess } from "../lib/api";
@@ -9,12 +9,15 @@ import { Avatar, countLabel } from "../lib/ui";
 import { useHsSidebar } from "../lib/heysocial";
 import { adminPages, useAdminAccess, useOpenReports } from "../lib/admin";
 import { useSupportUnread } from "../lib/support";
+import { useVideoEditsBoard } from "../lib/videoEdits";
 
 const SECTION_META: Record<Section, { label: string; icon: LucideIcon; shortcut: string }> = {
   home: { label: "Home", icon: House, shortcut: "⌘1" },
   dms: { label: "DMs", icon: MessageCircle, shortcut: "⌘2" },
   hub: { label: "Hub", icon: Sparkles, shortcut: "⌘3" },
   learn: { label: "Learn", icon: GraduationCap, shortcut: "⌘4" },
+  // "Video editing" (the rail's labels are one short word; the tooltip has the full name).
+  edits: { label: "Editing", icon: Clapperboard, shortcut: "" },
   activity: { label: "Activity", icon: Bell, shortcut: "⌘5" },
   later: { label: "Later", icon: Bookmark, shortcut: "" },
   admin: { label: "Admin", icon: Shield, shortcut: "" },
@@ -45,6 +48,9 @@ export function Rail({ user }: { user: SessionUser }) {
   const canAdmin = adminPages(admin).length > 0;
   const openReports = useOpenReports(Boolean(admin?.tabs.includes("moderation"))).data ?? 0;
   const supportUnread = useSupportUnread(Boolean(admin?.tabs.includes("support"))).data ?? 0;
+  // The video editing board: the owner and the editors only (the API answers 404 to everyone else).
+  const edits = useVideoEditsBoard().data;
+  const editsWaiting = edits ? edits.counts.submitted + edits.counts.in_editing : 0;
 
   async function meMenu() {
     const choice = await ch.menu.popup([
@@ -73,13 +79,13 @@ export function Rail({ user }: { user: SessionUser }) {
         </button>
       ) : null}
       <div className="rdiv" />
-      {SECTIONS[current.ws].filter((section) => (section !== "admin" || canAdmin) && (section !== "hub" || !hubHidden)).map((section) => {
+      {SECTIONS[current.ws].filter((section) => (section !== "admin" || canAdmin) && (section !== "hub" || !hubHidden) && (section !== "edits" || Boolean(edits))).map((section) => {
         const meta = SECTION_META[section];
         const Icon = meta.icon;
-        const count = section === "dms" ? here.dms : section === "activity" ? hsCounts?.activity ?? 0 : section === "admin" ? openReports + supportUnread : 0;
+        const count = section === "dms" ? here.dms : section === "activity" ? hsCounts?.activity ?? 0 : section === "admin" ? openReports + supportUnread : section === "edits" ? editsWaiting : 0;
         return (
           <button key={section} className={`ritem ${current.section === section ? "on" : ""}`}
-            title={meta.shortcut ? `${meta.label} (${meta.shortcut})` : meta.label} onClick={() => nav.section(section)}>
+            title={section === "edits" ? "Video editing" : meta.shortcut ? `${meta.label} (${meta.shortcut})` : meta.label} onClick={() => nav.section(section)}>
             <span className="ib"><Icon /></span>
             {meta.label}
             {count > 0 ? <span className="badge">{countLabel(count)}</span> : null}
