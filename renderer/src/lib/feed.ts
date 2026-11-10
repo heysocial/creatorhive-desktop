@@ -3,6 +3,8 @@ import { api, ApiError, queryClient, rateLimitMessage } from "./api";
 import { putToMux, type Author, type Reactions, type UploadedVideo, type VideoAttachment } from "./community";
 
 export const CATEGORIES = [
+  // The Weekend Starter group: only its buyers and the team ever get it (lib/access.ts useFeedAccess).
+  { key: "weekend_starter", label: "Weekend Starter", emoji: "🎬", staffOnly: false },
   { key: "general", label: "General", emoji: "💬", staffOnly: false },
   { key: "win", label: "Wins", emoji: "🏆", staffOnly: false },
   { key: "question", label: "Questions", emoji: "❓", staffOnly: false },

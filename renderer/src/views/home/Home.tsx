@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { useHubReady } from "../../lib/access";
-import { ArrowUp, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
+import { WEEKEND_STARTER, openUpgrade, useFeedAccess, useHubReady } from "../../lib/access";
+import { UpgradeDialog } from "../learn/Courses";
+import { ArrowUp, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, Lock, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, queryClient, rateLimitMessage } from "../../lib/api";
@@ -144,10 +145,19 @@ function Breakdown({ glance, pct, onClose }: { glance: Glance; pct: number; onCl
 
 /* ---------- Writing a post ---------- */
 
-function NewPost({ user, open, draft, onOpen, onClose }: { user: SessionUser; open: boolean; draft: { category: CategoryKey; text: string } | null; onOpen: () => void; onClose: () => void }) {
+function NewPost({ user, open, draft, onOpen, onClose, allowed, start, prompt }: {
+  user: SessionUser; open: boolean; draft: { category: CategoryKey; text: string } | null; onOpen: () => void; onClose: () => void;
+  /** The categories they may post in (the website decides; lib/access.ts). */
+  allowed: CategoryKey[];
+  /** Where a new post starts: the open tab, when it's one they post in. */
+  start: CategoryKey;
+  /** The resting prompt, when it isn't the usual one. */
+  prompt?: string;
+}) {
   const staff = user.role === "owner" || user.role === "team";
   const [text, setText] = useState(draft?.text ?? "");
-  const [category, setCategory] = useState<CategoryKey>(draft?.category ?? "general");
+  const [category, setCategory] = useState<CategoryKey>(draft && allowed.includes(draft.category) ? draft.category : start);
+  useEffect(() => { if (!draft) setCategory(start); }, [draft, start]);
   const [media, setMedia] = useState<{ url: string; preview: string }[]>([]);
   const [uploading, setUploading] = useState(0);
   const [poll, setPoll] = useState<{ question: string; options: string[] } | null>(null);
@@ -199,7 +209,7 @@ function NewPost({ user, open, draft, onOpen, onClose }: { user: SessionUser; op
         onDragOver={(e) => e.dataTransfer.types.includes("Files") && e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); void addImages([...e.dataTransfer.files]); }}>
         <Avatar name={user.name} src={user.image} seed={user.id} size={36} />
-        <span className="ph">Drop something worth talking about…</span>
+        <span className="ph">{prompt ?? "Drop something worth talking about…"}</span>
         <button className="iconbtn" title="Add pictures" onClick={(e) => { e.stopPropagation(); picker.current?.click(); }}><ImageIcon /></button>
         <input ref={picker} type="file" accept="image/*" multiple hidden onChange={(e) => { void addImages([...(e.target.files ?? [])]); e.target.value = ""; }} />
       </div>
@@ -212,13 +222,13 @@ function NewPost({ user, open, draft, onOpen, onClose }: { user: SessionUser; op
       <div className="np-head">
         <Avatar name={user.name} src={user.image} seed={user.id} size={36} />
         <div className="seg">
-          {CATEGORIES.filter((c) => staff || !c.staffOnly).map((c) => (
+          {CATEGORIES.filter((c) => (staff || !c.staffOnly) && allowed.includes(c.key) && allowed.length > 1).map((c) => (
             <button key={c.key} className={category === c.key ? "on" : ""} onClick={() => setCategory(c.key)}><span>{c.emoji}</span>{c.label}</button>
           ))}
         </div>
         <button className="iconbtn" style={{ marginLeft: "auto" }} onClick={onClose} aria-label="Close"><X /></button>
       </div>
-      <textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} placeholder="Share a win, ask a question, or say hi…" rows={4}
+      <textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} placeholder={prompt ?? "Share a win, ask a question, or say hi…"} rows={4}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void post(); } if (e.key === "Escape") onClose(); }}
         onPaste={(e) => { void pastedFiles(e).then((files) => files && addImages(files)); }} />
       {media.length || uploading ? (
@@ -256,7 +266,7 @@ function NewPost({ user, open, draft, onOpen, onClose }: { user: SessionUser; op
 
 /* ---------- A post ---------- */
 
-function PollView({ post }: { post: Post }) {
+function PollView({ post, readOnly }: { post: Post; readOnly: boolean }) {
   const poll = post.poll!;
   const voted = Boolean(poll.myVote);
   return (
@@ -265,7 +275,7 @@ function PollView({ post }: { post: Post }) {
       {poll.options.map((option) => {
         const pct = poll.totalVotes ? Math.round((option.votes / poll.totalVotes) * 100) : 0;
         return (
-          <button key={option.id} className={`poll-opt ${poll.myVote === option.id ? "mine" : ""}`} onClick={() => void vote(post, option.id)}>
+          <button key={option.id} className={`poll-opt ${poll.myVote === option.id ? "mine" : ""}`} onClick={() => (readOnly ? openUpgrade() : void vote(post, option.id))}>
             {voted ? <i style={{ width: `${pct}%` }} /> : null}
             <span>{option.label}</span>{voted ? <span className="pct">{pct}%</span> : null}
           </button>
@@ -386,6 +396,8 @@ function PostEditBox({ post, onClose }: { post: Post; onClose: () => void }) {
 
 export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser; onOpen: (post: Post) => void }) {
   const category = categoryOf(post.filterTag);
+  // A category they only read (Wins on a limited plan, the group after its 30 days): reacting and voting are locked.
+  const readOnly = !useFeedAccess().canWrite(post.filterTag);
   const own = post.author.id === user.id;
   const staff = user.role === "owner" || user.role === "team";
   // Never your own: reporting yourself is noise for the team's queue, as on the website.
@@ -444,13 +456,13 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
       </header>
       {editing ? <PostEditBox post={post} onClose={() => setEditing(false)} /> : <PostBody html={post.body} />}
       {post.mediaUrls.length && !editing ? <PostMedia urls={post.mediaUrls} /> : null}
-      {post.poll ? <PollView post={post} /> : null}
+      {post.poll ? <PollView post={post} readOnly={readOnly} /> : null}
       <footer>
         <div className="reacts">
           {POST_REACTIONS.map((emoji) => {
             const r = post.reactions[emoji];
             return (
-              <button key={emoji} className={`react ${r?.mine ? "mine" : ""} ${r?.count ? "" : "ghost"}`} onClick={() => void reactToPost(post, emoji)}>
+              <button key={emoji} className={`react ${r?.mine ? "mine" : ""} ${r?.count ? "" : "ghost"}`} onClick={() => (readOnly ? openUpgrade() : void reactToPost(post, emoji))}>
                 <span>{emoji}</span>{r?.count ? r.count : null}
               </button>
             );
@@ -491,7 +503,9 @@ function CommentText({ comment, meId }: { comment: Comment; meId: string }) {
   return <>{parts}</>;
 }
 
-function CommentRow({ comment, postId, meId, editing, actions, onSaveEdit, onCancelEdit }: {
+function CommentRow({ comment, postId, meId, editing, actions, onSaveEdit, onCancelEdit, readOnly }: {
+  /** The post's category is one they only read: no Like or Reply. */
+  readOnly: boolean;
   meId: string;
   comment: Comment;
   postId: string;
@@ -539,8 +553,8 @@ function CommentRow({ comment, postId, meId, editing, actions, onSaveEdit, onCan
         {!comment.deleted && !editing ? (
           <div className="c-meta">
             <span>{ago(comment.createdAt)}{comment.editedAt ? " · edited" : ""}</span>
-            <button className={comment.likedByMe ? "on" : ""} onClick={() => void likeComment(postId, comment)}>Like{comment.likeCount ? ` · ${comment.likeCount}` : ""}</button>
-            <button onClick={actions.onReply}>Reply</button>
+            {readOnly ? null : <button className={comment.likedByMe ? "on" : ""} onClick={() => void likeComment(postId, comment)}>Like{comment.likeCount ? ` · ${comment.likeCount}` : ""}</button>}
+            {readOnly ? null : <button onClick={actions.onReply}>Reply</button>}
             {actions.onEdit ? <button onClick={actions.onEdit}>Edit</button> : null}
             {actions.onDelete ? <button onClick={actions.onDelete}>Delete</button> : null}
             {actions.onReport ? <button onClick={actions.onReport}>Report</button> : null}
@@ -580,6 +594,9 @@ export function PostSheet({ postId, commentId, user, onClose }: { postId: string
   const [reporting, setReporting] = useState<ReportTarget | null>(null);
   const staff = user.role === "owner" || user.role === "team";
   const box = useRef<HTMLTextAreaElement>(null);
+  const feedAccess = useFeedAccess();
+  // Until the post loads, as before; then only in a category they write in.
+  const readOnly = post.data ? !feedAccess.canWrite(post.data.filterTag) : false;
   const body = useRef<HTMLDivElement>(null);
 
   // The @ list: everyone in CreatorHive but me, as channels offer.
@@ -683,7 +700,7 @@ export function PostSheet({ postId, commentId, user, onClose }: { postId: string
             {threads.map(({ comment, replies }) => (
               <div key={comment.id}>
                 {[comment, ...replies].map((c) => (
-                  <CommentRow key={c.id} comment={c} postId={postId} meId={user.id} editing={editingId === c.id} actions={actionsFor(c)}
+                  <CommentRow key={c.id} readOnly={readOnly} comment={c} postId={postId} meId={user.id} editing={editingId === c.id} actions={actionsFor(c)}
                     onSaveEdit={(body, media) => saveEdit(c, body, media)} onCancelEdit={() => setEditingId(null)} />
                 ))}
               </div>
@@ -691,11 +708,11 @@ export function PostSheet({ postId, commentId, user, onClose }: { postId: string
             {comments.data?.length === 0 ? <div className="faint">No comments yet. Start the conversation.</div> : null}
           </div>
         </div>
-        <div className="comment-box">
+        {readOnly ? <div className="comment-box read-only faint"><Lock />Read-only on your plan.</div> : <div className="comment-box">
           {replyTo ? <div className="replying"><span>Replying to <b>{replyTo.author.name}</b></span><button className="iconbtn" onClick={() => setReplyTo(null)}><X /></button></div> : null}
           <CommentComposer postId={postId} value={text} setValue={setText} box={box} placeholder={replyTo ? `Reply to ${replyTo.author.name}… (@ to mention)` : "Write a comment… (@ to mention)"}
             onChange={(value, caret) => picker.track(value, caret)} onKeyDown={(e) => picker.onKeyDown(e)} extra={picker.list} onSend={send} />
-        </div>
+        </div>}
       </aside>
       {reporting ? <ReportDialog target={reporting} onClose={() => setReporting(null)} /> : null}
     </div>
@@ -705,7 +722,27 @@ export function PostSheet({ postId, commentId, user, onClose }: { postId: string
 /* ---------- Home ---------- */
 
 export function Home({ user, openPostId, commentId }: { user: SessionUser; openPostId?: string | null; commentId?: string }) {
-  const [filter, setFilter] = useState<string>("all");
+  const access = useFeedAccess();
+  const [filter, setFilter] = useState<string>(access.home);
+  // A limited plan never sits on All or a locked tab; once the plan is read, it opens on its home tab.
+  useEffect(() => {
+    if (access.limited ? filter === "all" || !access.canRead(filter) : !access.canRead(filter) && filter !== "all") setFilter(access.home);
+  }, [access, filter]);
+  const [upgrade, setUpgrade] = useState(false);
+  useEffect(() => {
+    const show = () => setUpgrade(true);
+    window.addEventListener("ch:upgrade", show);
+    return () => window.removeEventListener("ch:upgrade", show);
+  }, []);
+  /*
+    The tabs: the Weekend Starter group first on The Weekend Starter (after
+    All for the team); a limited plan's other tabs locked.
+  */
+  const tabs = CATEGORIES.filter((c) => c.key !== WEEKEND_STARTER || access.group);
+  const lockedTab = (key: string) => access.limited && (key === "all" || !access.canRead(key));
+  // Who gets a composer, and for what: a limited plan only in the group, on its tab, for its 30 days.
+  const allowed = CATEGORIES.map((c) => c.key).filter((key) => access.canWrite(key) && (!access.limited || filter === WEEKEND_STARTER));
+  const start: CategoryKey = allowed.includes(filter as CategoryKey) ? (filter as CategoryKey) : allowed.includes("general") ? "general" : allowed[0] ?? "general";
   const [writing, setWriting] = useState(false);
   const [openPost, setOpenPost] = useState<string | null>(openPostId ?? null);
   const feed = useFeed(filter);
@@ -725,13 +762,13 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
   useEffect(() => {
     const open = (event: Event) => {
       const detail = (event as CustomEvent<{ category: CategoryKey; text: string } | undefined>).detail;
-      if (detail) { setDraft(detail); setFilter("all"); }
+      if (detail) { setDraft(detail); setFilter(access.limited ? access.home : "all"); }
       setWriting(true);
       scroller.current?.scrollTo({ top: 0, behavior: "smooth" });
     };
     window.addEventListener("ch:new-post", open);
     return () => window.removeEventListener("ch:new-post", open);
-  }, []);
+  }, [access.limited, access.home]);
 
   const pinnedIds = new Set((filter === "all" ? pinned.data ?? [] : []).map((p) => p.id));
   const posts = (feed.data?.pages.flatMap((p) => p.posts) ?? []).filter((p) => !pinnedIds.has(p.id));
@@ -743,8 +780,8 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
     wait behind the "New posts" pill, so nothing moves under the reader.
   */
   const [pending, setPending] = useState<Post[]>([]);
-  const live = useRef({ filter, posts, pinnedIds, pending });
-  live.current = { filter, posts, pinnedIds, pending };
+  const live = useRef({ filter, posts, pinnedIds, pending, canRead: access.canRead });
+  live.current = { filter, posts, pinnedIds, pending, canRead: access.canRead };
   useEffect(() => setPending([]), [filter]);
   // Shown some other way (a refetch, my own post): no longer new.
   useEffect(() => {
@@ -770,6 +807,8 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
     if (signal?.authorId === user.id) return;
     const { filter: active } = live.current;
     if (signal?.category && active !== "all" && signal.category !== active) return;
+    // The group's posts are signalled to everyone; only its members' feeds show them.
+    if (signal?.category && !live.current.canRead(signal.category)) return;
     void checkNewPosts();
   }), [checkNewPosts, user.id]);
 
@@ -793,14 +832,18 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
       <div className="mhead">
         <h1>Home</h1>
         <div className="seg home-tabs">
-          <button className={filter === "all" ? "on" : ""} onClick={() => setFilter("all")}>All</button>
-          {CATEGORIES.map((c) => (
-            <button key={c.key} className={filter === c.key ? "on" : ""} title={c.label} onClick={() => setFilter(c.key)}>
-              <span>{c.emoji}</span><span className="lbl">{c.label}</span>{unread[c.key] ? <i className="udot" /> : null}
-            </button>
+          {access.limited && access.group ? null : <button className={`${filter === "all" ? "on" : ""} ${lockedTab("all") ? "locked" : ""}`} onClick={() => (lockedTab("all") ? setUpgrade(true) : setFilter("all"))}>{lockedTab("all") ? <Lock className="tab-lock" /> : null}All</button>}
+          {tabs.map((c, index) => (
+            <span key={c.key} style={{ display: "contents" }}>
+              <button className={`${filter === c.key ? "on" : ""} ${lockedTab(c.key) ? "locked" : ""}`} title={lockedTab(c.key) ? `${c.label}: part of the UGC Academy` : c.label}
+                onClick={() => (lockedTab(c.key) ? setUpgrade(true) : setFilter(c.key))}>
+                {lockedTab(c.key) ? <Lock className="tab-lock" /> : null}<span>{c.emoji}</span><span className="lbl">{c.label}</span>{!lockedTab(c.key) && unread[c.key] ? <i className="udot" /> : null}
+              </button>
+              {access.limited && access.group && index === 0 ? <button className={`locked ${filter === "all" ? "on" : ""}`} onClick={() => setUpgrade(true)}><Lock className="tab-lock" />All</button> : null}
+            </span>
           ))}
         </div>
-        <div className="acts"><button className="btn honey" onClick={() => setWriting(true)}><SquarePen />New post<span className="kbd-in">⇧⌘N</span></button></div>
+        <div className="acts">{allowed.length ? <button className="btn honey" onClick={() => setWriting(true)}><SquarePen />New post<span className="kbd-in">⇧⌘N</span></button> : null}</div>
       </div>
       <div className="home-body">
         <div className="feed scroll" ref={scroller} onScroll={(e) => {
@@ -814,17 +857,23 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
           ) : null}
           <div className="feed-col">
             <PaidCard />
-            <NewPost key={draft?.text ?? "blank"} user={user} open={writing} draft={draft} onOpen={() => setWriting(true)} onClose={() => { setWriting(false); setDraft(null); }} />
+            {allowed.length ? (
+              <NewPost key={draft?.text ?? "blank"} user={user} open={writing} draft={draft} onOpen={() => setWriting(true)} onClose={() => { setWriting(false); setDraft(null); }}
+                allowed={allowed} start={start} prompt={access.limited && start === WEEKEND_STARTER ? "Share with the Weekend Starter group…" : undefined} />
+            ) : access.groupEnded && filter === WEEKEND_STARTER ? (
+              <div className="card group-ended"><span className="ge-mark"><Lock /></span><p><b>{access.endsAt ? `Your 30 days in the Weekend Starter group ended ${new Date(access.endsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.` : "Your 30 days in the Weekend Starter group have ended."}</b><br />You can still read the group. Join the UGC Academy to post again.</p></div>
+            ) : null}
             {filter === "all" ? (pinned.data ?? []).map((post) => <PostCard key={post.id} post={post} user={user} onOpen={(p) => setOpenPost(p.id)} />) : null}
             {feed.isLoading ? <div className="msgs-skel"><div /><div /><div /></div> : null}
             {feed.isError ? <div className="err-state">Couldn't load the feed.<button className="btn" onClick={() => void feed.refetch()}>Try again</button></div> : null}
             {posts.map((post) => <PostCard key={post.id} post={post} user={user} onOpen={(p) => setOpenPost(p.id)} />)}
-            {feed.isSuccess && posts.length === 0 && pinnedIds.size === 0 ? <div className="empty-state">Nothing here yet.</div> : null}
+            {feed.isSuccess && posts.length === 0 && pinnedIds.size === 0 ? <div className="empty-state">{filter === WEEKEND_STARTER ? (access.canWrite(WEEKEND_STARTER) ? "The group is quiet. Post a hello and tell everyone which video you’re filming first." : "Nothing has been posted in the group yet.") : "Nothing here yet."}</div> : null}
             {feed.isFetchingNextPage ? <div className="faint" style={{ textAlign: "center", padding: 12 }}>Loading…</div> : null}
           </div>
         </div>
         <WeekPanel />
       </div>
+      {upgrade ? <UpgradeDialog onClose={() => setUpgrade(false)} /> : null}
       {openPost ? <PostSheet postId={openPost} commentId={openPost === openPostId ? commentId : undefined} user={user} onClose={() => { setOpenPost(null); if (openPostId) nav.open({ kind: "feed" }); }} /> : null}
     </div>
   );

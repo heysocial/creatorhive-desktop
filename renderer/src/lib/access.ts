@@ -16,6 +16,18 @@ export interface MeAccess {
   /** The areas the plan locks: "hub" on The Weekend Starter (servers from Nov 9 2026). */
   locked: string[];
   upgradeUrl: string | null;
+  /** The feed categories a limited plan reads (null: every category). */
+  feedCategories?: string[] | null;
+  /** It may write nowhere in the feed. */
+  feedReadOnly?: boolean;
+  /** In the Weekend Starter group (its buyers and the team): its tab shows. Servers from Nov 10 2026. */
+  weekendGroup?: boolean;
+  /** The categories it may post, comment and react in (null: every one it reads). */
+  feedWritable?: string[] | null;
+  /** The tab the feed opens on: "weekend_starter" on The Weekend Starter. */
+  feedHome?: string | null;
+  /** When The Weekend Starter's 30 days end (or ended). */
+  communityEndsAt?: string | null;
 }
 
 export function useMeAccess() {
@@ -44,4 +56,42 @@ export function useHubReady(): boolean {
 export function useHubHidden(): boolean {
   const { known, open } = useHubAccess();
   return known && !open;
+}
+
+export const WEEKEND_STARTER = "weekend_starter";
+
+/**
+ * The feed's locks, from the website's rules (creatorhive-app lib/access.ts):
+ * UGC Starter reads Wins; The Weekend Starter reads its group (writing in it
+ * for its 30 days) and Wins; only the group and the team see the group. The
+ * server refuses the rest anyway; this decides tabs, the composer and buttons.
+ * Until the plan is read, nothing is locked (as before).
+ */
+export function useFeedAccess() {
+  const access = useMeAccess().data?.access;
+  const list = access?.feedCategories;
+  const limited = Array.isArray(list);
+  const group = access?.weekendGroup === true;
+  const canRead = (category: string) => (limited ? list.includes(category) : category !== WEEKEND_STARTER || group);
+  const writable = access?.feedWritable;
+  const canWrite = (category: string) => {
+    if (!canRead(category)) return false;
+    if (Array.isArray(writable)) return writable.includes(category);
+    return access?.feedReadOnly !== true;
+  };
+  return {
+    limited,
+    group,
+    canRead,
+    canWrite,
+    home: access?.feedHome ?? (limited ? list[0] ?? "win" : "all"),
+    /** The group became read-only: its 30 days are over. */
+    groupEnded: limited && group && !canWrite(WEEKEND_STARTER),
+    endsAt: access?.communityEndsAt ?? null,
+  };
+}
+
+/** Opens "Part of the UGC Academy" over Home (it listens for this). */
+export function openUpgrade() {
+  window.dispatchEvent(new Event("ch:upgrade"));
 }

@@ -2072,3 +2072,14 @@ html.is-popout body { background: var(--card); }
 .soon-owner > svg { width: 14px; height: 14px; flex: none; }
 .soon-owner-text { flex: 1; min-width: 180px; }
 .soon-owner-text strong { color: var(--ink); font-weight: 650; }
+
+/* The Weekend Starter group (Nov 2026): locked tabs, the read-only comment box, the 30-days-over note. */
+.home-tabs button.locked { color: var(--ink-4, var(--ink-3)); }
+.home-tabs button .tab-lock { width: 12px; height: 12px; }
+.comment-box.read-only { flex-direction: row; align-items: center; gap: 8px; font-size: 13px; }
+.comment-box.read-only svg { width: 14px; height: 14px; }
+.card.group-ended { display: flex; gap: 12px; align-items: center; padding: 14px 18px; }
+.card.group-ended .ge-mark { flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--fill, rgba(0,0,0,.05)); display: grid; place-items: center; color: var(--ink-3); }
+.card.group-ended .ge-mark svg { width: 15px; height: 15px; }
+.card.group-ended p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink-3); }
+.card.group-ended b { color: var(--ink); }
