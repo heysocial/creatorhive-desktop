@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, FileText, Link2, Loader2, Paperclip, Pencil, Plus, Trash2, X } from "lucide-react";
 import { api, ApiError, queryClient } from "../../lib/api";
-import { bytes } from "../../lib/format";
+import { bytes, money } from "../../lib/format";
 import {
-  DEAL_STATUSES, DEAL_TYPES, MAX_PAID_DAYS_AHEAD, STATUS_LABELS, UNPAID_REASON_LABELS, addDaysIso, createDeal, dayOf, landsLabel, longDay, createOption, deleteOption, errorText, isDeliveredOrLater, localToday, patchDeal, renameOption, useIndustries,
+  DEAL_STATUSES, DEAL_TYPES, MAX_PAID_DAYS_AHEAD, RETAINER_INTERVALS, retainerMonthly, retainerYearly, type RetainerInterval, STATUS_LABELS, UNPAID_REASON_LABELS, addDaysIso, createDeal, dayOf, landsLabel, longDay, createOption, deleteOption, errorText, isDeliveredOrLater, localToday, patchDeal, renameOption, useIndustries,
   usePaymentMethods, useSources, withTz, type Deal, type DealStatus, type DealType, type Option, type OptionKind, type UnpaidReason,
 } from "../../lib/hub";
 import { Modal, celebrate, hubToast, useLayer } from "./parts";
@@ -234,6 +234,8 @@ interface Values {
   amount: string; brand: string; email: string; name: string; phone: string; sources: string[]; industry: string | null;
   type: DealType; status: DealStatus; paidOn: string; paidTouched: boolean; deliveredOn: string; deliveredTouched: boolean; method: string | null; deliverables: string; notes: string;
   draftDue: string; paymentExpected: string; terms: string; count: string; unpaidReason: UnpaidReason; unpaidNote: string;
+  /* "How do you get paid?" (the website's hand-off §11.2): one payment, or a retainer paid again and again inside this deal. */
+  kind: "one_time" | "retainer"; interval: RetainerInterval; anchorOn: string;
 }
 
 function initial(start: FormStart): Values {
@@ -262,6 +264,9 @@ function initial(start: FormStart): Values {
     count: d?.deliverables_count != null ? String(d.deliverables_count) : "",
     unpaidReason: (!dup && d?.unpaid_reason) || "declined",
     unpaidNote: (!dup && d?.unpaid_note) || "",
+    kind: d?.payment_kind === "retainer" ? "retainer" : "one_time",
+    interval: d?.retainer?.interval ?? "week",
+    anchorOn: (!dup && d?.retainer?.anchor_on) || "",
   };
 }
 
@@ -334,6 +339,10 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
       ...(v.status === "closed_not_contracted" ? { unpaid_note: v.unpaidNote.trim() || null } : {}),
       // Only when the member set it (or cleared it): otherwise the server stamps today on the move to Delivered.
       ...(isDeliveredOrLater(v.status) && (editing ? v.deliveredTouched : v.deliveredOn) ? { delivered_on: v.deliveredOn || null } : {}),
+      // Sent only for a retainer, or to turn one back into a single payment: a one-time deal's save is as it was.
+      ...(v.kind === "retainer"
+        ? { payment_kind: "retainer", retainer_interval: v.interval, retainer_anchor_on: v.anchorOn || localToday() }
+        : editing && start.deal!.payment_kind === "retainer" ? { payment_kind: "one_time" } : {}),
     };
   }
 
@@ -424,8 +433,23 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
           <input className="amount" inputMode="numeric" value={Number(v.amount || 0).toLocaleString("en-US")} aria-label="Amount"
             style={{ width: `${Math.max(2, Number(v.amount || 0).toLocaleString("en-US").length) * 0.62 + 0.4}em` }}
             onChange={(e) => set("amount", e.target.value.replace(/\D/g, "").slice(0, 8))} />
-          <span className="muted">what's this deal worth?</span>
+          <span className="muted">{v.kind === "retainer" ? "how much each time?" : "what's this deal worth?"}</span>
         </div>
+        <label className="flabel">How do you get paid?</label>
+        <div className="seg pay-kind">
+          <button type="button" className={v.kind === "one_time" ? "on" : ""} onClick={() => set("kind", "one_time")}>One payment</button>
+          <button type="button" className={v.kind === "retainer" ? "on" : ""} onClick={() => setV((c) => ({ ...c, kind: "retainer", anchorOn: c.anchorOn || localToday() }))}>Retainer (repeats)</button>
+        </div>
+        {v.kind === "retainer" ? (
+          <div className="pay-kind-retainer">
+            <div className="seg pay-kind">{RETAINER_INTERVALS.map((i) => <button type="button" key={i.id} className={v.interval === i.id ? "on" : ""} onClick={() => set("interval", i.id)}>{i.label}</button>)}</div>
+            <label className="flabel">First payment</label>
+            <input className="field" type="date" value={v.anchorOn || localToday()} onChange={(e) => set("anchorOn", e.target.value)} />
+            <p className="hint">{editing ? "Changing it moves the coming payments only. Payments you logged stay where they are." : "Sets the day it repeats on."}</p>
+            {Number(v.amount) > 0 ? <span className="retainer-preview">About {money(retainerMonthly(Number(v.amount), v.interval))} a month · {money(retainerYearly(Number(v.amount), v.interval))} a year</span> : null}
+            <p className="hint">Every payment is listed inside this one deal. No new deal each week.</p>
+          </div>
+        ) : null}
         <label className="flabel">Brand</label>
         <input ref={brandInput} className="field" value={v.brand} maxLength={120} required onChange={(e) => set("brand", e.target.value)} />
         <div className="grid3">

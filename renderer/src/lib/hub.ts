@@ -130,7 +130,55 @@ export interface Deal {
   updated_at: string;
   added_by: { id: string; name: string; initials: string } | null;
   updated_by: { id: string; name: string; initials: string } | null;
+  /*
+    Retainers (the website's hand-off §11.2): one deal paid again and again,
+    each payment logged inside it. For a retainer `amount_usd` is one payment.
+    Older servers leave these out, and every deal is then a one-time deal.
+  */
+  payment_kind?: "one_time" | "retainer";
+  retainer?: Retainer | null;
+  /** What the expenses linked to this deal add up to, in cents ("Costs $180 · you kept $1,320"). */
+  costs_cents?: number;
 }
+
+export type RetainerInterval = "week" | "two_weeks" | "month";
+export interface RetainerPayment {
+  id: string;
+  amount_usd: number;
+  paid_at: string;
+  /** The paid day in the member's zone. */
+  paid_on: string;
+  /** False while the day is still ahead. */
+  landed: boolean;
+  payment_method: string | null;
+  payment_method_ref: Ref | null;
+  note: string | null;
+}
+export interface Retainer {
+  interval: RetainerInterval;
+  amount_usd: number;
+  anchor_on: string;
+  ended_on: string | null;
+  /** "/week". */
+  per_label: string;
+  /** "every week". */
+  every_label: string;
+  monthly_estimate_usd: number;
+  next_due_on: string | null;
+  upcoming: string[];
+  missed: string[];
+  paid_count: number;
+  paid_total_usd: number;
+  /** Newest first. */
+  payments: RetainerPayment[];
+}
+export const isRetainer = (deal: Deal): deal is Deal & { retainer: Retainer } => deal.payment_kind === "retainer" && Boolean(deal.retainer);
+export const RETAINER_INTERVALS: { id: RetainerInterval; label: string }[] = [
+  { id: "week", label: "Every week" }, { id: "two_weeks", label: "Every 2 weeks" }, { id: "month", label: "Every month" },
+];
+/** "About $1,083 a month": week × 52 / 12, two weeks × 26 / 12. */
+export const retainerMonthly = (amount: number, interval: RetainerInterval) => interval === "week" ? Math.round((amount * 52) / 12) : interval === "two_weeks" ? Math.round((amount * 26) / 12) : amount;
+export const retainerYearly = (amount: number, interval: RetainerInterval) => interval === "week" ? amount * 52 : interval === "two_weeks" ? amount * 26 : amount * 12;
 
 export interface Payday {
   month_label: string;
@@ -293,9 +341,11 @@ export function landsOn(deal: { status: string; paid_at: string | null; lands_on
 }
 export const isLanding = (deal: Deal) => landsOn(deal) !== null;
 /** Paid and landed: what a collected figure counts. */
-export const isCollected = (deal: Deal) => deal.status === "completed" && Boolean(deal.paid_at) && !isLanding(deal);
+export const isCollected = (deal: Deal) => deal.payment_kind !== "retainer" && deal.status === "completed" && Boolean(deal.paid_at) && !isLanding(deal);
 /** "Lands Nov 4", with the year only when it isn't this one. */
 export const landsLabel = (day: string) => `Lands ${shortDay(day)}`;
+/** "Mon, Nov 16". */
+export const weekdayDay = (day: string) => new Date(`${dayOf(day)}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 /** "Wednesday, Nov 4". */
 export const longDay = (day: string) => new Date(`${dayOf(day)}T12:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
 
@@ -376,6 +426,88 @@ export async function deleteDeal(id: string) {
     payment: data.payment.filter((d) => d.id !== id),
   }));
   void queryClient.invalidateQueries({ queryKey: ["hub"] });
+}
+
+/* ---------- Retainer payments (the website's /api/hub/deals/[id]/payments) ---------- */
+
+export async function logPayment(dealId: string, body: { amount_usd: number; paid_on: string; payment_method_ref?: string | null; note?: string | null }) {
+  const result = await api<{ deal: Deal | null; payday: Payday | null }>(withTz(`/api/hub/deals/${dealId}/payments`), { method: "POST", body });
+  if (result.deal) replaceDeal(result.deal);
+  void queryClient.invalidateQueries({ queryKey: ["hub"] });
+  return result;
+}
+
+export async function removePayment(dealId: string, paymentId: string) {
+  const result = await api<{ deal: Deal | null }>(withTz(`/api/hub/deals/${dealId}/payments/${paymentId}`), { method: "DELETE" });
+  if (result.deal) replaceDeal(result.deal);
+  void queryClient.invalidateQueries({ queryKey: ["hub"] });
+}
+
+export async function endRetainer(dealId: string, lastPaymentOn: string) {
+  const result = await api<{ deal: Deal }>(withTz(`/api/hub/deals/${dealId}/retainer/end`), { method: "POST", body: { last_payment_on: lastPaymentOn } });
+  replaceDeal(result.deal);
+  void queryClient.invalidateQueries({ queryKey: ["hub"] });
+}
+
+/* ---------- Money in & out (the website's lib/hub/money.ts) ---------- */
+
+export type ExpenseCategory = "editor" | "va" | "software" | "equipment" | "other";
+export const EXPENSE_CATEGORIES: { id: ExpenseCategory; label: string; short: string; stage: string }[] = [
+  { id: "editor", label: "Editor", short: "Editor", stage: "production" },
+  { id: "va", label: "VA (virtual assistant)", short: "VA", stage: "delivered" },
+  { id: "software", label: "Software & subscriptions", short: "Software", stage: "waiting_product" },
+  { id: "equipment", label: "Equipment", short: "Equipment", stage: "revisions" },
+  { id: "other", label: "Other", short: "Other", stage: "pitching" },
+];
+export const categoryOf = (id: string) => EXPENSE_CATEGORIES.find((c) => c.id === id) ?? EXPENSE_CATEGORIES[4];
+
+export interface MoneySummary {
+  period: "month" | "year";
+  from: string;
+  to: string;
+  label: string;
+  in_cents: number;
+  out_cents: number;
+  left_cents: number;
+  counts: { payments: number; from_retainers: number; expenses: number };
+  expected_in_cents: number | null;
+  to_renew_cents: number;
+  by_category: { category: ExpenseCategory; label: string; count: number; cents: number }[];
+}
+export interface Expense {
+  id: string; name: string; amount_cents: number; category: ExpenseCategory; category_label: string;
+  spent_on: string; deal_id: string | null; deal_brand_name: string | null; subscription_id: string | null;
+  receipt_url: string | null; note: string | null;
+}
+export interface Subscription {
+  id: string; name: string; amount_cents: number; category: ExpenseCategory; renews_day: number;
+  started_on: string; canceled_on: string | null; remind_day_before: boolean; next_renewal_on: string | null;
+}
+
+/** "$1,234.56", from cents. */
+export const cents = (value: number) => `${value < 0 ? "−" : ""}$${(Math.abs(value) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+export function useMoney() {
+  const src = useHubSource();
+  const enabled = useHubReady() && src.base === "/api/hub";
+  return useQuery({ queryKey: ["hub", "money"], enabled, queryFn: () => api<{ today: string; month: MoneySummary; year: MoneySummary; show_money_out: boolean }>(withTz("/api/hub/money")) });
+}
+export function useExpenses(from: string, to: string) {
+  const enabled = useHubReady() && useHubSource().base === "/api/hub";
+  return useQuery({ queryKey: ["hub", "expenses", from, to], enabled, queryFn: async () => (await api<{ expenses: Expense[] }>(withTz(`/api/hub/expenses?from=${from}&to=${to}`))).expenses });
+}
+export function useSubscriptions() {
+  const enabled = useHubReady() && useHubSource().base === "/api/hub";
+  return useQuery({ queryKey: ["hub", "subscriptions"], enabled, queryFn: () => api<{ subscriptions: Subscription[]; monthly_cents: number; yearly_cents: number }>(withTz("/api/hub/subscriptions")) });
+}
+export async function moneyWrite(path: string, method: "POST" | "PATCH" | "DELETE", body?: Record<string, unknown>) {
+  const result = await api<Record<string, unknown>>(withTz(path), { method, ...(body ? { body } : {}) });
+  void queryClient.invalidateQueries({ queryKey: ["hub"] });
+  return result;
+}
+export async function saveShowMoneyOut(value: boolean) {
+  await api("/api/hub/money/preferences", { method: "PATCH", body: { show_money_out: value } });
+  queryClient.setQueryData<{ show_money_out: boolean }>(["hub", "money"], (data) => data && ({ ...data, show_money_out: value }));
 }
 
 /** The error the server gave, worded for a person. */

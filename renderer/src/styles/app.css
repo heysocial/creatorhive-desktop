@@ -2083,3 +2083,163 @@ html.is-popout body { background: var(--card); }
 .card.group-ended .ge-mark svg { width: 15px; height: 15px; }
 .card.group-ended p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink-3); }
 .card.group-ended b { color: var(--ink); }
+
+/* ---------- Retainers & money in/out (the website's hand-off §11) ---------- */
+:root { --money-in: #2F7D55; --money-out: #8F4500; --money-out-bg: #FFEBD9; }
+@media (prefers-color-scheme: dark) { :root { --money-in: #5FBF8C; --money-out: #FFBE85; --money-out-bg: #3D2614; } }
+
+/* A retainer's card and row: only retainers carry these, so one-time deals look as before. */
+.deal-card.is-retainer { box-shadow: inset 0 0 0 1px #F3DF94; }
+.dc-per { margin-left: 1px; color: var(--ink-3); font-size: 11.5px; font-weight: 500; }
+.dc-retainer { display: flex; flex-direction: column; gap: 5px; margin-top: 4px; }
+.retainer-pill { display: inline-flex; align-items: center; gap: 4px; width: fit-content; padding: 2px 8px; border-radius: 999px; background: var(--honey-soft); color: var(--honey-ink); font-size: 11.5px; font-weight: 600; }
+.retainer-pill svg { width: 12px; height: 12px; }
+.retainer-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: var(--ink-3); font-size: 11.5px; }
+.retainer-dots { display: inline-flex; align-items: center; gap: 3px; }
+.retainer-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--money-in); }
+.retainer-dots i.next { box-sizing: border-box; border: 1.5px solid var(--honey-ink); background: transparent; }
+.retainer-dots em { font-size: 10.5px; font-style: normal; font-weight: 600; }
+.retainer-next-text { display: inline-flex; align-items: center; gap: 4px; color: var(--honey-ink); font-size: 11.5px; font-weight: 600; }
+.retainer-next-text svg { width: 12px; height: 12px; }
+.dt-repeat { width: 13px; height: 13px; margin-right: 4px; color: var(--honey-ink); }
+
+/* The deal pop-up. */
+.dp-amount.retainer { flex-wrap: wrap; }
+.dp-amount.retainer .every { font-size: 16px; }
+.retainer-paid { padding: 2px 9px; border-radius: 999px; background: color-mix(in oklab, var(--money-in) 14%, transparent); color: var(--money-in); font-size: 12.5px; font-weight: 600; }
+.dp-profit { margin: 2px 0 6px; color: var(--ink-3); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.retainer-sec { display: flex; flex-direction: column; gap: 10px; }
+.retainer-next { display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 16px; background: linear-gradient(160deg, var(--honey-soft), var(--card-2)); box-shadow: inset 0 0 0 1px #F3DF94; }
+@media (prefers-color-scheme: dark) { .retainer-next { background: linear-gradient(160deg, #2E2E2E, var(--card-2)); box-shadow: inset 0 0 0 1px #474747; } .deal-card.is-retainer { box-shadow: inset 0 0 0 1px #474747; } }
+.rn-head { display: flex; align-items: center; gap: 10px; }
+.rn-head > span:last-child { display: flex; flex-direction: column; gap: 1px; }
+.rn-head b { font-size: 14.5px; }
+.rn-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 11px; background: var(--card); color: var(--honey-ink); flex: none; }
+.rn-icon svg { width: 18px; height: 18px; }
+.retainer-payments { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 4px; border-radius: 14px; background: var(--card-2); list-style: none; }
+.retainer-payments li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; min-height: 44px; padding: 6px 8px; border-radius: 10px; }
+.retainer-payments li > span:nth-child(2) { display: flex; flex-direction: column; }
+.retainer-payments small { color: var(--ink-3); font-size: 12px; }
+.retainer-payments li.upcoming { background: var(--card); box-shadow: inset 0 0 0 1px #F3DF94; }
+.retainer-payments li.upcoming small { color: var(--honey-ink); font-weight: 600; }
+.retainer-payments .paid-text { color: var(--money-in); }
+.rp-status { display: grid; place-items: center; width: 26px; height: 26px; border: 1.5px dashed var(--honey-ink); border-radius: 50%; color: var(--honey-ink); }
+.rp-status svg { width: 13px; height: 13px; }
+.rp-status.paid { border: 0; background: color-mix(in oklab, var(--money-in) 16%, transparent); color: var(--money-in); }
+.rp-amt { font-variant-numeric: tabular-nums; }
+.retainer-note { display: flex; gap: 6px; align-items: flex-start; font-size: 12.5px; }
+.retainer-note svg { width: 14px; height: 14px; flex: none; margin-top: 1px; }
+
+/* Forms. */
+.money-form { display: flex; flex-direction: column; gap: 14px; }
+.money-form label, .money-form > div { display: flex; flex-direction: column; gap: 6px; }
+.money-form label > span:first-child, .money-form > div > span:first-child { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.money-form .field { height: 40px; font-size: 14px; }
+.big-amount { display: flex; flex-direction: row !important; align-items: center; gap: 4px; height: 54px; padding: 0 14px; border-radius: 12px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.big-amount i { color: var(--ink-3); font-size: 22px; font-style: normal; font-weight: 600; }
+.big-amount input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font-size: 26px; font-weight: 600; outline: none; font-variant-numeric: tabular-nums; }
+.big-amount em { color: var(--ink-3); font-size: 13px; font-style: normal; }
+.chip-row { display: flex; flex-direction: row !important; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chip.cat-chip.on { background: var(--st-bg); color: var(--st-ink); box-shadow: inset 0 0 0 1.5px var(--st-ink); }
+.form-2 { display: grid !important; grid-template-columns: 1fr 1fr; gap: 12px; }
+.check-row { flex-direction: row !important; align-items: flex-start; gap: 10px !important; padding: 10px 12px; border-radius: 10px; background: var(--card-2); cursor: pointer; }
+.check-row input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--green); }
+.check-row span { display: flex; flex-direction: column; gap: 1px; }
+.end-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.seg.pay-kind { width: fit-content; }
+.pay-kind-retainer { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 4px; }
+.retainer-preview { width: fit-content; padding: 3px 10px; border-radius: 999px; background: var(--honey-soft); color: var(--honey-ink); font-size: 12.5px; font-weight: 600; }
+
+/* The income graph, Shopify-style. */
+.chart.shopify { height: auto; }
+.chart.shopify svg { height: 100%; }
+.chart-switch { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 6px; gap: 8px; color: var(--ink-3); font-size: 12.5px; font-weight: 600; }
+.chart-body { display: grid; grid-template-columns: 44px minmax(0, 1fr); }
+.chart-y { position: relative; }
+.chart-y span { position: absolute; left: 0; transform: translateY(-50%); color: var(--ink-4); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.chart-plot { position: relative; height: 190px; cursor: crosshair; }
+.chart.shopify .grid { stroke: var(--line); }
+.chart.shopify .fill-top { stop-color: var(--money-in); stop-opacity: .22; }
+.chart.shopify .fill-bottom { stop-color: var(--money-in); stop-opacity: 0; }
+.chart.shopify .area { fill: url(#mac-collected-fill); }
+.chart.shopify .line { stroke: var(--money-in); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; animation: mac-chart-draw .4s ease-out both; }
+.chart.shopify .line.out { stroke: var(--money-out); stroke-width: 2.5; }
+@keyframes mac-chart-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .chart.shopify .line { animation: none; } }
+.chart-end { position: absolute; right: 0; transform: translateY(-130%); padding: 1px 7px; border-radius: 999px; background: color-mix(in oklab, var(--money-in) 16%, var(--card)); color: var(--money-in); font-size: 11.5px; font-weight: 700; pointer-events: none; }
+.chart-end.out { transform: translateY(30%); background: var(--money-out-bg); color: var(--money-out); }
+.chart-guide { position: absolute; top: 0; bottom: 0; border-left: 1px solid color-mix(in oklab, var(--ink-4) 60%, transparent); pointer-events: none; }
+.chart-ring { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 3px solid var(--money-in); border-radius: 50%; background: var(--card); pointer-events: none; }
+.chart-ring.out { border-color: var(--money-out); }
+.chart.shopify .chart-tip { top: 0; transform: translateX(14px); gap: 5px; min-width: 170px; padding: 10px 12px; border-radius: 12px; background: var(--card); backdrop-filter: none; box-shadow: 0 12px 32px rgba(0,0,0,.16), inset 0 0 0 .5px var(--line-strong); }
+.chart.shopify .chart-tip.left { transform: translateX(calc(-100% - 14px)); }
+.chart.shopify .chart-tip span { display: flex; align-items: center; gap: 7px; font-size: 12.5px; }
+.chart.shopify .chart-tip b { margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
+.chart .key { display: inline-block; width: 11px; height: 3px; border-radius: 2px; background: var(--money-in); flex: none; }
+.chart .key.out { background: var(--money-out); }
+.chart.shopify .chart-x { position: relative; display: block; height: 15px; margin: 8px 0 0 44px; }
+.chart.shopify .chart-x span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.chart.shopify .chart-x span[data-edge="start"] { transform: none; }
+.chart.shopify .chart-x span[data-edge="end"] { transform: translateX(-100%); }
+.chart-legend { display: flex; gap: 16px; margin: 10px 0 0 44px; color: var(--ink-3); font-size: 12px; font-weight: 600; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Money in & out, at the bottom of the Dashboard. Money out is never red. */
+.money-sections { display: flex; flex-direction: column; gap: 14px; margin-top: 22px; }
+.money-divider { display: flex; align-items: center; gap: 12px; color: var(--ink-3); font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.money-divider::before, .money-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.money-card { display: flex; flex-direction: column; gap: 14px; padding: 20px; }
+.money-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.money-head h3 { margin: 3px 0 0; font-size: 18px; }
+.eyebrow { color: var(--ink-3); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.money-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.money-tile { display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: 18px; background: var(--card-2); }
+.money-tile b { font-size: 14px; }
+.money-tile strong { font-size: 28px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.money-tile small { color: var(--ink-3); font-size: 12.5px; }
+.mt-icon { display: grid; place-items: center; width: 32px; height: 32px; margin-bottom: 4px; border-radius: 10px; }
+.mt-icon svg { width: 16px; height: 16px; }
+.money-tile.in .mt-icon { background: color-mix(in oklab, var(--money-in) 16%, var(--card)); color: var(--money-in); }
+.money-tile.out .mt-icon { background: var(--money-out-bg); color: var(--money-out); }
+.money-tile.left { background: linear-gradient(160deg, var(--honey-soft), var(--card-2)); }
+.money-tile.left .mt-icon { background: var(--honey); color: var(--on-honey); }
+.money-tile .in-ink { color: var(--money-in); font-weight: 600; }
+.money-tile .left-ink { color: var(--honey-ink); font-weight: 600; }
+.money-bar { display: flex; height: 12px; overflow: hidden; border-radius: 999px; background: var(--card-2); }
+.money-bar span { background: var(--honey); }
+.money-bar i { background: color-mix(in oklab, var(--money-out) 55%, transparent); }
+.money-bar-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+.money-bar-foot .k { display: inline-block; width: 9px; height: 9px; margin: 0 4px 0 6px; border-radius: 3px; background: var(--honey); }
+.money-bar-foot .k.out { background: color-mix(in oklab, var(--money-out) 55%, transparent); }
+.money-pair { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
+.money-rows { display: flex; flex-direction: column; gap: 2px; }
+.money-row { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 7px 8px; border-radius: 12px; cursor: pointer; }
+.money-row:hover { background: var(--card-2); }
+.money-row .link { opacity: 0; }
+.money-row:hover .link { opacity: 1; }
+.mr-main { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.mr-main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.mr-main small { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12px; }
+.mr-main small .tag-s { display: inline-flex; align-items: center; gap: 3px; }
+.mr-main small .tag-s svg { width: 10px; height: 10px; }
+.mr-main .soon { color: var(--honey-ink); font-weight: 600; }
+.mr-amt { min-width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
+.cat-tile { display: grid; place-items: center; flex: none; border-radius: 10px; background: var(--st-bg); color: var(--st-ink); }
+.cat-tile svg { width: 45%; height: 45%; }
+.cat-tile.letter { width: 34px; height: 34px; font-size: 14px; font-weight: 700; }
+.money-empty { margin: 0; padding: 14px; border-radius: 12px; background: var(--card-2); line-height: 1.45; }
+.money-total { display: flex; justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13.5px; }
+.money-total b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.subs-total { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-radius: 16px; background: linear-gradient(150deg, #DDF3F1, var(--card-2)); color: #0F6159; }
+@media (prefers-color-scheme: dark) { .subs-total { background: linear-gradient(150deg, #133A37, var(--card-2)); color: #86DCD2; } }
+.subs-total strong { font-size: 20px; font-weight: 600; }
+.money-card.tax { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 22px; }
+.tax-main { display: flex; flex-direction: column; gap: 10px; }
+.tax-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 6px 2px; }
+.tax-bar { grid-column: 2 / 4; height: 7px; overflow: hidden; border-radius: 999px; background: var(--card-2); }
+.tax-bar i { display: block; height: 100%; border-radius: 999px; background: var(--st-ink); }
+.tax-side { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 16px; background: var(--card-2); }
+.tax-figs { display: flex; flex-direction: column; gap: 6px; }
+.tax-figs div { display: flex; justify-content: space-between; color: var(--ink-3); font-size: 13.5px; }
+.tax-figs b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.year-pick { width: auto; height: 34px; }

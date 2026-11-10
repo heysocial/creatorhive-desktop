@@ -15,6 +15,7 @@ import { Monogram, StagePill, changePaidOn, editNotContractedNote, editUnpaidRea
 import { openDealForm } from "./DealForm";
 import { InvoiceSection } from "./Invoices";
 import { DealUpdates, Linkified } from "./DealUpdates";
+import { ProfitLine, RetainerAmount, RetainerSection } from "./Retainer";
 
 interface Brief { id: string; filename: string; kind: "pdf" | "word" | "image" | "link"; sizeBytes: number | null; site: string | null; url: string | null; createdAt: string }
 
@@ -235,7 +236,9 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
     return <div className={popout ? "deal-window" : "scrim side deal-scrim"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}><aside ref={box} className="deal-panel" tabIndex={-1}><div className="empty-state">Loading…</div></aside></div>;
   }
 
-  const next = deal.status === "pending_payment" ? "completed" : nextStatus(deal.status);
+  const retainer = deal.payment_kind === "retainer" && Boolean(deal.retainer);
+  // A retainer is paid payment by payment (Log payment) and finished with End retainer, never "Mark paid & complete".
+  const next = deal.status === "pending_payment" ? (retainer ? null : "completed") : nextStatus(deal.status);
   const u = urgency(deal);
   const lands = landsOn(deal);
   const index = ADVANCE_STATUSES.indexOf(deal.status);
@@ -292,7 +295,10 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
       <div className="dp-cols">
         <div className="dp-main scroll">
           <div className="faint">{dealTypeLabel(deal.deal_type)} · started {started} · {daysIn} {daysIn === 1 ? "day" : "days"} in</div>
-          <div className={`dp-amount ${closed ? "closed-unpaid" : ""}`}><b>{money(deal.amount_usd)}</b>{closed ? <span className="muted">Expected · not counted in any total</span> : null}{u ? <span className={`urgent ${u.late ? "late" : ""} ${u.landing ? "landing" : ""}`}><Clock />{u.text}</span> : null}{deal.payment_overdue && !closed ? <span className="tag-s late">Overdue</span> : null}</div>
+          {retainer ? <RetainerAmount deal={deal} /> : null}
+          <ProfitLine deal={deal} />
+          {retainer ? <RetainerSection deal={deal} onEditSchedule={() => openDealForm({ deal })} /> : null}
+          <div className={`dp-amount ${closed ? "closed-unpaid" : ""}`} hidden={retainer && !u}>{retainer ? null : <b>{money(deal.amount_usd)}</b>}{closed ? <span className="muted">Expected · not counted in any total</span> : null}{u ? <span className={`urgent ${u.late ? "late" : ""} ${u.landing ? "landing" : ""}`}><Clock />{u.text}</span> : null}{deal.payment_overdue && !closed ? <span className="tag-s late">Overdue</span> : null}</div>
           {notContracted ? (
             /* It fell through in negotiation: the note, and the way back is Move stage. No They paid, no invoice offer. */
             <div className="closed-banner not-contracted">

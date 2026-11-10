@@ -167,6 +167,11 @@ export function celebrate(deal: Deal, payday: Payday | null) {
   if (payday && deal.paid_at && !isLanding(deal)) show({ kind: "payday", deal, payday });
 }
 
+/** The payday card for a retainer payment that lands today (the deal itself has no paid day). */
+export function celebratePayment(deal: Deal, payday: Payday | null) {
+  if (payday) show({ kind: "payday", deal, payday });
+}
+
 /** "Change" beside a paid deal's Paid on: the same question, and only the day is sent. */
 export async function changePaidOn(deal: Deal) {
   const fields = await new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "paid-on", deal, change: true, resolve }));

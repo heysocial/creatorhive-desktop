@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, CalendarClock, ChartNoAxesColumn, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Columns3, Download, Layers, Plus, Sparkles, Table2 } from "lucide-react";
+import { ArrowUpRight, CalendarClock, CalendarDays, ChartNoAxesColumn, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Columns3, Download, Layers, Plus, Repeat, Sparkles, Table2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import {
   BOARDS, BOARD_LABELS, BOARD_STATUSES, CLOSED_OUT_TOTAL_LABELS, STATUS_LABELS, UNPAID_REASON_LABELS, active, addDaysIso, allDeals, closedUnpaidLine, contracted, dayOf, daysBetween, dealTypeLabel,
-  isActiveDeal, isClosedOutStatus, isCollected, isDraftPending, isLanding, landsLabel, landsOn, localToday, monDay, monDayYear, potential, timingLine, total, useCash, useDeals,
+  isActiveDeal, isClosedOutStatus, isCollected, isRetainer, weekdayDay, type Retainer, isDraftPending, isLanding, landsLabel, landsOn, localToday, monDay, monDayYear, potential, timingLine, total, useCash, useDeals,
   type Board, type Cash, type ClosedOutSummary, type ClosedUnpaidSummary, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { money, plural } from "../../lib/format";
@@ -68,6 +68,8 @@ export function Overview({ deals }: { deals: Deal[] }) {
   const inPlay = contracted(deals);
   const pot = potential(deals);
   const live = active(deals);
+  // A retainer's amount is one payment, so it would drag the average down: left out, as on the website.
+  const averaged = live.filter((d) => d.payment_kind !== "retainer");
   const collected = cash?.tier.collectedThisMonth ?? 0;
   const delta = cash ? collected - cash.activity.previous_month_collected_usd : 0;
   // Marked paid for a day still ahead: counted in Contracted until it lands, not in Collected.
@@ -86,7 +88,7 @@ export function Overview({ deals }: { deals: Deal[] }) {
         <div className="metric"><span className="ml"><Check />Collected</span><b>{money(collected)}</b><small>{cash ? `${delta >= 0 ? "+" : "−"}${money(Math.abs(delta))} vs last month` : " "}</small>
           {cash && cash.by_person.length > 1 ? <small>{cash.by_person.map((p) => `${p.initials} ${money(p.collected_usd)}`).join(" · ")}</small> : null}</div>
         <div className="metric"><span className="ml"><Layers />Active deals</span><b>{live.length}</b><small>across 3 sections</small></div>
-        <div className="metric"><span className="ml"><ChartNoAxesColumn />Avg Deal Size</span><b>{money(live.length ? Math.round(total(live) / live.length) : 0)}</b><small>across active deals</small></div>
+        <div className="metric"><span className="ml"><ChartNoAxesColumn />Avg Deal Size</span><b>{money(averaged.length ? Math.round(total(averaged) / averaged.length) : 0)}</b><small>across active deals</small></div>
       </div>
       {landing.length ? (
         <div className="landing-soon">
@@ -168,13 +170,15 @@ function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared:
   const timing = lands ? null : timingLine(deal);
   // Closed – Unpaid and Closed – Not contracted: dashed, the amount grey (expected, never counted), and why instead of any timing.
   const closed = isClosedOutStatus(deal.status);
+  const retainer = isRetainer(deal) ? deal.retainer : null;
   return (
-    <div className={`deal-card ${closed ? "closed-unpaid" : ""} ${dragging ? "ghost" : ""}`} onPointerDown={(e) => onDragStart(e, deal)} onClick={() => openDeal(deal.id)}
+    <div className={`deal-card ${closed ? "closed-unpaid" : ""} ${retainer ? "is-retainer" : ""} ${dragging ? "ghost" : ""}`} onPointerDown={(e) => onDragStart(e, deal)} onClick={() => openDeal(deal.id)}
       role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") openDeal(deal.id); }}>
       <div className="dc-top">
         <b className="dc-brand">{deal.brand_name}</b>
-        <span className="dc-amt">{money(deal.amount_usd)}{isCollected(deal) ? <CheckCircle2 /> : null}</span>
+        <span className="dc-amt">{money(deal.amount_usd)}{retainer ? <small className="dc-per">{retainer.per_label}</small> : null}{isCollected(deal) ? <CheckCircle2 /> : null}</span>
       </div>
+      {retainer ? <RetainerCardLines retainer={retainer} amount={deal.amount_usd} /> : null}
       <div className="dc-tags">
         <span className="tag-s">{dealTypeLabel(deal.deal_type)}</span>
         {payment ? <span className="tag-s">{payment}</span> : null}
@@ -187,6 +191,22 @@ function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared:
       {closed ? <div className="dc-when closed-text">{closedUnpaidLine(deal)}</div> : null}
       {timing ? <div className="dc-when">{timing.text}{timing.overdue ? <span className="tag-s late">Overdue</span> : null}</div> : null}
       <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}><StageButton deal={deal} onPick={(s) => void moveDeal(deal, s)} /></div>
+    </div>
+  );
+}
+
+/** A retainer on its card (the website's hand-off §11.2): the pill, one dot per payment, the next payment day. */
+function RetainerCardLines({ retainer, amount }: { retainer: Retainer; amount: number }) {
+  const dots = Math.min(8, retainer.paid_count);
+  return (
+    <div className="dc-retainer">
+      <span className="retainer-pill"><Repeat />Retainer · {money(amount)}{retainer.per_label}</span>
+      <span className="retainer-progress">
+        <span className="retainer-dots">{Array.from({ length: dots }, (_, i) => <i key={i} />)}{retainer.paid_count > 8 ? <em>+{retainer.paid_count - 8}</em> : null}{retainer.next_due_on ? <i className="next" /> : null}</span>
+        {retainer.paid_count} paid · {money(retainer.paid_total_usd)}
+      </span>
+      {retainer.next_due_on ? <span className="retainer-next-text"><CalendarDays />Next payment {weekdayDay(retainer.next_due_on)}</span>
+        : retainer.ended_on ? <span className="muted">Retainer ended</span> : null}
     </div>
   );
 }
@@ -392,11 +412,12 @@ function DealTable({ deals, shared }: { deals: Deal[]; shared: boolean }) {
       {deals.map((d) => (
         <div key={d.id} className={`dt-row ${d.status === "completed" ? "done" : isClosedOutStatus(d.status) ? "done closed" : ""}`} onClick={() => openDeal(d.id)} role="button">
           <span className="dt-brand"><b>{d.brand_name}</b><small>{[dealTypeLabel(d.deal_type), d.deliverables].filter(Boolean).join(" · ")}{shared && d.added_by ? ` · ${d.added_by.initials}` : ""}</small></span>
-          <span className="dt-amt"><b>{money(d.amount_usd)}</b>{isCollected(d) ? <CheckCircle2 /> : null}</span>
+          <span className="dt-amt">{isRetainer(d) ? <Repeat className="dt-repeat" aria-label="Retainer" /> : null}<b>{money(d.amount_usd)}</b>{isRetainer(d) ? <small className="dc-per"> {d.retainer.per_label.replace("/", "/ ")}</small> : null}{isCollected(d) ? <CheckCircle2 /> : null}</span>
           <span onClick={(e) => e.stopPropagation()}><StageButton deal={d} onPick={(s) => void moveDeal(d, s)} /></span>
           <span className="muted">{d.payment_method_ref?.label ?? "—"}</span>
           {isLanding(d) ? <span className="landing-text">{landsLabel(landsOn(d)!)}</span>
             : isClosedOutStatus(d.status) ? <span className="muted">{closedUnpaidLine(d)}</span>
+            : isRetainer(d) && d.retainer.next_due_on ? <span className="retainer-next-text">Next payment {weekdayDay(d.retainer.next_due_on)}</span>
             : <span className="muted">{d.status === "completed" && d.paid_at ? monDayYear(d.paid_at) : monDayYear(d.updated_at)}</span>}
         </div>
       ))}
@@ -463,7 +484,7 @@ export function smartDeals(view: SmartView, deals: Deal[]) {
   // As the Dashboard and the website count it: deals in Pending Payment, and paid ones still to land.
   if (view === "awaiting") return deals.filter((d) => d.status === "pending_payment" || isLanding(d));
   if (view === "paid") return paidThisWeek(deals);
-  return deals.filter((d) => d.deal_type === "retainer" && isActiveDeal(d.status));
+  return deals.filter((d) => (d.deal_type === "retainer" || d.payment_kind === "retainer") && isActiveDeal(d.status));
 }
 /*
   Paid this week: Completed with a paid date in the last 7 days, today
@@ -473,9 +494,13 @@ export function smartDeals(view: SmartView, deals: Deal[]) {
 */
 export function paidThisWeek(deals: Deal[]) {
   const from = addDaysIso(localToday(), -6);
+  // A retainer is paid this week when one of its payments landed this week; listed once, by its latest.
+  const lastPaid = (d: Deal) => isRetainer(d)
+    ? d.retainer.payments.find((p) => p.landed)?.paid_at ?? null
+    : isCollected(d) ? d.paid_at : null;
   return deals
-    .filter((d) => isCollected(d) && dayOf(d.paid_at!) >= from)
-    .sort((a, b) => new Date(b.paid_at!).getTime() - new Date(a.paid_at!).getTime());
+    .filter((d) => { const at = lastPaid(d); return at !== null && dayOf(at) >= from; })
+    .sort((a, b) => new Date(lastPaid(b)!).getTime() - new Date(lastPaid(a)!).getTime());
 }
 export const SMART_LABELS: Record<SmartView, { title: string; sub: string }> = {
   due: { title: "Due this week", sub: "Drafts due in the next 7 days, and any overdue" },

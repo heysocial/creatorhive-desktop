@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { ChevronRight, Download, Hourglass, Plus, Wallet } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { DEAL_STATUSES, deliveredAgo, sourcePath, staleText, useHubSource, type DealStatus } from "../../lib/hub";
+import { DEAL_STATUSES, deliveredAgo, saveShowMoneyOut, sourcePath, staleText, useHubSource, useMoney, type DealStatus } from "../../lib/hub";
+import { MoneySections } from "./Money";
 import { money, plural } from "../../lib/format";
 import { Modal, Monogram, StagePill } from "./parts";
 import { openDeal } from "./Deals";
@@ -12,14 +13,16 @@ import { openExport } from "./Export";
 type Range = "7d" | "30d" | "90d" | "1y" | "all";
 interface Figure { value: number; count?: number; previous?: number | null; dealIds?: string[] }
 interface Breakdown { key: string; label: string; amount: number; count: number; dealIds: string[] }
-interface DashDeal { id: string; brandName: string; amount: number; status: DealStatus; paidAt: string | null }
+/* `collected`: what it brought in over the range — for a retainer, its payments, not one payment's `amount`. Older servers leave it out. */
+interface DashDeal { id: string; brandName: string; amount: number; status: DealStatus; paidAt: string | null; collected?: number }
 interface Dash {
   range: Range;
   rangeLabel: string;
   /* closedUnpaid: Closed – Unpaid deals closed in the range, in no other figure; `declined` is that reason's share. Older servers leave it out.
      closedNotContracted: Closed – Not contracted ("Fell through"), its own figure, never added to closedUnpaid. Older servers leave it out. */
   headline: { collected: Figure; moneyInPlay: Figure; potential: Figure; totalDeals: Figure; averageDeal: Figure; closedUnpaid?: Figure & { declined?: number }; closedNotContracted?: Figure };
-  trend: { date: string; label: string; amount: number; count: number }[];
+  /* `out`: money out that day (that month for All Time), in dollars with cents. Older servers leave it out. */
+  trend: { date: string; label: string; amount: number; count: number; out?: number }[];
   revenueBySource: Breakdown[];
   revenueByIndustry: Breakdown[];
   revenueByPaymentMethod: Breakdown[];
@@ -64,34 +67,112 @@ function DrillDialog({ drill, deals, onClose }: { drill: Drill; deals: DashDeal[
   );
 }
 
-function Chart({ trend }: { trend: Dash["trend"] }) {
-  const width = 900;
-  const height = 190;
-  const points = useMemo(() => {
-    let running = 0;
-    return trend.map((t) => (running += t.amount));
+/** A smooth line through every point that never overshoots them (monotone cubic), as the website draws it. */
+function monotone(points: [number, number][]) {
+  if (points.length < 2) return points.length ? `M${points[0][0]},${points[0][1]}` : "";
+  const gaps: number[] = [];
+  const slopes: number[] = [];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    gaps.push(points[i + 1][0] - points[i][0]);
+    slopes.push((points[i + 1][1] - points[i][1]) / gaps[i]);
+  }
+  const tangents = points.map((_, i) => {
+    if (i === 0) return slopes[0];
+    if (i === points.length - 1) return slopes[i - 1];
+    if (slopes[i - 1] * slopes[i] <= 0) return 0;
+    const span = gaps[i - 1] + gaps[i];
+    return 3 * span / ((span + gaps[i]) / slopes[i - 1] + (span + gaps[i - 1]) / slopes[i]);
+  });
+  let path = `M${points[0][0].toFixed(2)},${points[0][1].toFixed(2)}`;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const third = gaps[i] / 3;
+    const [x0, y0] = points[i];
+    const [x1, y1] = points[i + 1];
+    path += ` C${(x0 + third).toFixed(2)},${(y0 + tangents[i] * third).toFixed(2)} ${(x1 - third).toFixed(2)},${(y1 - tangents[i + 1] * third).toFixed(2)} ${x1.toFixed(2)},${y1.toFixed(2)}`;
+  }
+  return path;
+}
+
+const STEPS = [1, 2, 2.5, 3, 4, 5, 6, 8, 10];
+/** A round step so three of them reach the top: $0, $2K, $4K, $6K. */
+function niceStep(value: number) {
+  if (value <= 0) return 100;
+  const raw = value / 3;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  return STEPS.map((s) => s * magnitude).find((c) => c >= raw) ?? raw;
+}
+const compact = (v: number) => (v >= 1000 ? `$${(v / 1000).toLocaleString("en-US", { maximumFractionDigits: 1 })}K` : `$${Math.round(v)}`);
+const dollars = (v: number) => (Number.isInteger(v) ? money(v) : `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+
+/*
+  The income graph, Shopify-style (the website's HubCollectedChart): Collected
+  adding up over the range as a smooth line with a soft fill, and, with "Show
+  money out", what went out over the same range on the same scale. No
+  comparison with an earlier period.
+*/
+function Chart({ trend, rangeLabel, showOut, onShowOut }: { trend: Dash["trend"]; rangeLabel: string; showOut: boolean; onShowOut?: (on: boolean) => void }) {
+  const width = 1000;
+  const height = 100;
+  const series = useMemo(() => {
+    let collected = 0;
+    let out = 0;
+    return trend.map((t) => {
+      collected += t.amount;
+      out = Math.round((out + (t.out ?? 0)) * 100) / 100;
+      return { ...t, total: collected, outTotal: out };
+    });
   }, [trend]);
-  const max = Math.max(1, ...points);
-  const step = trend.length > 1 ? width / (trend.length - 1) : width;
-  const coords = points.map((v, i) => [i * step, height - (v / max) * (height - 16) - 4]);
-  const line = coords.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  const area = `${line} L${width},${height} L0,${height} Z`;
-  const ticks = trend.length > 1 ? [0, Math.floor(trend.length / 4), Math.floor(trend.length / 2), Math.floor((3 * trend.length) / 4), trend.length - 1] : [0];
   const [hover, setHover] = useState<number | null>(null);
+  const total = series.at(-1)?.total ?? 0;
+  const outTotal = series.at(-1)?.outTotal ?? 0;
+  const drawOut = showOut && outTotal > 0;
+  const step = niceStep(Math.max(total, drawOut ? outTotal : 0));
+  const max = step * 3;
+  const last = Math.max(1, series.length - 1);
+  const x = (i: number) => (series.length <= 1 ? 50 : (i / last) * 100);
+  const y = (v: number) => (1 - v / max) * 100;
+  const path = (pick: (p: (typeof series)[number]) => number) => monotone(series.map((p, i) => [(x(i) / 100) * width, (y(pick(p)) / 100) * height]));
+  const line = path((p) => p.total);
+  const outLine = drawOut ? path((p) => p.outTotal) : "";
+  const tickCount = Math.min(5, series.length);
+  const ticks = [...new Set(Array.from({ length: tickCount }, (_, i) => Math.round((i / Math.max(1, tickCount - 1)) * last)))];
+  const h = hover !== null ? series[hover] : null;
+  const words = rangeLabel === "All Time" ? "all time" : rangeLabel.toLowerCase();
   return (
-    <div className="chart" onMouseLeave={() => setHover(null)} onMouseMove={(e) => {
-      const r = e.currentTarget.getBoundingClientRect();
-      setHover(Math.max(0, Math.min(trend.length - 1, Math.round(((e.clientX - r.left) / r.width) * (trend.length - 1)))));
-    }}>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-        {[0.25, 0.5, 0.75].map((f) => <line key={f} x1="0" x2={width} y1={height * f} y2={height * f} className="grid" />)}
-        <path d={area} className="area" />
-        <path d={line} className="line" vectorEffect="non-scaling-stroke" />
-        {coords.length ? <circle cx={coords.at(-1)![0]} cy={coords.at(-1)![1]} r="4" className="dot" vectorEffect="non-scaling-stroke" /> : null}
-        {hover !== null && coords[hover] ? <line x1={coords[hover][0]} x2={coords[hover][0]} y1="0" y2={height} className="hover" vectorEffect="non-scaling-stroke" /> : null}
-      </svg>
-      <div className="chart-x">{ticks.map((i) => <span key={i}>{trend[i]?.label}</span>)}</div>
-      {hover !== null && trend[hover] ? <div className="chart-tip" style={{ left: `${(hover / Math.max(1, trend.length - 1)) * 100}%` }}><b>{money(points[hover])}</b><span>{trend[hover].label}{trend[hover].amount ? ` · +${money(trend[hover].amount)}` : ""}</span></div> : null}
+    <div className="chart shopify">
+      {onShowOut ? <label className="chart-switch"><button role="switch" aria-checked={showOut} className={`switch ${showOut ? "on" : ""}`} onClick={() => onShowOut(!showOut)}><i /></button>Show money out</label> : null}
+      <div className="chart-body">
+        <div className="chart-y">{[3, 2, 1, 0].map((n) => <span key={n} style={{ top: `${y(step * n)}%` }}>{compact(step * n)}</span>)}</div>
+        <div className="chart-plot" onMouseLeave={() => setHover(null)} onMouseMove={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setHover(Math.max(0, Math.min(series.length - 1, Math.round(((e.clientX - r.left) / r.width) * last))));
+        }}>
+          <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+            <defs><linearGradient id="mac-collected-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" className="fill-top" /><stop offset="1" className="fill-bottom" /></linearGradient></defs>
+            {[0, 1, 2, 3].map((n) => <line key={n} x1="0" x2={width} y1={y(step * n)} y2={y(step * n)} className="grid" vectorEffect="non-scaling-stroke" />)}
+            {total > 0 ? <path d={`${line} L${width},${height} L0,${height} Z`} className="area" fill="url(#mac-collected-fill)" /> : null}
+            <path key={`in-${rangeLabel}`} d={line} className="line" pathLength={1} vectorEffect="non-scaling-stroke" />
+            {outLine ? <path key={`out-${rangeLabel}`} d={outLine} className="line out" pathLength={1} vectorEffect="non-scaling-stroke" /> : null}
+          </svg>
+          {hover === null && series.length > 1 && (total > 0 || drawOut) ? <>
+            <span className="chart-end" style={{ top: `${y(total)}%` }}>{dollars(total)}</span>
+            {drawOut ? <span className="chart-end out" style={{ top: `${y(outTotal)}%` }}>{dollars(outTotal)}</span> : null}
+          </> : null}
+          {h && hover !== null ? <>
+            <span className="chart-guide" style={{ left: `${x(hover)}%` }} />
+            <span className="chart-ring" style={{ left: `${x(hover)}%`, top: `${y(h.total)}%` }} />
+            {drawOut ? <span className="chart-ring out" style={{ left: `${x(hover)}%`, top: `${y(h.outTotal)}%` }} /> : null}
+            <div className={`chart-tip ${x(hover) > 70 ? "left" : ""}`} style={{ left: `${x(hover)}%` }}>
+              <small>{h.label}</small>
+              <span><i className="key" />Collected<b>{dollars(h.total)}</b></span>
+              {h.count ? <small className="faint">{money(h.amount)} from {plural(h.count, "payment")}</small> : null}
+              {drawOut ? <span><i className="key out" />Money out<b>{dollars(h.outTotal)}</b></span> : null}
+            </div>
+          </> : null}
+        </div>
+      </div>
+      <div className="chart-x">{ticks.map((i) => <span key={i} style={{ left: `${x(i)}%` }} data-edge={i === 0 ? "start" : i === last ? "end" : undefined}>{series[i]?.label}</span>)}</div>
+      <div className="chart-legend"><span><i className="key" />Collected · {words}</span>{drawOut ? <span><i className="key out" />Money out</span> : null}</div>
     </div>
   );
 }
@@ -120,25 +201,7 @@ function during(rangeLabel: string) {
   if (rangeLabel === "This Month") return "this month";
   return `in the ${rangeLabel.toLowerCase()}`;
 }
-function previousPeriod(range: Range) {
-  return { "7d": "the 7 days before", "30d": "the 30 days before", "90d": "the 90 days before", "1y": "the 12 months before", all: null }[range];
-}
-
-/** "+$12" / "−3", or null when there is nothing to compare or nothing changed. */
-function change(f: Figure, asMoney = false) {
-  if (f.previous === null || f.previous === undefined) return null;
-  const delta = Math.round(f.value - f.previous);
-  if (!delta) return null;
-  return { text: `${delta > 0 ? "+" : "−"}${asMoney ? money(Math.abs(delta)) : Math.abs(delta).toLocaleString("en-US")}`, up: delta > 0 };
-}
-
-/** A stat's foot line: its change against the period before, in words. */
-function Comparison({ f, before, asMoney = false }: { f: Figure; before: string | null; asMoney?: boolean }) {
-  if (f.previous === null || f.previous === undefined || !before) return <>Lifetime</>;
-  const delta = change(f, asMoney);
-  if (!delta) return <>No change vs {before}</>;
-  return <><span className={`delta-text ${delta.up ? "up" : "down"}`}>{delta.text}</span> vs {before}</>;
-}
+/* No comparisons anywhere (Simon, Nov 10): no change pill, no "the 30 days before", no "vs" line. */
 
 /*
   Top brands as the website shows them: collected in the range plus money in
@@ -153,7 +216,7 @@ function topBrands(d: Dash) {
       const deal = byId.get(id);
       if (!deal) continue;
       const brand = brands.get(deal.brandName) ?? { brandName: deal.brandName, collected: 0, inPlay: 0, dealIds: [] };
-      brand[key] += deal.amount;
+      brand[key] += key === "collected" ? deal.collected ?? deal.amount : deal.amount;
       if (!brand.dealIds.includes(id)) brand.dealIds.push(id);
       brands.set(deal.brandName, brand);
     }
@@ -177,9 +240,12 @@ export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
   const [drill, setDrill] = useState<Drill | null>(null);
   const pick = (r: Range) => { setRange(r); try { localStorage.setItem("ch.hub.range", r); } catch { /* fine */ } };
   const d = data;
-  const collectedChange = d ? change(d.headline.collected, true) : null;
   const when = d ? during(d.rangeLabel) : "";
-  const before = d ? previousPeriod(d.range) : null;
+  // The member's own money in & out; Admin → Hubs (someone else's Hub) shows neither the switch nor the sections.
+  const own = src.base === "/api/hub" && !fixedRange;
+  const moneyData = useMoney().data;
+  const [showOutLocal, setShowOutLocal] = useState<boolean | null>(null);
+  const showOut = own ? showOutLocal ?? moneyData?.show_money_out ?? true : false;
   const brands = d ? topBrands(d) : [];
   const overdueCount = d?.attention.overdueCount ?? 0;
   const unpaid = d?.headline.closedUnpaid;
@@ -203,12 +269,13 @@ export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
               <div className="dh-top">
                 <button className="dh-fig" onClick={() => setDrill({ title: "Collected", figure: money(d.headline.collected.value), ids: d.headline.collected.dealIds ?? [] })}>
                   <span className="muted">Collected</span>
-                  <span><b>{money(d.headline.collected.value)}</b>{collectedChange ? <span className={`delta ${collectedChange.up ? "up" : "down"}`}>{collectedChange.text}</span> : null}</span>
-                  <span className="muted">{plural(d.headline.collected.count ?? 0, "payout")} {when}{d.headline.collected.previous != null && before ? ` · ${money(d.headline.collected.previous)} ${before}` : ""}</span>
+                  <span><b>{money(d.headline.collected.value)}</b></span>
+                  <span className="muted">{plural(d.headline.collected.count ?? 0, "payout")} {when}</span>
                 </button>
                 <div className="seg">{RANGES.map((r) => <button key={r.id} className={range === r.id ? "on" : ""} onClick={() => pick(r.id)}>{r.label}</button>)}</div>
               </div>
-              <Chart trend={d.trend} />
+              <Chart trend={d.trend} rangeLabel={d.rangeLabel} showOut={showOut}
+                onShowOut={own ? (on) => { setShowOutLocal(on); void saveShowMoneyOut(on).catch(() => undefined); } : undefined} />
               <div className="dh-stats">
                 <div>
                   <button onClick={() => setDrill({ title: "Money in play", figure: money(d.headline.moneyInPlay.value), ids: d.headline.moneyInPlay.dealIds ?? [] })}>
@@ -219,10 +286,10 @@ export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
                   </button>
                 </div>
                 <button onClick={() => setDrill({ title: "Total deals", figure: String(d.headline.totalDeals.value), ids: d.headline.totalDeals.dealIds ?? [] })}>
-                  <span className="muted">Total deals</span><b>{d.headline.totalDeals.value}</b><small className="muted"><Comparison f={d.headline.totalDeals} before={before} /></small>
+                  <span className="muted">Total deals</span><b>{d.headline.totalDeals.value}</b><small className="muted">Added {when}</small>
                 </button>
                 <button onClick={() => setDrill({ title: "Avg deal size", figure: money(d.headline.averageDeal.value), ids: d.headline.averageDeal.dealIds ?? d.headline.totalDeals.dealIds ?? [] })}>
-                  <span className="muted">Avg deal size</span><b>{money(d.headline.averageDeal.value)}</b><small className="muted"><Comparison f={d.headline.averageDeal} before={before} asMoney /></small>
+                  <span className="muted">Avg deal size</span><b>{money(d.headline.averageDeal.value)}</b><small className="muted">{d.range === "all" ? "Across every deal" : `Across the deals added ${when}`}</small>
                 </button>
               </div>
               {/* Expected money that didn't pay out, by the day each deal closed; shown only when there is some. */}
@@ -283,6 +350,8 @@ export function Dashboard({ fixedRange }: { fixedRange?: Range } = {}) {
               {!tagged(d.revenueBySource) && !tagged(d.revenueByIndustry) && !tagged(d.revenueByPaymentMethod)
                 ? <p className="faint dash-prompt">Source, industry and payment method breakdowns will appear once you tag your deals.</p> : null}
             </div>
+            {/* New, and last: everything above is the Dashboard as it was (the website's hand-off §11.1). */}
+            {own ? <MoneySections /> : null}
           </div>
           <aside className="dash-side scroll">
             <h3>Needs attention</h3>
