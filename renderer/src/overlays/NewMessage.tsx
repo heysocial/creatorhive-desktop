@@ -3,13 +3,24 @@ import { Loader2, Search, X } from "lucide-react";
 import { api, keys, queryClient, rateLimitMessage, type Conversation, type Workspace } from "../lib/api";
 import { ch } from "../lib/bridge";
 import { useMembers, type Member } from "../lib/community";
+import { contactLabel, useStarterContacts } from "../lib/access";
 import { nav } from "../lib/nav";
 import { Avatar } from "../lib/ui";
 import { Badge } from "../views/messages/MessageRow";
 
 /** ⌘N: pick one person (or several, for a group) and open the conversation. */
 export function NewMessage({ onClose, workspace }: { onClose: () => void; workspace: Workspace }) {
-  const members = useMembers().data;
+  /*
+    A limited plan (UGC Starter, The Weekend Starter) can only start a DM with
+    its contacts, and the member directory is locked for it: offer those
+    instead ("Valentin · Video editor"), one at a time.
+  */
+  const contacts = useStarterContacts();
+  const limited = contacts.length > 0 && workspace === "creatorhive";
+  const directory = useMembers(!limited).data;
+  const members = useMemo(() => (limited
+    ? contacts.map((contact) => ({ id: contact.id, name: contactLabel(contact), avatarUrl: contact.avatarUrl } as Member))
+    : directory), [limited, contacts, directory]);
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState<Member[]>([]);
   const [index, setIndex] = useState(0);
@@ -66,7 +77,7 @@ export function NewMessage({ onClose, workspace }: { onClose: () => void; worksp
               if (e.key === "Backspace" && !q && picked.length) setPicked(picked.slice(0, -1));
               if (e.key === "Enter") {
                 e.preventDefault();
-                if (q && results[index]) { setPicked([...picked, results[index]]); setQ(""); }
+                if (q && results[index]) { setPicked(limited ? [results[index]] : [...picked, results[index]]); setQ(""); }
                 else void start(picked);
               }
             }} />
@@ -76,7 +87,7 @@ export function NewMessage({ onClose, workspace }: { onClose: () => void; worksp
           {!members ? <div className="palette-empty">Loading…</div> : null}
           {results.map((m, i) => (
             <button key={m.id} className={`palette-row ${i === index ? "sel" : ""}`} onMouseEnter={() => setIndex(i)}
-              onClick={() => { setPicked([...picked, m]); setQ(""); input.current?.focus(); }}>
+              onClick={() => { setPicked(limited ? [m] : [...picked, m]); setQ(""); input.current?.focus(); }}>
               <Avatar name={m.name} src={m.avatarUrl} seed={m.id} size={28} radius="8px" presence={m.presence} />
               <span className="t">{m.name}</span><Badge badge={m.badge} role={m.role} />
               <span className="hint">{m.headline ?? ""}</span>

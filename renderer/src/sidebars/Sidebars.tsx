@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { useHubHidden } from "../lib/access";
+import { contactLabel, useHubHidden, useStarterContacts, type StarterContact } from "../lib/access";
 import {
   Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
   Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen,
 } from "lucide-react";
-import { useChannels, useConversations, type Conversation, type Workspace } from "../lib/api";
+import { api, keys, queryClient, useChannels, useConversations, type Conversation, type Workspace } from "../lib/api";
 import type { SessionUser } from "../lib/bridge";
 import { commands } from "../lib/commands";
 import { nav, useNav } from "../lib/nav";
@@ -35,6 +35,54 @@ function dmAvatar(conversation: Conversation, size = 20) {
   );
 }
 
+/**
+ * A limited plan's contacts, pinned above its DMs even before the first message
+ * (the website and the phone apps do the same). Clicking opens the conversation,
+ * starting it the first time. Their conversations are left out of the list below.
+ */
+function PinnedContacts({ contacts, conversations }: { contacts: StarterContact[]; conversations: Conversation[] }) {
+  const { current } = useNav();
+  const [starting, setStarting] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  async function open(contact: StarterContact) {
+    const existing = conversations.find((c) => !c.isGroup && c.other?.id === contact.id);
+    if (existing) { nav.open({ kind: "dm", id: existing.id }); return; }
+    if (starting) return;
+    setStarting(contact.id);
+    setError(null);
+    try {
+      const { conversation } = await api<{ conversation: Conversation }>("/api/dms", { method: "POST", body: { userId: contact.id, workspace: "creatorhive" } });
+      await queryClient.invalidateQueries({ queryKey: keys.conversations("creatorhive") });
+      nav.open({ kind: "dm", id: conversation.id });
+    } catch {
+      setError("Couldn't start the conversation. Try again.");
+    } finally {
+      setStarting(null);
+    }
+  }
+  return (
+    <SidebarSection id="creatorhive-pinned" title="Pinned">
+      {contacts.map((contact) => {
+        const existing = conversations.find((c) => !c.isGroup && c.other?.id === contact.id);
+        const on = Boolean(existing && current.view.kind === "dm" && current.view.id === existing.id);
+        return (
+          <button key={contact.id} className={`sb-item ${on ? "on" : existing?.unreadCount ? "unread" : ""}`}
+            disabled={starting === contact.id} onClick={() => void open(contact)} title={`Message ${contactLabel(contact)}`}>
+            <Avatar name={contact.name} src={contact.avatarUrl} seed={contact.id} size={20} radius="6px" presence={existing?.other?.presence} />
+            <span className="label">{starting === contact.id ? "Opening…" : contactLabel(contact)}</span>
+            {existing?.unreadCount ? <span className="cnt">{existing.unreadCount}</span> : null}
+          </button>
+        );
+      })}
+      {error ? <div className="sb-empty">{error}</div> : null}
+    </SidebarSection>
+  );
+}
+
+const pinnedIds = (contacts: StarterContact[], conversations: Conversation[]) => new Set(conversations
+  .filter((c) => !c.isGroup && contacts.some((contact) => contact.id === c.other?.id))
+  .map((c) => c.id));
+
 function ChannelList({ workspace }: { workspace: Workspace }) {
   const { data, isLoading, isError } = useChannels(workspace);
   const channels = useMemo(
@@ -57,8 +105,15 @@ function ChannelList({ workspace }: { workspace: Workspace }) {
 
 function DmList({ workspace, limit = 12 }: { workspace: Workspace; limit?: number }) {
   const { data, isLoading, isError } = useConversations(workspace);
-  const conversations = useMemo(() => [...(data ?? [])].sort(byRecent).slice(0, limit), [data, limit]);
+  const allContacts = useStarterContacts();
+  const contacts = workspace === "creatorhive" ? allContacts : [];
+  const conversations = useMemo(() => {
+    const pinned = pinnedIds(contacts, data ?? []);
+    return [...(data ?? [])].filter((c) => !pinned.has(c.id)).sort(byRecent).slice(0, limit);
+  }, [data, limit, contacts]);
   return (
+    <>
+    {contacts.length > 0 ? <PinnedContacts contacts={contacts} conversations={data ?? []} /> : null}
     <SidebarSection id={`${workspace}-dms`} title="Direct messages">
       {isLoading ? <Skeleton rows={3} /> : null}
       {isError ? <div className="sb-empty">Couldn't load messages.</div> : null}
@@ -68,6 +123,7 @@ function DmList({ workspace, limit = 12 }: { workspace: Workspace; limit?: numbe
           view={{ kind: "dm", id: conversation.id }} count={conversation.unreadCount} />
       ))}
     </SidebarSection>
+    </>
   );
 }
 
@@ -97,10 +153,13 @@ function DirectMessages({ workspace, user }: { workspace: Workspace; user: Sessi
   const { data, isLoading, isError } = useConversations(workspace);
   const [filter, setFilter] = useState("");
   const { current } = useNav();
+  const allContacts = useStarterContacts();
+  const contacts = workspace === "creatorhive" ? allContacts : [];
   const conversations = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    return [...(data ?? [])].sort(byRecent).filter((c) => !q || c.displayName.toLowerCase().includes(q));
-  }, [data, filter]);
+    const pinned = pinnedIds(contacts, data ?? []);
+    return [...(data ?? [])].filter((c) => !pinned.has(c.id)).sort(byRecent).filter((c) => !q || c.displayName.toLowerCase().includes(q));
+  }, [data, filter, contacts]);
 
   return (
     <>
@@ -112,6 +171,7 @@ function DirectMessages({ workspace, user }: { workspace: Workspace; user: Sessi
           style={{ border: 0, background: "none", outline: "none", flex: 1, fontSize: 13 }} />
       </label>
       <div className="sb-scroll">
+        {contacts.length > 0 && !filter.trim() ? <PinnedContacts contacts={contacts} conversations={data ?? []} /> : null}
         {isLoading ? <Skeleton rows={6} /> : null}
         {isError ? <div className="sb-empty">Couldn't load messages.</div> : null}
         {conversations.map((conversation) => {

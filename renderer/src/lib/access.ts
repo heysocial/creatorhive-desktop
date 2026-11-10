@@ -28,6 +28,8 @@ export interface MeAccess {
   feedHome?: string | null;
   /** When The Weekend Starter's 30 days end (or ended). */
   communityEndsAt?: string | null;
+  /** Who a limited plan may start a DM with (see useStarterContacts). */
+  starterContacts?: StarterContact[];
 }
 
 export function useMeAccess() {
@@ -94,4 +96,30 @@ export function useFeedAccess() {
 /** Opens "Part of the UGC Academy" over Home (it listens for this). */
 export function openUpgrade() {
   window.dispatchEvent(new Event("ch:upgrade"));
+}
+
+/** Someone a limited plan can start a DM with (GET /api/me/access → starterContacts). */
+export interface StarterContact {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  /** "Video editor": The Weekend Starter's contacts have one (servers from Nov 10 2026). */
+  title?: string | null;
+}
+
+/**
+ * Who a limited plan may start a DM with, pinned at the top of its DMs:
+ * Vince on UGC Starter; Vince, Simon and Valentin on The Weekend Starter.
+ * Empty for everyone else (the Academy messages anyone).
+ */
+export function useStarterContacts(): StarterContact[] {
+  const access = useMeAccess().data?.access as (MeAccess & { starterContacts?: StarterContact[] }) | undefined;
+  if (!access || access.state !== "starter") return [];
+  return Array.isArray(access.starterContacts) ? access.starterContacts : [];
+}
+
+/** "Valentin · Video editor" when the contact has a title, else their name. */
+export function contactLabel(contact: StarterContact): string {
+  const first = contact.name.split(" ")[0] || contact.name;
+  return contact.title ? `${first} · ${contact.title}` : contact.name;
 }
