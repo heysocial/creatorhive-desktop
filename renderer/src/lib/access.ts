@@ -32,11 +32,24 @@ export interface MeAccess {
   starterContacts?: StarterContact[];
 }
 
+/**
+ * GET /api/me/access. Beside `access`, a Weekend Starter buyer's first steps
+ * (creatorhive-app docs/weekend-signup.md): `mustChangePassword` (still on the
+ * temporary password from the email) and `welcomePending` (the profile step).
+ */
+export interface MeAccessResponse {
+  access: MeAccess;
+  mustChangePassword?: boolean;
+  welcomePending?: boolean;
+}
+
+export const ME_ACCESS_KEY = ["me", "access"] as const;
+
 export function useMeAccess() {
   return useQuery({
-    queryKey: ["me", "access"],
+    queryKey: ME_ACCESS_KEY,
     staleTime: 300_000,
-    queryFn: () => api<{ access: MeAccess }>("/api/me/access"),
+    queryFn: () => api<MeAccessResponse>("/api/me/access"),
   });
 }
 

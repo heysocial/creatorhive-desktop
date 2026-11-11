@@ -4,6 +4,8 @@ import { ch, type SessionUser } from "../lib/bridge";
 const MESSAGES: Record<string, string> = {
   credentials: "That email and password don't match. Check them and try again.",
   too_many_attempts: "Too many attempts. Try again in a few minutes or reset your password.",
+  // The Weekend Starter's temporary password ran out (creatorhive-app docs/weekend-signup.md).
+  temp_password_expired: "Your temporary password has expired. Click “Forgot password?” and we’ll email you a link to choose your own.",
   offline: "Can't reach CreatorHive. Check your internet connection and try again.",
   missing: "Enter your email and password.",
   "no-account": "No CreatorHive account uses that Google email. Sign in with your email and password.",
@@ -137,7 +139,12 @@ export function SignIn({ onSignedIn, initialEmail = "" }: { onSignedIn: (user: S
           </label>
           <input id="password" className="field" type="password" autoComplete="current-password" autoFocus={Boolean(initialEmail)} value={password}
             onChange={(event) => setPassword(event.target.value)} />
-          {error ? <div className="signin-error" role="alert">{error}</div> : null}
+          {error ? (
+            <div className="signin-error" role="alert">
+              {error}
+              {error === MESSAGES.temp_password_expired ? <button type="button" className="signin-error-link" onClick={() => setForgot(true)}>Forgot password?</button> : null}
+            </div>
+          ) : null}
           <button type="submit" className="btn honey lg" style={{ marginTop: 10 }} disabled={busy || googleWaiting}>
             {busy ? "Signing in…" : "Sign in"}
           </button>

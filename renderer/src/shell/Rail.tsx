@@ -1,4 +1,6 @@
-import { Bell, Bookmark, Clapperboard, GraduationCap, House, MessageCircle, Shield, Sparkles, type LucideIcon } from "lucide-react";
+import { useState } from "react";
+import { Bell, Bookmark, Clapperboard, GraduationCap, House, Lock, MessageCircle, Shield, Sparkles, type LucideIcon } from "lucide-react";
+import { UpgradeDialog } from "../views/learn/Courses";
 import { useHubHidden } from "../lib/access";
 import { ch, type SessionUser } from "../lib/bridge";
 import { useChannels, useConversations, useHeySocialAccess } from "../lib/api";
@@ -43,8 +45,9 @@ export function Rail({ user }: { user: SessionUser }) {
   const other = current.ws === "hs" ? chUnread : hsUnread;
   const hsCounts = useHsSidebar(heySocial && current.ws === "hs").data?.counts;
   const admin = useAdminAccess().data;
-  // The Weekend Starter has no Creator Hub: no rail item at all.
-  const hubHidden = useHubHidden();
+  // The Weekend Starter has no Creator Hub: its rail item shows locked and offers the UGC Academy.
+  const hubLocked = useHubHidden();
+  const [upgrade, setUpgrade] = useState(false);
   const canAdmin = adminPages(admin).length > 0;
   const openReports = useOpenReports(Boolean(admin?.tabs.includes("moderation"))).data ?? 0;
   const supportUnread = useSupportUnread(Boolean(admin?.tabs.includes("support"))).data ?? 0;
@@ -68,6 +71,7 @@ export function Rail({ user }: { user: SessionUser }) {
 
   return (
     <nav className="rail" aria-label="Workspaces and sections">
+      {upgrade ? <UpgradeDialog onClose={() => setUpgrade(false)} /> : null}
       <button className={`ws ${current.ws === "ch" ? "on" : ""}`} title="CreatorHive (⌃⌘1)" aria-label="CreatorHive" onClick={() => nav.workspace("ch")}>
         <img src="./ch-logo.svg" alt="" />
         {current.ws !== "ch" && other.total > 0 ? <span className="badge">{countLabel(other.total)}</span> : null}
@@ -79,14 +83,17 @@ export function Rail({ user }: { user: SessionUser }) {
         </button>
       ) : null}
       <div className="rdiv" />
-      {SECTIONS[current.ws].filter((section) => (section !== "admin" || canAdmin) && (section !== "hub" || !hubHidden) && (section !== "edits" || Boolean(edits))).map((section) => {
+      {SECTIONS[current.ws].filter((section) => (section !== "admin" || canAdmin) && (section !== "edits" || Boolean(edits))).map((section) => {
         const meta = SECTION_META[section];
         const Icon = meta.icon;
         const count = section === "dms" ? here.dms : section === "activity" ? hsCounts?.activity ?? 0 : section === "admin" ? openReports + supportUnread : section === "edits" ? editsWaiting : 0;
+        const locked = section === "hub" && hubLocked;
         return (
-          <button key={section} className={`ritem ${current.section === section ? "on" : ""}`}
-            title={section === "edits" ? "Video editing" : meta.shortcut ? `${meta.label} (${meta.shortcut})` : meta.label} onClick={() => nav.section(section)}>
-            <span className="ib"><Icon /></span>
+          <button key={section} className={`ritem ${current.section === section && !locked ? "on" : ""} ${locked ? "locked" : ""}`}
+            aria-label={locked ? "Hub, part of the UGC Academy" : undefined}
+            title={locked ? "Hub · Part of the UGC Academy" : section === "edits" ? "Video editing" : meta.shortcut ? `${meta.label} (${meta.shortcut})` : meta.label}
+            onClick={() => (locked ? setUpgrade(true) : nav.section(section))}>
+            <span className="ib"><Icon />{locked ? <span className="rlock"><Lock /></span> : null}</span>
             {meta.label}
             {count > 0 ? <span className="badge">{countLabel(count)}</span> : null}
           </button>
