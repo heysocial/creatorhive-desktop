@@ -330,3 +330,6 @@
   .st-side > * { flex: 1 1 240px; }
   .st-track-head { flex-wrap: wrap; }
 }
+
+/* The Weekend Starter's track: one column, no grades. */
+.st-cols.ve-solo { grid-template-columns: minmax(0, 1fr); }

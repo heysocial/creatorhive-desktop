@@ -174,7 +174,6 @@ function DirectMessages({ workspace, user }: { workspace: Workspace; user: Sessi
       .filter((c) => !studentsOnly || cardFor(c));
   }, [data, filter, contacts, studentsOnly, cardFor]);
   const studentCount = (data ?? []).filter((c) => cardFor(c)).length;
-  const allWeekend = (board?.cards ?? []).every((c) => c.member.plan === "first3");
 
   return (
     <>
@@ -188,7 +187,7 @@ function DirectMessages({ workspace, user }: { workspace: Workspace; user: Sessi
       {workspace === "creatorhive" && board && studentCount > 0 ? (
         <div className="ve-dm-chips" role="tablist">
           <button role="tab" aria-selected={!studentsOnly} className={!studentsOnly ? "on" : ""} onClick={() => setStudentsOnly(false)}>All</button>
-          <button role="tab" aria-selected={studentsOnly} className={studentsOnly ? "on" : ""} onClick={() => setStudentsOnly(true)}><Clapperboard />{allWeekend ? "Weekend Starter" : "Starters"} · {studentCount}</button>
+          <button role="tab" aria-selected={studentsOnly} className={studentsOnly ? "on" : ""} onClick={() => setStudentsOnly(true)}><Clapperboard />Video edits · {studentCount}</button>
         </div>
       ) : null}
       <div className="sb-scroll">
@@ -269,7 +268,8 @@ function Learn() {
   const courses = useCourses().data ?? [];
   const improve = useImprove().data;
   // UGC Starter's grade is the track's letter; everyone else's is the percentage.
-  const grade = improve?.starter ? (improve.starter.overallGrade === "–" ? undefined : improve.starter.overallGrade) : improve?.grade.overallPercentage;
+  // The Weekend Starter has no grade (as on the website).
+  const grade = improve?.starter ? (improve.starter.overallGrade === "–" || improve.starter.plan === "first3" ? undefined : improve.starter.overallGrade) : improve?.grade.overallPercentage;
   const access = useResourcesAccess().data;
   const mine = useResourcePages(access === true).data ?? [];
   const guides = useImproveResources().data ?? [];

@@ -106,7 +106,7 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
   const next = [1, 2, 3].find((slot) => !bySlot.has(slot)) ?? 3;
   return (
     <div className="card st-now">
-      <div className="st-row-head"><div><span className="st-eyebrow">Now</span><b className="st-title big">{step.title}</b></div><GradePill grade={step.grade} /></div>
+      <div className="st-row-head"><div><span className="st-eyebrow">Now</span><b className="st-title big">{step.title}</b></div>{track.plan === "first3" ? null : <GradePill grade={step.grade} />}</div>
       <p className="st-lede">Film 3 videos and upload them here. <b>Our editor cuts all 3 for you</b>, so you start pitching with a finished portfolio.</p>
       <div className="st-slots">
         {[1, 2, 3].map((slot) => {
@@ -182,7 +182,7 @@ function CurrentCard({ step, track }: { step: StarterStep; track: StarterTrack }
   const count = step.count;
   return (
     <div className="card st-now">
-      <div className="st-row-head"><div><span className="st-eyebrow">Now</span><b className="st-title big">{step.title}</b></div><GradePill grade={step.grade} /></div>
+      <div className="st-row-head"><div><span className="st-eyebrow">Now</span><b className="st-title big">{step.title}</b></div>{track.plan === "first3" ? null : <GradePill grade={step.grade} />}</div>
       {count && step.id === "applications" ? (
         <>
           <div className="st-count"><b>{count.value}</b><span>of {count.target} sent</span></div>
@@ -223,7 +223,7 @@ function Timeline({ track }: { track: StarterTrack }) {
                 : (
                   <div className="st-row-head">
                     <div><b className="st-title">{step.title}</b><span className="muted">{step.detail}</span></div>
-                    <GradePill grade={step.grade} />
+                    {track.plan === "first3" ? null : <GradePill grade={step.grade} />}
                   </div>
                 )}
             </div>
@@ -281,15 +281,16 @@ export function StarterImprove({ track, resources }: { track: StarterTrack; reso
             <span className="st-eyebrow">{weekend ? "The Weekend Starter" : "UGC Starter"}</span><h2>{track.title ?? "Your path to your first paid deal"}</h2>
             {weekend ? <p className="muted ve-track-sub">Watch the course, upload 3 videos, and {editing?.editor ? firstName(editing.editor.name) : "your editor"} edits them for you.</p> : null}
           </div>
-          <Summary track={track} />
+          {/* The Weekend Starter has no grades (as on the website): no summary, no side column. */}
+          {weekend ? null : <Summary track={track} />}
         </div>
-        <div className="st-cols">
+        <div className={`st-cols ${weekend ? "ve-solo" : ""}`}>
           <div className="ve-main-col">
             <Timeline track={track} />
             {editing?.editor ? <EditorCard editor={editing.editor} /> : null}
             {editing?.stage ? <WhereTracker editing={editing} /> : null}
           </div>
-          <aside className="st-side">
+          {weekend ? null : <aside className="st-side">
             <div className="card st-side-card">
               <span className="section-label">AI Script Writer</span>
               <div className="st-count"><b>{sw.remaining}</b><span>of {sw.limit} scripts left this month</span></div>
@@ -301,7 +302,7 @@ export function StarterImprove({ track, resources }: { track: StarterTrack; reso
               <span className="section-label">How grades work</span>
               <p className="muted">{STARTER_GRADE_HELP}</p>
             </div>
-          </aside>
+          </aside>}
         </div>
       </section>
       <Resources resources={resources?.length ? resources : [...STARTER_RESOURCES]} onLocked={() => setUpgrade(true)} />
