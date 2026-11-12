@@ -6,10 +6,9 @@ import {
   type Course, type LessonNote,
 } from "../../lib/learn";
 import { RichText } from "../../lib/html";
-import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { Modal } from "../hub/parts";
 import { nav } from "../../lib/nav";
+import { openUpgrade } from "../../lib/access";
 
 const GRADIENTS = [
   "linear-gradient(120deg, #1F1E1C 55%, #FFCC04 55%)",
@@ -31,28 +30,7 @@ function Cover({ title, url, index, children }: { title: string; url: string | n
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-const ACADEMY_INCLUDES = ["All courses, not just New Bee", "Group coaching calls and events", "Every channel and the full feed", "DM any creator in the hive"];
-
-/** A locked course: what the UGC Academy adds, as the website's upgrade dialog says it. */
-export function UpgradeDialog({ onClose }: { onClose: () => void }) {
-  const access = useQuery({ queryKey: ["me", "access"], staleTime: 300_000, queryFn: () => api<{ access: { upgradeUrl: string | null } }>("/api/me/access") });
-  const url = access.data?.access.upgradeUrl ?? "https://cal.com/team/creatorhive/skool";
-  return (
-    <Modal width={400} onClose={onClose}>
-      <div className="upgrade">
-        <span className="upgrade-mark"><Lock /></span>
-        <h2>Part of the UGC Academy</h2>
-        <p className="muted">Every course, live group coaching calls, all the channels, and DMs with the whole community.</p>
-        <ul>{ACADEMY_INCLUDES.map((item) => <li key={item}><Check />{item}</li>)}</ul>
-        <button className="btn honey lg" onClick={() => { ch.app.openExternal(url); onClose(); }}>Upgrade</button>
-        <button className="btn ghost" onClick={onClose}>Not now</button>
-      </div>
-    </Modal>
-  );
-}
-
 export function Courses() {
-  const [upgrade, setUpgrade] = useState(false);
   const { data, isLoading, isError } = useCourses();
   const [filter, setFilter] = useState<"all" | "progress" | "done">("all");
   const last = lastLesson();
@@ -60,7 +38,6 @@ export function Courses() {
   const list = (data ?? []).filter((c) => filter === "all" || (filter === "done" ? c.lessonCount > 0 && c.completedCount === c.lessonCount : c.completedCount > 0 && c.completedCount < c.lessonCount));
   return (
     <div className="page">
-      {upgrade ? <UpgradeDialog onClose={() => setUpgrade(false)} /> : null}
       <div className="mhead">
         <h1>Courses</h1>
         <div className="acts"><div className="seg">
@@ -89,7 +66,7 @@ export function Courses() {
         <div className="course-grid">
           {list.map((c, i) => (
             <button key={c.id} className={`card course-card ${c.locked ? "locked" : ""}`}
-              onClick={() => (c.locked ? setUpgrade(true) : nav.open({ kind: "course", id: c.id }, "learn", "ch"))}>
+              onClick={() => (c.locked ? openUpgrade() : nav.open({ kind: "course", id: c.id }, "learn", "ch"))}>
               <Cover title={c.title} url={c.coverUrl} index={i}>{c.locked ? <span className="lock"><Lock /></span> : null}</Cover>
               <div className="cc-text">
                 <b>{c.title}</b>

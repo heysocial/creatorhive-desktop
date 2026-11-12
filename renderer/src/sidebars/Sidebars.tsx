@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { contactLabel, useHubHidden, useStarterContacts, type StarterContact } from "../lib/access";
+import { contactLabel, useAreaLocked, useHubHidden, useStarterContacts, type StarterContact } from "../lib/access";
 import {
   Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
   Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen,
@@ -88,16 +88,19 @@ const pinnedIds = (contacts: StarterContact[], conversations: Conversation[]) =>
   .map((c) => c.id));
 
 function ChannelList({ workspace }: { workspace: Workspace }) {
-  const { data, isLoading, isError } = useChannels(workspace);
+  // A plan without channels (UGC Starter, The Weekend Starter): one locked row, nothing asked for.
+  const locked = useAreaLocked("channels") && workspace === "creatorhive";
+  const { data, isLoading, isError } = useChannels(workspace, !locked);
   const channels = useMemo(
     () => soonLast((data ?? []).filter((c) => c.joined || !c.isPrivate).sort((a, b) => channelName(a.name).localeCompare(channelName(b.name))), (c) => c, data),
     [data],
   );
   return (
     <SidebarSection id={`${workspace}-channels`} title="Channels">
-      {isLoading ? <Skeleton /> : null}
-      {isError ? <div className="sb-empty">Couldn't load channels.</div> : null}
-      {!isLoading && !isError && channels.length === 0 ? <div className="sb-empty">No channels yet.</div> : null}
+      {locked ? <SidebarItem icon={<Hash />} label="All channels" view={{ kind: "feed" }} locked /> : null}
+      {locked ? null : isLoading ? <Skeleton /> : null}
+      {isError && !locked ? <div className="sb-empty">Couldn't load channels.</div> : null}
+      {!locked && !isLoading && !isError && channels.length === 0 ? <div className="sb-empty">No channels yet.</div> : null}
       {channels.map((channel) => (
         <SidebarItem key={channel.id} icon={channel.isPrivate && !channel.comingSoon ? <Lock /> : <Hash />} label={channelName(channel.name)}
           tag={channel.comingSoon ? <SoonTag /> : undefined} view={{ kind: "channel", id: channel.id }}
@@ -135,6 +138,9 @@ function DmList({ workspace, limit = 12 }: { workspace: Workspace; limit?: numbe
 function CreatorHiveHome() {
   const today = useTodayCount();
   const nextEvent = useNextEventDay();
+  const eventsLocked = useAreaLocked("events");
+  const leaderboardLocked = useAreaLocked("leaderboard");
+  const membersLocked = useAreaLocked("members");
   return (
     <>
       <SidebarHead title="CreatorHive" action={() => commands.run("new-message")} />
@@ -142,9 +148,9 @@ function CreatorHiveHome() {
       <div className="sb-scroll">
         <SidebarItem icon={<House />} label="Home" view={{ kind: "feed" }} />
         <SidebarItem icon={<Sun />} label="Today" view={{ kind: "today" }} quietCount={today} honeyCount />
-        <SidebarItem icon={<Calendar />} label="Events" view={{ kind: "events" }} meta={nextEvent} />
-        <SidebarItem icon={<Trophy />} label="Leaderboard" view={{ kind: "leaderboard" }} />
-        <SidebarItem icon={<Users />} label="Members" view={{ kind: "members" }} />
+        <SidebarItem icon={<Calendar />} label="Events" view={{ kind: "events" }} meta={nextEvent} locked={eventsLocked} />
+        <SidebarItem icon={<Trophy />} label="Leaderboard" view={{ kind: "leaderboard" }} locked={leaderboardLocked} />
+        <SidebarItem icon={<Users />} label="Members" view={{ kind: "members" }} locked={membersLocked} />
         <ChannelList workspace="creatorhive" />
         <DmList workspace="creatorhive" />
       </div>

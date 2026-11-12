@@ -1968,11 +1968,21 @@ html.is-popout body { background: var(--card); }
 .upgrade-mark svg { width: 26px; height: 26px; }
 .upgrade h2 { margin: 6px 0 0; font-size: 19px; }
 .upgrade p { margin: 0; line-height: 1.45; }
-.upgrade ul { list-style: none; padding: 0; margin: 6px 0; display: flex; flex-direction: column; gap: 8px; text-align: left; }
-.upgrade li { display: flex; gap: 8px; align-items: center; font-size: 13.5px; }
-.upgrade li svg { width: 17px; height: 17px; color: var(--honey); stroke-width: 2.6; flex: none; }
-.upgrade .btn { justify-content: center; }
-.upgrade .btn.ghost { background: transparent; box-shadow: none; color: var(--ink-3); }
+/* What the UGC Academy includes (shell/Upgrade.tsx): the sheet and the Hub's locked screen. */
+.academy-list { list-style: none; padding: 0; margin: 6px 0 2px; display: flex; flex-direction: column; gap: 9px; text-align: left; color: var(--ink); user-select: text; }
+.academy-list li { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; line-height: 1.4; }
+.academy-list li svg { width: 17px; height: 17px; margin-top: 1px; color: var(--green); stroke-width: 2.6; flex: none; }
+.modal-foot:has(> .upgrade-foot) { border-top: 0; padding-top: 6px; }
+.upgrade-foot { flex: 1; display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.upgrade-foot .btn { justify-content: center; }
+.upgrade-foot .btn.ghost { background: transparent; box-shadow: none; color: var(--ink-3); }
+.sb-item.locked { color: var(--ink-3); }
+.sb-item .sb-lock { width: 12px; height: 12px; margin-left: auto; color: var(--ink-4, var(--ink-3)); flex: none; }
+.soon-screen.academy-screen { overflow-y: auto; align-items: safe center; }
+.academy-locked { max-width: 440px; padding: 36px 28px 28px; }
+.academy-locked h2 { margin: 0; font-size: 19px; color: var(--ink); }
+.academy-locked .academy-list { align-self: stretch; }
+.academy-locked-actions { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
 
 .signin-sub { margin: 0 0 6px; font-size: 13px; color: var(--ink-3); text-align: left; }
 .signin-note { padding: 12px 14px; border-radius: 12px; background: rgba(52,199,89,.12); color: var(--ink-2); font-size: 13.5px; line-height: 1.45; text-align: left; }

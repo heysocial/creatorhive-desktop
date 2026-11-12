@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { ArrowUpRight, Check, Lock, PlayCircle, Plus, Sparkles, Upload } from "lucide-react";
-import { ch } from "../../lib/bridge";
 import { useCourses, type ImproveResource } from "../../lib/learn";
 import { editorChat, firstName, shortDay } from "../../lib/videoEdits";
 import { EditorCard, WhereTracker } from "./EditorParts";
 import { nav } from "../../lib/nav";
+import { openUpgrade } from "../../lib/access";
 import {
   formatBytes,
   formatDuration,
@@ -20,7 +20,6 @@ import {
   type StarterTrack,
   type SubmissionVideo,
 } from "../../lib/starter";
-import { UpgradeDialog } from "./Courses";
 import "../../styles/starter.css";
 
 /*
@@ -49,12 +48,12 @@ function openVideos() {
   nav.open({ kind: "starter-videos" }, "learn", "ch");
 }
 
-function StuckBox({ text, upgradeUrl }: { text: string; upgradeUrl: string }) {
+function StuckBox({ text }: { text: string }) {
   return (
     <div className="st-stuck">
       <span className="st-stuck-why">{text}</span>
       <b>This is the exact thing we fix on coaching calls.</b>
-      <button className="btn honey" onClick={() => ch.app.openExternal(upgradeUrl)}>Upgrade</button>
+      <button className="btn honey" onClick={openUpgrade}>Upgrade</button>
     </div>
   );
 }
@@ -126,7 +125,7 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
       <button className="btn honey lg" onClick={openVideos}>
         <Upload />{ready === 3 ? "Review and submit" : ready === 0 ? "Upload your videos" : `Upload video ${next}`}
       </button>
-      {step.stuck ? <StuckBox text={step.stuck} upgradeUrl={track.upgradeUrl} /> : null}
+      {step.stuck ? <StuckBox text={step.stuck} /> : null}
     </div>
   );
 }
@@ -197,7 +196,7 @@ function CurrentCard({ step, track }: { step: StarterStep; track: StarterTrack }
       ) : (
         <button className="st-link" onClick={() => nav.open({ kind: "hub", page: "deals" }, "hub", "ch")}>Open your Hub →</button>
       )}
-      {step.stuck ? <StuckBox text={step.stuck} upgradeUrl={track.upgradeUrl} /> : null}
+      {step.stuck ? <StuckBox text={step.stuck} /> : null}
     </div>
   );
 }
@@ -268,13 +267,11 @@ function Resources({ resources, onLocked }: { resources: ImproveResource[]; onLo
 }
 
 export function StarterImprove({ track, resources }: { track: StarterTrack; resources: ImproveResource[] | null | undefined }) {
-  const [upgrade, setUpgrade] = useState(false);
   const sw = track.scriptWriter;
   const editing = useSubmission().data?.state?.editing ?? null;
   const weekend = track.plan === "first3";
   return (
     <>
-      {upgrade ? <UpgradeDialog onClose={() => setUpgrade(false)} /> : null}
       <section className="st-track">
         <div className="st-track-head">
           <div>
@@ -305,7 +302,7 @@ export function StarterImprove({ track, resources }: { track: StarterTrack; reso
           </aside>}
         </div>
       </section>
-      <Resources resources={resources?.length ? resources : [...STARTER_RESOURCES]} onLocked={() => setUpgrade(true)} />
+      <Resources resources={resources?.length ? resources : [...STARTER_RESOURCES]} onLocked={openUpgrade} />
     </>
   );
 }

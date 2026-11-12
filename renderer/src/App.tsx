@@ -28,6 +28,7 @@ import { usePresence } from "./lib/realtime";
 import { SupportWidget } from "./shell/Support";
 import { LivePopups } from "./shell/LivePopups";
 import { FirstSteps } from "./shell/FirstSteps";
+import { UpgradeHost } from "./shell/Upgrade";
 
 type Auth = { state: "loading" } | { state: "offline" } | { state: "signedOut" } | { state: "signedIn"; user: SessionUser };
 type Overlay = null | "quick-open" | "shortcuts" | "new-message";
@@ -279,6 +280,7 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       {updateReady && !updateLater ? <UpdateBanner version={updateReady} onLater={() => setUpdateLater(true)} /> : null}
       {locked ? <LockScreen /> : <LivePopups />}
       <HubDialogs />
+      <UpgradeHost />
       <DealFormHost />
       <ExportHost />
       <PromptHost />
