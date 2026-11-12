@@ -2130,3 +2130,18 @@ html.is-popout body { background: var(--card); }
 .fs-gender > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .fs-gender .chip { height: 44px; padding: 0 16px; border-radius: 22px; font-size: 15px; }
 .signin-error-link { display: block; margin-top: 6px; font-weight: 650; text-decoration: underline; text-underline-offset: 2px; color: inherit; }
+
+/* "Book a call with our team": the Cal.com booking over the window (shell/Booking.tsx). */
+.booking-scrim { position: fixed; z-index: 40; -webkit-app-region: no-drag; }
+.booking { width: min(960px, calc(100% - 48px)); height: min(720px, calc(100% - 48px)); max-width: none; max-height: none; overflow: hidden; }
+.booking-head { padding: 12px 12px 12px 18px; border-bottom: 1px solid var(--line); font-size: 15px; }
+.booking-head > svg { width: 18px; height: 18px; color: var(--ink-3); }
+.booking-head .iconbtn { margin-left: 0; }
+.booking-head .iconbtn:first-of-type { margin-left: auto; }
+.booking-body { position: relative; flex: 1; min-height: 0; background: #FFFFFF; border-radius: 0 0 14px 14px; overflow: hidden; }
+.booking-body iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
+.booking-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #6E6B66; font-size: 13.5px; pointer-events: none; }
+@media (prefers-color-scheme: dark) {
+  .booking-body { background: #101010; }
+  .booking-loading { color: #ABA69E; }
+}

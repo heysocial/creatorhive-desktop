@@ -1,8 +1,8 @@
 import { Lock } from "lucide-react";
-import { ch } from "../../lib/bridge";
 import { nav } from "../../lib/nav";
 import { useMeAccess } from "../../lib/access";
 import { AcademyIncludes, upgradeUrlOf } from "../../shell/Upgrade";
+import { talkToTeam } from "../../shell/Booking";
 
 /**
  * What a Hub view shows on a plan without the Hub (The Weekend Starter): a
@@ -23,7 +23,7 @@ export function HubLocked() {
             <p className="soon-description">Here's everything the UGC Academy includes:</p>
             <AcademyIncludes access={access} />
             <div className="academy-locked-actions">
-              <button className="btn honey" onClick={() => ch.app.openExternal(url)}>Talk to our team</button>
+              <button className="btn honey" onClick={() => talkToTeam(access, url)}>Talk to our team</button>
               <button className="btn" onClick={() => nav.open({ kind: "learn", page: "improve" }, "learn", "ch")}>Open Learn</button>
             </div>
           </div>

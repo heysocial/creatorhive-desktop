@@ -252,6 +252,13 @@ function createWindow({ show }) {
     event.preventDefault();
     openExternally(url);
   });
+  // Esc inside an embedded page (the Cal.com booking pop-up) never reaches the
+  // interface's own key handlers; tell it, so Esc still closes the pop-up.
+  contents.on("before-input-event", (_event, input) => {
+    if (input.type !== "keyDown" || input.key !== "Escape") return;
+    const focused = contents.focusedFrame;
+    if (focused && focused !== contents.mainFrame) send("window:escape");
+  });
 
   mainWindow.on("enter-full-screen", () => send("window:fullscreen", true));
   mainWindow.on("leave-full-screen", () => send("window:fullscreen", false));

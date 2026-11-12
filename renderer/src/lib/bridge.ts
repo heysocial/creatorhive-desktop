@@ -143,6 +143,8 @@ export interface Bridge {
     popout(target: { kind: "dm" | "channel" | "thread" | "deal" | "lesson" | "settings" | "huddle"; id: string; title?: string }): void;
     onFullscreen: Listen<boolean>;
     onFocus: Listen<boolean>;
+    /** Esc pressed while a frame inside the page (the booking pop-up) has focus; main window only. */
+    onEscape: Listen<void>;
   };
 }
 

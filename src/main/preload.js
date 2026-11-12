@@ -108,5 +108,6 @@ contextBridge.exposeInMainWorld("ch", {
     popout: (target) => ipcRenderer.send("window:popout", target),
     onFullscreen: listen("window:fullscreen"),
     onFocus: listen("window:focus"),
+    onEscape: listen("window:escape"),
   },
 });

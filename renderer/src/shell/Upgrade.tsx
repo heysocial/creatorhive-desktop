@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Check, Lock } from "lucide-react";
-import { ch } from "../lib/bridge";
 import { useMeAccess, type MeAccess } from "../lib/access";
 import { Modal } from "../views/hub/parts";
+import { talkToTeam } from "./Booking";
 
 /*
   "Part of the UGC Academy": the one sheet every locked thing opens (the rail's
@@ -58,7 +58,7 @@ export function UpgradeDialog({ onClose }: { onClose: () => void }) {
   return (
     <Modal width={440} onClose={onClose} foot={
       <div className="upgrade-foot">
-        <button className="btn honey lg" onClick={() => { ch.app.openExternal(url); onClose(); }}>Talk to our team</button>
+        <button className="btn honey lg" onClick={() => { onClose(); talkToTeam(access, url); }}>Talk to our team</button>
         <button className="btn ghost" onClick={onClose}>Not now</button>
       </div>
     }>

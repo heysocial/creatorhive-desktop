@@ -29,6 +29,7 @@ import { SupportWidget } from "./shell/Support";
 import { LivePopups } from "./shell/LivePopups";
 import { FirstSteps } from "./shell/FirstSteps";
 import { UpgradeHost } from "./shell/Upgrade";
+import { BookingHost } from "./shell/Booking";
 
 type Auth = { state: "loading" } | { state: "offline" } | { state: "signedOut" } | { state: "signedIn"; user: SessionUser };
 type Overlay = null | "quick-open" | "shortcuts" | "new-message";
@@ -281,6 +282,7 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       {locked ? <LockScreen /> : <LivePopups />}
       <HubDialogs />
       <UpgradeHost />
+      <BookingHost />
       <DealFormHost />
       <ExportHost />
       <PromptHost />
