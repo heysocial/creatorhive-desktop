@@ -95,6 +95,12 @@ contextBridge.exposeInMainWorld("ch", {
       return ipcRenderer.invoke("files:videoInfo", filePath);
     },
     putFile: (request) => ipcRenderer.invoke("files:putFile", request),
+    /** One part of a multipart upload: bytes [start, end) of the file, to its presigned URL. */
+    putPart: (request) => ipcRenderer.invoke("files:putPart", request),
+    /** Staff "Download all": a folder picked once, then each clip saved under it. */
+    pickFolder: (title) => ipcRenderer.invoke("files:pickFolder", { title }),
+    saveInto: (request) => ipcRenderer.invoke("files:saveInto", request),
+    showInFolder: (filePath) => ipcRenderer.invoke("files:showInFolder", filePath),
     cancelPut: (id) => ipcRenderer.send("files:putCancel", id),
     onPutProgress: listen("files:putProgress"),
   },

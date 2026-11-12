@@ -131,6 +131,11 @@ export interface Bridge {
     pickVideo(): Promise<LocalVideoFile | null>;
     videoInfo(file: File): Promise<LocalVideoFile | null>;
     putFile(request: { id: string; url: string; type: string; filePath: string }): Promise<{ ok: boolean; status?: number; error?: string }>;
+    putPart(request: { id: string; url: string; filePath: string; start: number; end: number }): Promise<{ ok: boolean; status?: number; error?: string }>;
+    pickFolder(title: string): Promise<string | null>;
+    /** Saves `url` to <folder>/<parts…> (each part cleaned); only a folder from pickFolder. */
+    saveInto(request: { folder: string; parts: string[]; url: string }): Promise<{ ok: boolean; path?: string; status?: number; error?: string }>;
+    showInFolder(filePath: string): Promise<void>;
     cancelPut(id: string): void;
     onPutProgress: Listen<{ id: string; sent: number; total: number }>;
   };

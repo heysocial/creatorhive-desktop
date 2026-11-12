@@ -13,7 +13,10 @@ import {
   resetsLabel,
   STARTER_GRADE_HELP,
   STARTER_RESOURCES,
-  useSlotUploads,
+  canEditClipsNow,
+  clipsLabel,
+  clipsOf,
+  useClipUploads,
   useSubmission,
   type StarterGrade,
   type StarterStep,
@@ -60,21 +63,22 @@ function StuckBox({ text }: { text: string }) {
 
 function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack }) {
   const submission = useSubmission().data;
-  const inFlight = useSlotUploads();
+  const inFlight = useClipUploads();
   const state = submission?.state ?? null;
-  const bySlot = new Map((state?.videos ?? []).map((v) => [v.slot, v]));
+  const clips = (slot: number) => clipsOf(state, slot);
 
   if (step.state === "done" || state?.status === "submitted") {
     const editing = state?.editing;
     const editorName = editing?.editor ? firstName(editing.editor.name) : "our editor";
+    const editable = canEditClipsNow(state);
     return (
       <div className="card st-now">
         <div className="st-row-head">
           <div>
             <b className="st-title">{track.plan === "first3" ? `Step ${step.number} · ` : ""}{step.title}{state?.submittedAt ? <span className="ve-done-pill"><Check />Submitted {shortDay(state.submittedAt)}</span> : null}</b>
             <span className="muted">
-              {editing?.canReplace ? `You can still replace a video until ${editorName} starts editing.`
-                : editing ? <>Your originals are with {editorName}, at full quality. To swap a video now, <button className="ve-inline-link" onClick={() => editorChat.open()}>message him</button>.</>
+              {editable ? `Sent. You can still add or remove clips until ${editorName} starts editing.`
+                : editing ? <>Your clips are with {editorName}, at full quality. To change a clip now, <button className="ve-inline-link" onClick={() => editorChat.open()}>message him</button>.</>
                 : step.detail}
             </span>
           </div>
@@ -87,43 +91,56 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
           </div>
         )}
         <div className="st-slots">{[1, 2, 3].map((slot) => {
-          const v = bySlot.get(slot);
+          const list = clips(slot);
+          const v = list[0];
           if (!v) return <span key={slot} className="st-empty" style={{ height: 96 }} />;
           return (
-            <div key={slot} className="ve-sub-slot">
-              <Thumb video={v} height={editing ? 150 : 96} />
-              {editing ? <span className="ve-sub-name"><b>{v.fileName}</b><small className="faint">{[formatDuration(v.durationSeconds), formatBytes(v.sizeBytes)].filter(Boolean).join(" · ")}</small></span> : null}
-              {editing?.canReplace ? <button className="btn" onClick={openVideos}>Replace</button> : null}
+            <div key={slot} className="ve-sub-slot mc-step-slot">
+              <button className="mc-step-btn" title="See your clips" onClick={openVideos}><Thumb video={v} height={editing ? 150 : 96} /></button>
+              <small>Video {slot} · {clipsLabel(list.length)}</small>
+              {editing ? <span className="ve-sub-name"><small className="faint">{formatBytes(list.reduce((sum, c) => sum + c.sizeBytes, 0))}</small></span> : null}
             </div>
           );
         })}</div>
+        {editable ? <button className="btn" onClick={openVideos}><Plus />Add or remove clips</button> : null}
       </div>
     );
   }
 
-  const ready = state?.videos.length ?? step.count?.value ?? 0;
-  const next = [1, 2, 3].find((slot) => !bySlot.has(slot)) ?? 3;
+  const filled = [1, 2, 3].filter((slot) => clips(slot).length > 0).length;
+  const ready = state ? filled : step.count?.value ?? 0;
+  const next = [1, 2, 3].find((slot) => clips(slot).length === 0) ?? 3;
   return (
     <div className="card st-now">
       <div className="st-row-head"><div><span className="st-eyebrow">Now</span><b className="st-title big">{step.title}</b></div>{track.plan === "first3" ? null : <GradePill grade={step.grade} />}</div>
-      <p className="st-lede">Film 3 videos and upload them here. <b>Our editor cuts all 3 for you</b>, so you start pitching with a finished portfolio.</p>
+      <p className="st-lede">Film 3 videos and add all their clips here. <b>Our editor puts each one together for you</b>, so you start pitching with a finished portfolio.</p>
       <div className="st-slots">
         {[1, 2, 3].map((slot) => {
-          const v = bySlot.get(slot);
-          if (v) return <Thumb key={slot} video={v} height={120} />;
-          const up = inFlight[slot];
+          const list = clips(slot);
+          const ups = inFlight.filter((u) => u.slot === slot);
+          if (list[0]) {
+            const total = list.length + ups.length;
+            return (
+              <button key={slot} className="mc-step-slot mc-step-btn" onClick={openVideos}>
+                <Thumb video={list[0]} height={120} />
+                <small>{clipsLabel(total)}{ups.length ? " · uploading" : ""}</small>
+              </button>
+            );
+          }
+          const size = ups.reduce((sum, u) => sum + u.size, 0);
+          const pct = size ? Math.round((ups.reduce((sum, u) => sum + u.sent, 0) / size) * 100) : 0;
           return (
             <button key={slot} className="st-empty" style={{ height: 120 }} onClick={openVideos}>
-              {up ? <><span className="st-mini-bar"><i style={{ width: `${up.size ? Math.round((up.sent / up.size) * 100) : 0}%` }} /></span><small>{up.status === "failed" ? "Upload stopped" : `Uploading ${up.size ? Math.round((up.sent / up.size) * 100) : 0}%`}</small></>
+              {ups.length ? <><span className="st-mini-bar"><i style={{ width: `${pct}%` }} /></span><small>{ups.some((u) => u.status === "failed") ? "Upload stopped" : `Uploading ${pct}%`}</small></>
                 : <><Plus /><small>Video {slot}</small></>}
             </button>
           );
         })}
       </div>
-      <div className="st-progress"><span className="st-bar"><i style={{ width: `${(ready / 3) * 100}%` }} /></span><b>{ready} of 3 uploaded</b></div>
+      <div className="st-progress"><span className="st-bar"><i style={{ width: `${(ready / 3) * 100}%` }} /></span><b>{ready} of 3 videos have clips</b></div>
       {submission?.unavailable ? <p className="faint">{submission.unavailable}</p> : null}
       <button className="btn honey lg" onClick={openVideos}>
-        <Upload />{ready === 3 ? "Review and submit" : ready === 0 ? "Upload your videos" : `Upload video ${next}`}
+        <Upload />{ready === 3 ? "Review and submit" : ready === 0 ? "Add your clips" : `Add clips to video ${next}`}
       </button>
       {step.stuck ? <StuckBox text={step.stuck} /> : null}
     </div>

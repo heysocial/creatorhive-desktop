@@ -333,3 +333,24 @@
 
 /* The Weekend Starter's track: one column, no grades. */
 .st-cols.ve-solo { grid-template-columns: minmax(0, 1fr); }
+
+/* Several clips per video (creatorhive-app docs/multi-clip.md) */
+.ve-clip-counts { font-size: 11.5px; font-weight: 600; color: var(--ink-3); margin-top: -2px; }
+.ve-slot.ve-slot-multi { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+.ve-clip-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.ve-clip-dl { height: 26px; font-size: 12px; padding: 0 9px; }
+.ve-clip-dl svg { width: 13px; height: 13px; }
+.ve-clips { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.ve-clip { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.ve-clip-thumb { position: relative; width: 34px; border-radius: 6px; overflow: hidden; padding: 0; }
+.ve-clip-thumb .ve-still { border-radius: 6px; aspect-ratio: 3 / 4; }
+.ve-clip-thumb .ve-play { width: 18px; height: 18px; opacity: 0; transition: opacity .12s; }
+.ve-clip-thumb .ve-play svg { width: 9px; height: 9px; margin-left: 1px; }
+.ve-clip-thumb:hover .ve-play { opacity: 1; }
+.ve-clip-name { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.ve-clip-name .ve-file { font-size: 13px; }
+.ve-clip-name .faint { font-size: 11.5px; }
+.ve-clip .iconbtn:hover { background: var(--card-3); color: var(--ink); }
+.ve-slot-original .btn.ve-clip-dl { margin-top: 0; }
+.ve-clip-head { flex-wrap: wrap; }
+.ve-clip-head .ve-kicker { white-space: nowrap; }

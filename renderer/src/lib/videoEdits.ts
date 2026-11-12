@@ -131,6 +131,8 @@ export interface BoardCard {
   dueOn: string | null;
   member: EditPerson & { plan: "first3" | "starter" | "other" };
   thumbnails: Array<{ slot: number; url: string | null }>;
+  /** Clips per video, e.g. { 1: 4, 2: 3, 3: 5 }. Older servers leave it out. */
+  clipCounts?: Record<number, number>;
   unread: number;
   progress: string;
   opened: boolean;
@@ -145,7 +147,10 @@ export interface BoardResponse {
 
 export interface StaffOriginal {
   id: string;
+  /** Video 1, 2 or 3; several clips per slot, in `position` order. */
   slot: number;
+  /** Older servers leave it out (one file per video). */
+  position?: number;
   fileName: string;
   sizeBytes: number;
   durationSeconds: number | null;
@@ -528,4 +533,75 @@ export function cancelVersionUpload(key: string) {
 
 export function openCard(cardId: string) {
   nav.open({ kind: "video-edits", cardId }, "edits", "ch");
+}
+
+/* ---------- Staff: download a student's clips into a folder (creatorhive-app docs/multi-clip.md) ---------- */
+
+/** A card's originals for one video (or all), in order: by slot, then position. */
+export function clipsFor(card: StaffCard, slot: number | null = null): StaffOriginal[] {
+  return card.originals
+    .filter((o) => slot == null || o.slot === slot)
+    .sort((a, b) => a.slot - b.slot || (a.position ?? 0) - (b.position ?? 0));
+}
+
+export interface ClipDownload { done: number; total: number; slot: number | null; error: string | null }
+
+let clipDownloads: Record<string, ClipDownload> = {};
+const downloadListeners = new Set<() => void>();
+function setClipDownload(cardId: string, value: ClipDownload | null) {
+  const next = { ...clipDownloads };
+  if (value) next[cardId] = value;
+  else delete next[cardId];
+  clipDownloads = next;
+  for (const listener of downloadListeners) listener();
+}
+
+/** Downloads in progress, by card: they carry on when the panel closes. */
+export function useClipDownloads() {
+  return useSyncExternalStore(
+    (listener) => { downloadListeners.add(listener); return () => downloadListeners.delete(listener); },
+    () => clipDownloads,
+  );
+}
+
+/**
+ * "Download all" (slot null) or "Download Video N": asks for a folder once, then
+ * saves each clip as <folder>/<Student name>/Video N/01 - <file name>, one after
+ * another. The presigned links last an hour, so a refused one is fetched again.
+ */
+export async function downloadClips(card: StaffCard, slot: number | null = null): Promise<void> {
+  if (clipDownloads[card.id] && !clipDownloads[card.id].error) return;
+  const list = clipsFor(card, slot);
+  if (!list.length) return;
+  const first = firstName(card.member.name);
+  const folder = await ch.files.pickFolder(slot ? `Save ${first}'s Video ${slot}` : `Save ${first}'s clips`);
+  if (!folder) return;
+  const numberOf = (o: StaffOriginal) => clipsFor(card, o.slot).findIndex((c) => c.id === o.id) + 1;
+  let last: string | null = null;
+  for (const [index, original] of list.entries()) {
+    setClipDownload(card.id, { done: index, total: list.length, slot, error: null });
+    const parts = [card.member.name, `Video ${original.slot}`, `${String(numberOf(original)).padStart(2, "0")} - ${original.fileName}`];
+    let result = await ch.files.saveInto({ folder, parts, url: original.downloadUrl });
+    if (!result.ok) {
+      // An expired link (or a dropped connection): fresh links, then once more.
+      const fresh = await queryClient.fetchQuery({
+        queryKey: cardKey(card.id),
+        staleTime: 0,
+        queryFn: async () => (await api<{ card: StaffCard }>(`/api/video-edits/${card.id}`)).card,
+      }).catch(() => null);
+      const url = fresh?.originals.find((o) => o.id === original.id)?.downloadUrl ?? original.downloadUrl;
+      result = await ch.files.saveInto({ folder, parts, url });
+    }
+    if (!result.ok) {
+      setClipDownload(card.id, { done: index, total: list.length, slot, error: `${original.fileName} didn't download. Try again.` });
+      return;
+    }
+    last = result.path ?? last;
+  }
+  setClipDownload(card.id, null);
+  if (last) void ch.files.showInFolder(last);
+}
+
+export function dismissClipDownload(cardId: string) {
+  if (clipDownloads[cardId]?.error) setClipDownload(cardId, null);
 }

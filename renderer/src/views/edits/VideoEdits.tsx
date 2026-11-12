@@ -10,7 +10,7 @@ import { Avatar } from "../../lib/ui";
 import { clock, dayLabel } from "../../lib/format";
 import {
   EDIT_STAGES, EDIT_STAGE_LABELS, STAGE_CLASS, cancelVersionUpload, daysUntil, dueIn, firstName, formatDueDate, formatMoment,
-  patchCard, planLabel, replyToStudent, shortDay, staffComment, uploadKey, uploadVersion, useVersionUploads, useVideoEditCard,
+  clipsFor, dismissClipDownload, downloadClips, patchCard, planLabel, useClipDownloads, replyToStudent, shortDay, staffComment, uploadKey, uploadVersion, useVersionUploads, useVideoEditCard,
   useVideoEditsBoard, versionsOf, type BoardCard, type EditStage, type StaffCard, type StaffEditVersion, type StaffOriginal,
 } from "../../lib/videoEdits";
 import { useLayer } from "../hub/parts";
@@ -78,6 +78,7 @@ function BoardCardView({ card, selected, ghost, onPointerDown }: { card: BoardCa
           return <VideoStill key={slot} thumbnailUrl={thumb?.url} label={thumb?.url ? undefined : String(slot)} />;
         })}
       </div>
+      {card.clipCounts ? <span className="ve-clip-counts">{[1, 2, 3].map((slot) => card.clipCounts?.[slot] ?? 0).join(" · ")} clips</span> : null}
       <div className="ve-card-chips">
         <DueChip card={card} />
         {card.member.plan !== "first3" ? <span className="ve-chip quiet">{planLabel(card.member.plan)}</span> : null}
@@ -217,7 +218,7 @@ function CardBody({ card, user, onClose, onPlay }: { card: StaffCard; user: Sess
   const first = firstName(card.member.name);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savingAll, setSavingAll] = useState(false);
+  const download = useClipDownloads()[card.id];
   const newest = Math.max(0, ...card.edits.filter((e) => e.status === "ready").map((e) => e.version));
   const primary = card.stage === "revisions" ? `Send v${Math.max(2, newest)} for review` : card.stage === "submitted" || card.stage === "in_editing" ? "Move to Ready to review" : null;
 
@@ -229,12 +230,6 @@ function CardBody({ card, user, onClose, onPlay }: { card: StaffCard; user: Sess
   async function stageMenu() {
     const choice = await ch.menu.popup(EDIT_STAGES.map((stage) => ({ id: stage, label: EDIT_STAGE_LABELS[stage], checked: stage === card.stage })));
     if (choice && choice !== card.stage) void move(choice as EditStage);
-  }
-  async function saveAll() {
-    setSavingAll(true);
-    const result = await ch.files.saveMany(card.originals.map((o) => ({ url: o.downloadUrl, name: `${first} · Video ${o.slot} · ${o.fileName}` })), `Save ${first}'s 3 originals`);
-    setSavingAll(false);
-    if (!result.ok && !result.canceled) setError("The download didn't finish. Try again.");
   }
   function message() {
     if (!card.conversationId) return;
@@ -274,11 +269,16 @@ function CardBody({ card, user, onClose, onPlay }: { card: StaffCard; user: Sess
           </div>
         ) : null}
         <div className="ve-sec-head">
-          <h3>{card.originals.length === 3 ? "Her 3 videos" : "Her videos"}</h3>
-          {card.originals.length ? <button className="btn" disabled={savingAll} onClick={() => void saveAll()}><Download />{savingAll ? "Downloading…" : `Download all ${card.originals.length} originals · ${formatBytes(card.totalBytes)}`}</button> : null}
+          <h3>Her videos</h3>
+          {card.originals.length ? (
+            <button className="btn" disabled={Boolean(download && !download.error)} onClick={() => { dismissClipDownload(card.id); void downloadClips(card); }}>
+              <Download />{download && !download.error ? `Downloading ${download.done + 1} of ${download.total}` : `Download all · ${card.originals.length} ${card.originals.length === 1 ? "clip" : "clips"} · ${formatBytes(card.totalBytes)}`}
+            </button>
+          ) : null}
         </div>
+        {download?.error ? <div className="ve-error" role="alert">{download.error}</div> : null}
         {[1, 2, 3].map((slot) => (
-          <SlotRow key={slot} card={card} slot={slot} original={card.originals.find((o) => o.slot === slot)} versions={versionsOf(card.edits, slot)} onPlay={onPlay} />
+          <SlotRow key={slot} card={card} slot={slot} clips={clipsFor(card, slot)} versions={versionsOf(card.edits, slot)} onPlay={onPlay} />
         ))}
         <Thread card={card} user={user} />
       </div>
@@ -299,7 +299,7 @@ function DueRow({ card, onError }: { card: StaffCard; onError: (message: string 
   );
 }
 
-function SlotRow({ card, slot, original, versions, onPlay }: { card: StaffCard; slot: number; original: StaffOriginal | undefined; versions: StaffEditVersion[]; onPlay: (p: { source: PlayerSource; title: string }) => void }) {
+function SlotRow({ card, slot, clips, versions, onPlay }: { card: StaffCard; slot: number; clips: StaffOriginal[]; versions: StaffEditVersion[]; onPlay: (p: { source: PlayerSource; title: string }) => void }) {
   const uploads = useVersionUploads();
   const up = uploads[uploadKey(card.id, slot)];
   const input = useRef<HTMLInputElement>(null);
@@ -309,6 +309,7 @@ function SlotRow({ card, slot, original, versions, onPlay }: { card: StaffCard; 
   const [error, setError] = useState<string | null>(null);
   const nextVersion = (versions[0]?.version ?? 0) + 1;
   const review = card.reviews.find((r) => r.slot === slot);
+  const download = useClipDownloads()[card.id];
 
   async function take(file: File | undefined) {
     if (!file) return;
@@ -334,19 +335,32 @@ function SlotRow({ card, slot, original, versions, onPlay }: { card: StaffCard; 
   const fileInput = <input ref={input} type="file" hidden accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" onChange={(event: ChangeEvent<HTMLInputElement>) => { const f = event.target.files?.[0]; event.target.value = ""; void take(f); }} />;
 
   return (
-    <div className={`ve-slot ${over ? "over" : ""}`} {...drop}>
-      <button className="ve-slot-thumb" disabled={!original} onClick={() => original && onPlay({ source: original, title: `${card.member.name} · Video ${slot} · original` })} aria-label={`Play video ${slot}`}>
-        <VideoStill thumbnailUrl={original?.playback?.thumbnailUrl} fileUrl={original?.viewUrl} />
-        {original ? <span className="ve-play"><Play /></span> : null}
-      </button>
+    <div className={`ve-slot ve-slot-multi ${over ? "over" : ""}`} {...drop}>
       <div className="ve-slot-original">
-        <span className="ve-kicker">Original · Video {slot}</span>
-        {original ? (
-          <>
-            <b className="ve-file">{original.fileName}</b>
-            <span className="faint">{metaLine(original)}</span>
-            <button className="btn" onClick={() => void ch.files.save(original.downloadUrl, original.fileName)}><Download />Download original</button>
-          </>
+        <div className="ve-clip-head">
+          <span className="ve-kicker">Video {slot}{clips.length ? ` · ${clips.length} ${clips.length === 1 ? "clip" : "clips"} · ${formatBytes(clips.reduce((sum, c) => sum + c.sizeBytes, 0))}` : ""}</span>
+          {clips.length ? (
+            <button className="btn ve-clip-dl" disabled={Boolean(download && !download.error)} onClick={() => { dismissClipDownload(card.id); void downloadClips(card, slot); }}>
+              <Download />{download && !download.error && download.slot === slot ? `Downloading ${download.done + 1} of ${download.total}` : `Download Video ${slot}`}
+            </button>
+          ) : null}
+        </div>
+        {clips.length ? (
+          <ol className="ve-clips">
+            {clips.map((original, index) => (
+              <li key={original.id} className="ve-clip">
+                <button className="ve-clip-thumb" onClick={() => onPlay({ source: original, title: `${card.member.name} · Video ${slot} · clip ${index + 1}` })} aria-label={`Play ${original.fileName}`}>
+                  <VideoStill thumbnailUrl={original.playback?.thumbnailUrl} fileUrl={original.viewUrl} />
+                  <span className="ve-play"><Play /></span>
+                </button>
+                <span className="ve-clip-name">
+                  <b className="ve-file" title={original.fileName}>{String(index + 1).padStart(2, "0")} · {original.fileName}</b>
+                  <span className="faint">{metaLine(original)}</span>
+                </span>
+                <button className="iconbtn" title="Download" aria-label={`Download ${original.fileName}`} onClick={() => void ch.files.save(original.downloadUrl, `${String(index + 1).padStart(2, "0")} - ${original.fileName}`)}><Download /></button>
+              </li>
+            ))}
+          </ol>
         ) : <span className="faint">Not uploaded</span>}
       </div>
       <div className="ve-slot-edits">
