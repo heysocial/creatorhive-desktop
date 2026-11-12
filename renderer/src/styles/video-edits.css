@@ -354,3 +354,8 @@
 .ve-slot-original .btn.ve-clip-dl { margin-top: 0; }
 .ve-clip-head { flex-wrap: wrap; }
 .ve-clip-head .ve-kicker { white-space: nowrap; }
+
+/* Clip group header: "VIDEO 1 · 4 CLIPS" with the size on its own line, never split mid-value. */
+.ve-clip-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ve-clip-title > span { white-space: nowrap; }
+.ve-clip-size { text-transform: none; letter-spacing: 0; font-weight: 500; opacity: 0.75; }

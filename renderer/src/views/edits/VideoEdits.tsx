@@ -338,7 +338,10 @@ function SlotRow({ card, slot, clips, versions, onPlay }: { card: StaffCard; slo
     <div className={`ve-slot ve-slot-multi ${over ? "over" : ""}`} {...drop}>
       <div className="ve-slot-original">
         <div className="ve-clip-head">
-          <span className="ve-kicker">Video {slot}{clips.length ? ` · ${clips.length} ${clips.length === 1 ? "clip" : "clips"} · ${formatBytes(clips.reduce((sum, c) => sum + c.sizeBytes, 0))}` : ""}</span>
+          <span className="ve-kicker ve-clip-title">
+            <span>Video {slot}{clips.length ? ` · ${clips.length} ${clips.length === 1 ? "clip" : "clips"}` : ""}</span>
+            {clips.length ? <span className="ve-clip-size">{formatBytes(clips.reduce((sum, c) => sum + c.sizeBytes, 0))}</span> : null}
+          </span>
           {clips.length ? (
             <button className="btn ve-clip-dl" disabled={Boolean(download && !download.error)} onClick={() => { dismissClipDownload(card.id); void downloadClips(card, slot); }}>
               <Download />{download && !download.error && download.slot === slot ? `Downloading ${download.done + 1} of ${download.total}` : `Download Video ${slot}`}
