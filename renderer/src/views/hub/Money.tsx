@@ -101,10 +101,12 @@ export function MoneySections() {
               {listed.map((e) => (
                 <div key={e.id} className="money-row" role="button" tabIndex={0} onClick={() => setEditing({ kind: "expense", expense: e })}>
                   <CategoryTile category={e.category} />
-                  <span className="mr-main"><b>{e.name}</b><small className="faint">{categoryOf(e.category).short}{e.subscription_id ? " · subscription" : ""}{e.deal_brand_name ? <span className="tag-s"><Link2 />for {e.deal_brand_name}</span> : null}</small></span>
-                  <span className="faint">{monDay(e.spent_on)}</span>
-                  <b className="mr-amt">−{cents(e.amount_cents)}</b>
-                  <button className="link" onClick={(ev) => { ev.stopPropagation(); void removeExpense(e); }}>Delete</button>
+                  {/* Name first: the date sits under it and Delete under the amount, so a narrow card never squeezes the name. */}
+                  <span className="mr-main"><b title={e.name}>{e.name}</b><small className="faint">{categoryOf(e.category).short} · {monDay(e.spent_on)}{e.subscription_id ? " · subscription" : ""}{e.deal_brand_name ? <span className="tag-s"><Link2 />for {e.deal_brand_name}</span> : null}</small></span>
+                  <span className="mr-side">
+                    <b className="mr-amt">−{cents(e.amount_cents)}</b>
+                    <button className="link" onClick={(ev) => { ev.stopPropagation(); void removeExpense(e); }}>Delete</button>
+                  </span>
                 </div>
               ))}
             </div>

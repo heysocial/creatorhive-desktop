@@ -2227,7 +2227,8 @@ html.is-popout body { background: var(--card); }
 .money-bar-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: 12.5px; }
 .money-bar-foot .k { display: inline-block; width: 9px; height: 9px; margin: 0 4px 0 6px; border-radius: 3px; background: var(--honey); }
 .money-bar-foot .k.out { background: color-mix(in oklab, var(--money-out) 55%, transparent); }
-.money-pair { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
+/* Expenses and Subscriptions side by side when both have room (each at least 340 wide), else stacked. */
+.money-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; align-items: start; }
 .money-rows { display: flex; flex-direction: column; gap: 2px; }
 .money-row { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 7px 8px; border-radius: 12px; cursor: pointer; }
 .money-row:hover { background: var(--card-2); }
@@ -2240,6 +2241,10 @@ html.is-popout body { background: var(--card); }
 .mr-main small .tag-s svg { width: 10px; height: 10px; }
 .mr-main .soon { color: var(--honey-ink); font-weight: 600; }
 .mr-amt { min-width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
+.mr-side { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: 1px; }
+.mr-side .mr-amt { min-width: 0; }
+.mr-side .link { font-size: 12px; }
+.mr-main small .tag-s { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-tile { display: grid; place-items: center; flex: none; border-radius: 10px; background: var(--st-bg); color: var(--st-ink); }
 .cat-tile svg { width: 45%; height: 45%; }
 .cat-tile.letter { width: 34px; height: 34px; font-size: 14px; font-weight: 700; }
