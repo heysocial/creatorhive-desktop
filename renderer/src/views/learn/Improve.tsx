@@ -5,6 +5,9 @@ import { api, queryClient } from "../../lib/api";
 import { useImprove, useImproveResources, type Improve as ImproveData, type Milestone } from "../../lib/learn";
 import { nav } from "../../lib/nav";
 import { StarterImprove } from "./StarterImprove";
+import { EditorChatDock } from "./EditorParts";
+import type { SessionUser } from "../../lib/bridge";
+import { useStudentEditing } from "../../lib/videoEdits";
 
 function Ring({ pct }: { pct: number }) {
   const r = 46;
@@ -62,8 +65,10 @@ function MilestoneCard({ m, open, onToggle }: { m: Milestone; open: boolean; onT
   );
 }
 
-export function ImprovePage() {
+export function ImprovePage({ user }: { user: SessionUser }) {
   const { data, isLoading, isError } = useImprove();
+  // UGC Starter and The Weekend Starter: the personal video editor's chat docks on the right.
+  const { editing } = useStudentEditing(Boolean(data?.starter));
   const resources = useImproveResources().data;
   const calls = useQuery({
     queryKey: ["improve", "calls"],
@@ -77,6 +82,7 @@ export function ImprovePage() {
   const [allResources, setAllResources] = useState(false);
 
   return (
+    <div className="ve-with-dock">
     <div className="page">
       <div className="mhead"><h1>Improve</h1><span className="sub">Your grade, your milestones, and what to do next.</span></div>
       <div className="scroll page-body improve-body">
@@ -121,6 +127,8 @@ export function ImprovePage() {
           </section>
         ) : null}
       </div>
+    </div>
+    {data?.starter ? <EditorChatDock editing={editing} user={user} /> : null}
     </div>
   );
 }

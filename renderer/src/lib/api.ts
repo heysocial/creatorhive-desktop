@@ -87,10 +87,19 @@ export function rateLimitMessage(failure: unknown): string | null {
   return typeof data.error === "string" && data.error.trim() ? data.error : null;
 }
 
+/** Fired when the server answers 403 PASSWORD_CHANGE_REQUIRED: the Create your password screen takes over. */
+export const PASSWORD_REQUIRED_EVENT = "ch:password-required";
+
 /** A JSON call through the main process. Throws on anything but success. */
 export async function api<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const result = await ch.api<T & { ok?: boolean; error?: string }>({ path, ...init });
-  if (!result.ok || !result.data) throw new ApiError(result.status, result.error ?? result.data?.error, result.data as Record<string, unknown> | null);
+  if (!result.ok || !result.data) {
+    // Still on a temporary password: every request but a few is refused until it's changed (shell/FirstSteps.tsx).
+    if (result.status === 403 && (result.data as { code?: unknown } | null)?.code === "PASSWORD_CHANGE_REQUIRED") {
+      window.dispatchEvent(new Event(PASSWORD_REQUIRED_EVENT));
+    }
+    throw new ApiError(result.status, result.error ?? result.data?.error, result.data as Record<string, unknown> | null);
+  }
   return result.data;
 }
 

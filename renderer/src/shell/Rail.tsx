@@ -1,5 +1,5 @@
-import { Bell, Bookmark, GraduationCap, House, MessageCircle, Shield, Sparkles, type LucideIcon } from "lucide-react";
-import { useHubHidden } from "../lib/access";
+import { Bell, Bookmark, Clapperboard, GraduationCap, House, Lock, MessageCircle, Shield, Sparkles, type LucideIcon } from "lucide-react";
+import { openUpgrade, useHubHidden } from "../lib/access";
 import { ch, type SessionUser } from "../lib/bridge";
 import { useChannels, useConversations, useHeySocialAccess } from "../lib/api";
 import { commands } from "../lib/commands";
@@ -9,12 +9,15 @@ import { Avatar, countLabel } from "../lib/ui";
 import { useHsSidebar } from "../lib/heysocial";
 import { adminPages, useAdminAccess, useOpenReports } from "../lib/admin";
 import { useSupportUnread } from "../lib/support";
+import { useVideoEditsBoard } from "../lib/videoEdits";
 
 const SECTION_META: Record<Section, { label: string; icon: LucideIcon; shortcut: string }> = {
   home: { label: "Home", icon: House, shortcut: "⌘1" },
   dms: { label: "DMs", icon: MessageCircle, shortcut: "⌘2" },
   hub: { label: "Hub", icon: Sparkles, shortcut: "⌘3" },
   learn: { label: "Learn", icon: GraduationCap, shortcut: "⌘4" },
+  // "Video editing" (the rail's labels are one short word; the tooltip has the full name).
+  edits: { label: "Editing", icon: Clapperboard, shortcut: "" },
   activity: { label: "Activity", icon: Bell, shortcut: "⌘5" },
   later: { label: "Later", icon: Bookmark, shortcut: "" },
   admin: { label: "Admin", icon: Shield, shortcut: "" },
@@ -40,11 +43,14 @@ export function Rail({ user }: { user: SessionUser }) {
   const other = current.ws === "hs" ? chUnread : hsUnread;
   const hsCounts = useHsSidebar(heySocial && current.ws === "hs").data?.counts;
   const admin = useAdminAccess().data;
-  // The Weekend Starter has no Creator Hub: no rail item at all.
-  const hubHidden = useHubHidden();
+  // The Weekend Starter has no Creator Hub: its rail item shows locked and offers the UGC Academy.
+  const hubLocked = useHubHidden();
   const canAdmin = adminPages(admin).length > 0;
   const openReports = useOpenReports(Boolean(admin?.tabs.includes("moderation"))).data ?? 0;
   const supportUnread = useSupportUnread(Boolean(admin?.tabs.includes("support"))).data ?? 0;
+  // The video editing board: the owner and the editors only (the API answers 404 to everyone else).
+  const edits = useVideoEditsBoard().data;
+  const editsWaiting = edits ? edits.counts.submitted + edits.counts.in_editing : 0;
 
   async function meMenu() {
     const choice = await ch.menu.popup([
@@ -73,14 +79,17 @@ export function Rail({ user }: { user: SessionUser }) {
         </button>
       ) : null}
       <div className="rdiv" />
-      {SECTIONS[current.ws].filter((section) => (section !== "admin" || canAdmin) && (section !== "hub" || !hubHidden)).map((section) => {
+      {SECTIONS[current.ws].filter((section) => (section !== "admin" || canAdmin) && (section !== "edits" || Boolean(edits))).map((section) => {
         const meta = SECTION_META[section];
         const Icon = meta.icon;
-        const count = section === "dms" ? here.dms : section === "activity" ? hsCounts?.activity ?? 0 : section === "admin" ? openReports + supportUnread : 0;
+        const count = section === "dms" ? here.dms : section === "activity" ? hsCounts?.activity ?? 0 : section === "admin" ? openReports + supportUnread : section === "edits" ? editsWaiting : 0;
+        const locked = section === "hub" && hubLocked;
         return (
-          <button key={section} className={`ritem ${current.section === section ? "on" : ""}`}
-            title={meta.shortcut ? `${meta.label} (${meta.shortcut})` : meta.label} onClick={() => nav.section(section)}>
-            <span className="ib"><Icon /></span>
+          <button key={section} className={`ritem ${current.section === section && !locked ? "on" : ""} ${locked ? "locked" : ""}`}
+            aria-label={locked ? "Hub, part of the UGC Academy" : undefined}
+            title={locked ? "Hub · Part of the UGC Academy" : section === "edits" ? "Video editing" : meta.shortcut ? `${meta.label} (${meta.shortcut})` : meta.label}
+            onClick={() => (locked ? openUpgrade() : nav.section(section))}>
+            <span className="ib"><Icon />{locked ? <span className="rlock"><Lock /></span> : null}</span>
             {meta.label}
             {count > 0 ? <span className="badge">{countLabel(count)}</span> : null}
           </button>

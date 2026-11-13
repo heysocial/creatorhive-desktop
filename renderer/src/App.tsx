@@ -27,6 +27,9 @@ import { api } from "./lib/api";
 import { usePresence } from "./lib/realtime";
 import { SupportWidget } from "./shell/Support";
 import { LivePopups } from "./shell/LivePopups";
+import { FirstSteps } from "./shell/FirstSteps";
+import { UpgradeHost } from "./shell/Upgrade";
+import { BookingHost } from "./shell/Booking";
 
 type Auth = { state: "loading" } | { state: "offline" } | { state: "signedOut" } | { state: "signedIn"; user: SessionUser };
 type Overlay = null | "quick-open" | "shortcuts" | "new-message";
@@ -278,6 +281,8 @@ function Workspace({ user, info }: { user: SessionUser; info: { version: string;
       {updateReady && !updateLater ? <UpdateBanner version={updateReady} onLater={() => setUpdateLater(true)} /> : null}
       {locked ? <LockScreen /> : <LivePopups />}
       <HubDialogs />
+      <UpgradeHost />
+      <BookingHost />
       <DealFormHost />
       <ExportHost />
       <PromptHost />
@@ -370,5 +375,11 @@ export function App() {
   }
   // The key gives a newly opened sign-in link a fresh form with its email.
   if (auth.state === "signedOut") return <SignIn key={signInEmail} initialEmail={signInEmail} onSignedIn={signedIn} />;
-  return <Workspace key={auth.user.id} user={auth.user} info={info} />;
+  // A Weekend Starter buyer's first sign-in: their own password, then the profile step, then the app.
+  const patchUser = (patch: Partial<SessionUser>) => setAuth((current) => (current.state === "signedIn" ? { ...current, user: { ...current.user, ...patch } } : current));
+  return (
+    <FirstSteps key={auth.user.id} user={auth.user} onUser={patchUser}>
+      <Workspace key={auth.user.id} user={auth.user} info={info} />
+    </FirstSteps>
+  );
 }

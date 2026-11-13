@@ -69,7 +69,7 @@ button.st-empty:hover { box-shadow: inset 0 0 0 1.5px var(--ink-4); }
 .st-sent > div { display: flex; flex-direction: column; gap: 2px; }
 .st-sent b { font-size: 14.5px; }
 .st-sent span { font-size: 13px; color: #2F5A3D; }
-.st-sent.big { padding: 18px 20px; }
+.st-sent.big { display: flex; padding: 18px 20px; font-size: inherit; font-weight: inherit; letter-spacing: normal; }
 .st-sent.big b { font-size: 18px; }
 .st-sent-tick { width: 24px; height: 24px; flex: none; border-radius: 50%; background: #2F7D4F; color: #fff; display: grid; place-items: center; }
 .st-sent-tick svg { width: 14px; height: 14px; stroke-width: 3; }
@@ -111,3 +111,47 @@ button.st-empty:hover { box-shadow: inset 0 0 0 1.5px var(--ink-4); }
 .st-submit { padding: 18px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .st-submit > div { display: flex; flex-direction: column; gap: 3px; }
 .sw-limit { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--honey-soft); color: var(--honey-ink); font-weight: 600; }
+
+/* Submit your 3 videos: several clips per video (creatorhive-app docs/multi-clip.md) */
+.mc-cards { align-items: start; }
+.mc-card { padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.mc-card.over { box-shadow: 0 0 0 2px var(--honey); }
+.mc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mc-head b { font-size: 16px; }
+.mc-head .muted { font-size: 13px; }
+.mc-sent { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: #2F7D4F; }
+.mc-sent svg { width: 14px; height: 14px; stroke-width: 3; }
+.mc-empty { display: flex; flex-direction: column; gap: 10px; }
+.mc-drop { min-height: 200px; border-radius: 14px; border: 2px dashed var(--line-strong); background: var(--card-2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 20px; color: var(--ink); font: inherit; cursor: pointer; }
+.mc-drop:hover { border-color: var(--ink-4); }
+.mc-drop b { font-size: 14.5px; }
+.mc-drop .faint { font-size: 12.5px; }
+.mc-card.over .mc-drop { border-color: var(--honey); background: var(--honey-soft); }
+.mc-empty .btn { justify-content: center; }
+.mc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.mc-tile { position: relative; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; background: linear-gradient(160deg, #6E6253, #2E2A25); min-width: 0; }
+.mc-tile > img, .mc-tile > video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mc-tile.busy { opacity: .5; }
+.mc-dur { position: absolute; left: 5px; bottom: 5px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; font-weight: 600; border-radius: 5px; padding: 1px 5px; }
+.mc-x { position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; border-radius: 50%; border: 0; padding: 0; background: rgba(20,19,17,.72); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.mc-x:hover { background: rgba(20,19,17,.9); }
+.mc-x svg { width: 13px; height: 13px; stroke-width: 2.6; }
+.mc-tile.up > img { opacity: .45; filter: saturate(.6); }
+.mc-tile.up::before { content: ""; position: absolute; inset: 0; background: rgba(0,0,0,.25); }
+.mc-mid { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #fff; text-align: center; padding: 6px; font-size: 11.5px; font-weight: 600; line-height: 1.25; }
+.mc-mid b { font-size: 17px; font-weight: 700; text-shadow: 0 1px 3px rgba(0,0,0,.35); }
+.mc-mid svg { width: 18px; height: 18px; }
+button.mc-mid { border: 0; background: transparent; font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.mc-tile.failed::before { background: rgba(120,20,20,.35); }
+.mc-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255,255,255,.25); }
+.mc-bar i { display: block; height: 100%; background: var(--honey); transition: width .2s; }
+.mc-add { border: 1.5px dashed var(--line-strong); background: var(--card-2); color: var(--ink-3); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.mc-add:hover { border-color: var(--ink-4); color: var(--ink-2); }
+.mc-add svg { width: 18px; height: 18px; }
+.mc-foot { display: flex; flex-direction: column; align-items: stretch; gap: 6px; text-align: center; }
+.mc-foot .muted { font-size: 13px; }
+.mc-note { font-size: 13px; }
+/* The Improve step card: each video's first clip and its count. */
+.mc-step-slot { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mc-step-slot small { font-size: 12px; color: var(--ink-3); font-weight: 600; }
+.mc-step-btn { border: 0; background: none; padding: 0; cursor: pointer; text-align: left; font: inherit; color: inherit; }

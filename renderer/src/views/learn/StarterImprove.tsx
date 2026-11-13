@@ -1,22 +1,28 @@
 import { useState } from "react";
-import { ArrowUpRight, Check, Lock, Plus, Sparkles, Upload } from "lucide-react";
-import { ch } from "../../lib/bridge";
-import type { ImproveResource } from "../../lib/learn";
+import { ArrowUpRight, Check, Lock, PlayCircle, Plus, Sparkles, Upload } from "lucide-react";
+import { useCourses, type ImproveResource } from "../../lib/learn";
+import { editorChat, firstName, shortDay } from "../../lib/videoEdits";
+import { EditorCard, WhereTracker } from "./EditorParts";
 import { nav } from "../../lib/nav";
+import { openUpgrade } from "../../lib/access";
 import {
+  formatBytes,
   formatDuration,
+  markCourseDone,
   markFirstVideo,
   resetsLabel,
   STARTER_GRADE_HELP,
   STARTER_RESOURCES,
-  useSlotUploads,
+  canEditClipsNow,
+  clipsLabel,
+  clipsOf,
+  useClipUploads,
   useSubmission,
   type StarterGrade,
   type StarterStep,
   type StarterTrack,
   type SubmissionVideo,
 } from "../../lib/starter";
-import { UpgradeDialog } from "./Courses";
 import "../../styles/starter.css";
 
 /*
@@ -35,7 +41,7 @@ export function Thumb({ video, height }: { video: SubmissionVideo; height: numbe
   const duration = formatDuration(video.durationSeconds);
   return (
     <span className="st-thumb" style={{ height }}>
-      <video src={`${video.previewUrl}#t=0.1`} preload="metadata" muted playsInline />
+      {video.thumbnailUrl ? <img src={video.thumbnailUrl} alt="" /> : <video src={`${video.previewUrl}#t=0.1`} preload="metadata" muted playsInline />}
       {duration ? <span className="st-dur">{duration}</span> : null}
     </span>
   );
@@ -45,71 +51,154 @@ function openVideos() {
   nav.open({ kind: "starter-videos" }, "learn", "ch");
 }
 
-function StuckBox({ text, upgradeUrl }: { text: string; upgradeUrl: string }) {
+function StuckBox({ text }: { text: string }) {
   return (
     <div className="st-stuck">
       <span className="st-stuck-why">{text}</span>
       <b>This is the exact thing we fix on coaching calls.</b>
-      <button className="btn honey" onClick={() => ch.app.openExternal(upgradeUrl)}>Upgrade</button>
+      <button className="btn honey" onClick={openUpgrade}>Upgrade</button>
     </div>
   );
 }
 
 function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack }) {
   const submission = useSubmission().data;
-  const inFlight = useSlotUploads();
+  const inFlight = useClipUploads();
   const state = submission?.state ?? null;
-  const bySlot = new Map((state?.videos ?? []).map((v) => [v.slot, v]));
+  const clips = (slot: number) => clipsOf(state, slot);
 
   if (step.state === "done" || state?.status === "submitted") {
+    const editing = state?.editing;
+    const editorName = editing?.editor ? firstName(editing.editor.name) : "our editor";
+    const editable = canEditClipsNow(state);
     return (
       <div className="card st-now">
-        <div className="st-row-head"><div><b className="st-title">{step.title}</b><span className="muted">{step.detail}</span></div><GradePill grade={step.grade} /></div>
-        <div className="st-sent">
-          <span className="st-sent-tick"><Check /></span>
-          <div><b>Submitted, our editor is on it</b><span>We'll message you here when your 3 edits are ready.</span></div>
+        <div className="st-row-head">
+          <div>
+            <b className="st-title">{track.plan === "first3" ? `Step ${step.number} · ` : ""}{step.title}{state?.submittedAt ? <span className="ve-done-pill"><Check />Submitted {shortDay(state.submittedAt)}</span> : null}</b>
+            <span className="muted">
+              {editable ? `Sent. You can still add or remove clips until ${editorName} starts editing.`
+                : editing ? <>Your clips are with {editorName}, at full quality. To change a clip now, <button className="ve-inline-link" onClick={() => editorChat.open()}>message him</button>.</>
+                : step.detail}
+            </span>
+          </div>
+          {track.plan === "first3" ? null : <GradePill grade={step.grade} />}
         </div>
-        <div className="st-slots">{[1, 2, 3].map((slot) => { const v = bySlot.get(slot); return v ? <Thumb key={slot} video={v} height={96} /> : <span key={slot} className="st-empty" style={{ height: 96 }} />; })}</div>
+        {editing ? null : (
+          <div className="st-sent">
+            <span className="st-sent-tick"><Check /></span>
+            <div><b>Submitted, our editor is on it</b><span>We'll message you here when your 3 edits are ready.</span></div>
+          </div>
+        )}
+        <div className="st-slots">{[1, 2, 3].map((slot) => {
+          const list = clips(slot);
+          const v = list[0];
+          if (!v) return <span key={slot} className="st-empty" style={{ height: 96 }} />;
+          return (
+            <div key={slot} className="ve-sub-slot mc-step-slot">
+              <button className="mc-step-btn" title="See your clips" onClick={openVideos}><Thumb video={v} height={editing ? 150 : 96} /></button>
+              <small>Video {slot} · {clipsLabel(list.length)}</small>
+              {editing ? <span className="ve-sub-name"><small className="faint">{formatBytes(list.reduce((sum, c) => sum + c.sizeBytes, 0))}</small></span> : null}
+            </div>
+          );
+        })}</div>
+        {editable ? <button className="btn" onClick={openVideos}><Plus />Add or remove clips</button> : null}
       </div>
     );
   }
 
-  const ready = state?.videos.length ?? step.count?.value ?? 0;
-  const next = [1, 2, 3].find((slot) => !bySlot.has(slot)) ?? 3;
+  const filled = [1, 2, 3].filter((slot) => clips(slot).length > 0).length;
+  const ready = state ? filled : step.count?.value ?? 0;
+  const next = [1, 2, 3].find((slot) => clips(slot).length === 0) ?? 3;
   return (
     <div className="card st-now">
-      <div className="st-row-head"><div><span className="st-eyebrow">Now</span><b className="st-title big">{step.title}</b></div><GradePill grade={step.grade} /></div>
-      <p className="st-lede">Film 3 videos and upload them here. <b>Our editor cuts all 3 for you</b>, so you start pitching with a finished portfolio.</p>
+      <div className="st-row-head"><div><span className="st-eyebrow">Now</span><b className="st-title big">{step.title}</b></div>{track.plan === "first3" ? null : <GradePill grade={step.grade} />}</div>
+      <p className="st-lede">Film 3 videos and add all their clips here. <b>Our editor puts each one together for you</b>, so you start pitching with a finished portfolio.</p>
       <div className="st-slots">
         {[1, 2, 3].map((slot) => {
-          const v = bySlot.get(slot);
-          if (v) return <Thumb key={slot} video={v} height={120} />;
-          const up = inFlight[slot];
+          const list = clips(slot);
+          const ups = inFlight.filter((u) => u.slot === slot);
+          if (list[0]) {
+            const total = list.length + ups.length;
+            return (
+              <button key={slot} className="mc-step-slot mc-step-btn" onClick={openVideos}>
+                <Thumb video={list[0]} height={120} />
+                <small>{clipsLabel(total)}{ups.length ? " · uploading" : ""}</small>
+              </button>
+            );
+          }
+          const size = ups.reduce((sum, u) => sum + u.size, 0);
+          const pct = size ? Math.round((ups.reduce((sum, u) => sum + u.sent, 0) / size) * 100) : 0;
           return (
             <button key={slot} className="st-empty" style={{ height: 120 }} onClick={openVideos}>
-              {up ? <><span className="st-mini-bar"><i style={{ width: `${up.size ? Math.round((up.sent / up.size) * 100) : 0}%` }} /></span><small>{up.status === "failed" ? "Upload stopped" : `Uploading ${up.size ? Math.round((up.sent / up.size) * 100) : 0}%`}</small></>
+              {ups.length ? <><span className="st-mini-bar"><i style={{ width: `${pct}%` }} /></span><small>{ups.some((u) => u.status === "failed") ? "Upload stopped" : `Uploading ${pct}%`}</small></>
                 : <><Plus /><small>Video {slot}</small></>}
             </button>
           );
         })}
       </div>
-      <div className="st-progress"><span className="st-bar"><i style={{ width: `${(ready / 3) * 100}%` }} /></span><b>{ready} of 3 uploaded</b></div>
+      <div className="st-progress"><span className="st-bar"><i style={{ width: `${(ready / 3) * 100}%` }} /></span><b>{ready} of 3 videos have clips</b></div>
       {submission?.unavailable ? <p className="faint">{submission.unavailable}</p> : null}
       <button className="btn honey lg" onClick={openVideos}>
-        <Upload />{ready === 3 ? "Review and submit" : ready === 0 ? "Upload your videos" : `Upload video ${next}`}
+        <Upload />{ready === 3 ? "Review and submit" : ready === 0 ? "Add your clips" : `Add clips to video ${next}`}
       </button>
-      {step.stuck ? <StuckBox text={step.stuck} upgradeUrl={track.upgradeUrl} /> : null}
+      {step.stuck ? <StuckBox text={step.stuck} /> : null}
+    </div>
+  );
+}
+
+/** The Weekend Starter's step 1: its course, with progress, Open the course and Mark as done. */
+function CourseCard({ step }: { step: StarterStep }) {
+  const [busy, setBusy] = useState(false);
+  const courses = useCourses().data;
+  const course = step.course;
+  const done = step.state === "done";
+  const summary = course ? courses?.find((c) => c.slug === course.slug) : undefined;
+  const lessons = course?.lessons || summary?.lessonCount || 0;
+  const completed = course?.completed ?? summary?.completedCount ?? 0;
+  const pct = done ? 100 : lessons ? Math.round((completed / lessons) * 100) : 0;
+  const line = course ? [course.title, lessons ? `${lessons} ${lessons === 1 ? "lesson" : "lessons"}` : null, course.minutes ? `${course.minutes} min` : null].filter(Boolean).join(" · ") : step.detail;
+  const toggle = (value: boolean) => { setBusy(true); void markCourseDone(value).finally(() => setBusy(false)); };
+  return (
+    <div className={`card st-now ${done ? "ve-done" : ""}`}>
+      <div className="st-row-head">
+        <div>
+          {done ? null : <span className="st-eyebrow">Now</span>}
+          <b className={`st-title ${done ? "" : "big"}`}>Step {step.number} · {step.title}{done && step.completedAt ? <span className="ve-done-pill"><Check />Done {shortDay(step.completedAt)}</span> : null}</b>
+          <span className="muted">{line}. Watch it before you film: it shows what brands want to see.</span>
+        </div>
+      </div>
+      <div className="st-progress"><span className="st-bar ve-green"><i style={{ width: `${pct}%` }} /></span>{lessons ? <b>{done && course?.markedDone && completed < lessons ? "Marked as done" : `${completed} of ${lessons} lessons`}</b> : null}</div>
+      <div className="ve-course-acts">
+        <button className={`btn ${done ? "" : "honey"}`} disabled={!summary} onClick={() => summary && nav.open({ kind: "course", id: summary.id }, "learn", "ch")}><PlayCircle />Open the course</button>
+        {done ? (course?.markedDone ? <button className="st-link" disabled={busy} onClick={() => toggle(false)}>Not done yet? Undo</button> : null)
+          : <button className="btn" disabled={busy} onClick={() => toggle(true)}><Check />Mark as done</button>}
+      </div>
+    </div>
+  );
+}
+
+/** The Weekend Starter's upload step, until the course is done. */
+function LockedCard({ step }: { step: StarterStep }) {
+  return (
+    <div className="card st-now ve-locked">
+      <div className="st-row-head">
+        <div><b className="st-title">Step {step.number} · {step.title}</b><span className="muted">Upload 3 videos and your editor cuts them for you.</span></div>
+        <span className="ve-lock-pill"><Lock />{step.locked}</span>
+      </div>
     </div>
   );
 }
 
 function CurrentCard({ step, track }: { step: StarterStep; track: StarterTrack }) {
   const [busy, setBusy] = useState(false);
+  if (step.id === "course") return <CourseCard step={step} />;
+  if (step.locked) return <LockedCard step={step} />;
   if (step.id === "three_videos") return <VideosCard step={step} track={track} />;
   const count = step.count;
   return (
     <div className="card st-now">
-      <div className="st-row-head"><div><span className="st-eyebrow">Now</span><b className="st-title big">{step.title}</b></div><GradePill grade={step.grade} /></div>
+      <div className="st-row-head"><div><span className="st-eyebrow">Now</span><b className="st-title big">{step.title}</b></div>{track.plan === "first3" ? null : <GradePill grade={step.grade} />}</div>
       {count && step.id === "applications" ? (
         <>
           <div className="st-count"><b>{count.value}</b><span>of {count.target} sent</span></div>
@@ -124,7 +213,7 @@ function CurrentCard({ step, track }: { step: StarterStep; track: StarterTrack }
       ) : (
         <button className="st-link" onClick={() => nav.open({ kind: "hub", page: "deals" }, "hub", "ch")}>Open your Hub →</button>
       )}
-      {step.stuck ? <StuckBox text={step.stuck} upgradeUrl={track.upgradeUrl} /> : null}
+      {step.stuck ? <StuckBox text={step.stuck} /> : null}
     </div>
   );
 }
@@ -144,11 +233,13 @@ function Timeline({ track }: { track: StarterTrack }) {
             </div>
             <div className="st-body">
               {step.state === "current" ? <CurrentCard step={step} track={track} />
+                : step.id === "course" ? <CourseCard step={step} />
+                : step.locked ? <LockedCard step={step} />
                 : step.id === "three_videos" && step.state === "done" ? <VideosCard step={step} track={track} />
                 : (
                   <div className="st-row-head">
                     <div><b className="st-title">{step.title}</b><span className="muted">{step.detail}</span></div>
-                    <GradePill grade={step.grade} />
+                    {track.plan === "first3" ? null : <GradePill grade={step.grade} />}
                   </div>
                 )}
             </div>
@@ -193,19 +284,27 @@ function Resources({ resources, onLocked }: { resources: ImproveResource[]; onLo
 }
 
 export function StarterImprove({ track, resources }: { track: StarterTrack; resources: ImproveResource[] | null | undefined }) {
-  const [upgrade, setUpgrade] = useState(false);
   const sw = track.scriptWriter;
+  const editing = useSubmission().data?.state?.editing ?? null;
+  const weekend = track.plan === "first3";
   return (
     <>
-      {upgrade ? <UpgradeDialog onClose={() => setUpgrade(false)} /> : null}
       <section className="st-track">
         <div className="st-track-head">
-          <div><span className="st-eyebrow">{track.plan === "first3" ? "The Weekend Starter" : "UGC Starter"}</span><h2>{track.title ?? "Your path to your first paid deal"}</h2></div>
-          <Summary track={track} />
+          <div>
+            <span className="st-eyebrow">{weekend ? "The Weekend Starter" : "UGC Starter"}</span><h2>{track.title ?? "Your path to your first paid deal"}</h2>
+            {weekend ? <p className="muted ve-track-sub">Watch the course, upload 3 videos, and {editing?.editor ? firstName(editing.editor.name) : "your editor"} edits them for you.</p> : null}
+          </div>
+          {/* The Weekend Starter has no grades (as on the website): no summary, no side column. */}
+          {weekend ? null : <Summary track={track} />}
         </div>
-        <div className="st-cols">
-          <Timeline track={track} />
-          <aside className="st-side">
+        <div className={`st-cols ${weekend ? "ve-solo" : ""}`}>
+          <div className="ve-main-col">
+            <Timeline track={track} />
+            {editing?.editor ? <EditorCard editor={editing.editor} /> : null}
+            {editing?.stage ? <WhereTracker editing={editing} /> : null}
+          </div>
+          {weekend ? null : <aside className="st-side">
             <div className="card st-side-card">
               <span className="section-label">AI Script Writer</span>
               <div className="st-count"><b>{sw.remaining}</b><span>of {sw.limit} scripts left this month</span></div>
@@ -217,10 +316,10 @@ export function StarterImprove({ track, resources }: { track: StarterTrack; reso
               <span className="section-label">How grades work</span>
               <p className="muted">{STARTER_GRADE_HELP}</p>
             </div>
-          </aside>
+          </aside>}
         </div>
       </section>
-      <Resources resources={resources?.length ? resources : [...STARTER_RESOURCES]} onLocked={() => setUpgrade(true)} />
+      <Resources resources={resources?.length ? resources : [...STARTER_RESOURCES]} onLocked={openUpgrade} />
     </>
   );
 }

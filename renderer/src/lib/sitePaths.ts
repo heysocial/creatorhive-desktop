@@ -28,6 +28,10 @@ export function sitePathFor({ ws, view }: Location): string {
       return "/library/resources/ai-script-writer";
     case "starter-videos":
       return "/library";
+    case "video-review":
+      return view.video ? `/library/videos/review?video=${view.video}` : "/library/videos/review";
+    case "video-edits":
+      return view.cardId ? `/video-edits/${view.cardId}` : "/video-edits";
     case "improve-resource":
       return `/library/resources/${view.slug}`;
     case "profile":

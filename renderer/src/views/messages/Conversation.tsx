@@ -20,6 +20,7 @@ import { HS_KEY, huddleFor, setPrefs, toggleSaved, useHsSidebar, useHuddles } fr
 import { HuddleButton } from "../heysocial/Huddle";
 import { ChannelMembers } from "./ChannelMembers";
 import { ComingSoonOwnerBar, SoonTag } from "./ComingSoon";
+import { StudentLabel, StudentStrip } from "../edits/StudentStrip";
 
 const GROUP_GAP_MS = 5 * 60_000;
 
@@ -347,7 +348,11 @@ function PinsPopover({ channelId, onClose, onJump, onUnpin }: { channelId: strin
 }
 
 /** A channel or DM: header, messages, composer, and threads beside it. */
-export function Conversation({ where, user, workspace, popout = false, threadId: initialThread, messageId }: { where: Thread; user: SessionUser; workspace: Workspace; popout?: boolean; threadId?: string; messageId?: string }) {
+export function Conversation({ where, user, workspace, popout = false, threadId: initialThread, messageId, dock }: {
+  where: Thread; user: SessionUser; workspace: Workspace; popout?: boolean; threadId?: string; messageId?: string;
+  /** Docked beside a page (the personal video editor's chat on Improve): its own header and strip replace the usual header. */
+  dock?: { head: ReactNode; placeholder?: string };
+}) {
   const heySocial = workspace === "heysocial";
   const hsSidebar = useHsSidebar(heySocial).data;
   const huddles = useHuddles(heySocial).data;
@@ -441,6 +446,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
           {conversation ? <Avatar name={conversation.displayName} src={conversation.isGroup ? null : other?.avatarUrl} seed={conversation.isGroup ? conversation.id : other?.id}
             size={28} radius="8px" presence={conversation.isGroup ? undefined : other?.presence} /> : null}
           {title}
+          {!heySocial && other && !conversation?.isGroup ? <StudentLabel memberId={other.id} /> : null}
         </h1>
       )}
       {where.kind === "dm" && other && !conversation?.isGroup ? <span className="sub">{other.presence === "online" ? "Active now" : other.presence === "away" ? "Away" : ""}</span> : null}
@@ -478,7 +484,9 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
     <div className={`convo ${threadId ? "with-thread" : ""}`}
       onDragEnter={(event) => event.dataTransfer.types.includes("Files") && setDragging(true)}>
       <div className="convo-main">
-        {head}
+        {dock ? dock.head : head}
+        {/* Staff: a student with videos to edit gets her card's strip under the header. */}
+        {!dock && !heySocial && where.kind === "dm" && other && !conversation?.isGroup ? <StudentStrip memberId={other.id} /> : null}
         {channel?.comingSoon && !channel.comingSoonLocked ? <ComingSoonOwnerBar channelId={channel.id} /> : null}
         <MessageList where={where} actions={actions} header={intro} empty={null}
           jumpTo={threadId ? null : jump} onJumped={() => setJump(null)} />
@@ -488,7 +496,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
         ) : null}
         <Composer ref={composer} draftKey={`${where.kind}:${where.id}`}
           uploadVideo={heySocial ? undefined : (file, onProgress) => uploadVideo(where, file, onProgress)}
-          voice={where.kind === "dm" || heySocial ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder={where.kind === "channel" ? `Message #${title}` : `Message ${title}`}
+          voice={where.kind === "dm" || heySocial ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder={dock?.placeholder ?? (where.kind === "channel" ? `Message #${title}` : `Message ${title}`)}
           searchPeople={where.kind === "channel" || workspace === "heysocial" ? people : undefined} onTyping={sendTyping}
           onSend={async (input: ComposerSend) => {
             if (input.videos.length) {

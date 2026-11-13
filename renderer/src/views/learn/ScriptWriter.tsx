@@ -9,6 +9,7 @@ import { nav } from "../../lib/nav";
 import { useImprove } from "../../lib/learn";
 import { resetsLabel } from "../../lib/starter";
 import "../../styles/starter.css";
+import { openUpgrade } from "../../lib/access";
 
 interface ChatSummary { id: string; title: string | null; adType: string | null; replies: number; updatedAt: string }
 interface ChatMessage { id: string; role: "user" | "assistant"; body: string; linkUrl: string | null; status: "complete" | "stopped" | "failed" | "declined" | "streaming" }
@@ -149,7 +150,7 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
           {limit ? (
             <div className="sw-error sw-limit">
               <span>{limit.message}</span>
-              <button className="btn honey" onClick={() => ch.app.openExternal(limit.upgradeUrl)}>Upgrade</button>
+              <button className="btn honey" onClick={openUpgrade}>Upgrade</button>
             </div>
           ) : null}
           <div className="composer sw-composer">

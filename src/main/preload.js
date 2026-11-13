@@ -82,6 +82,7 @@ contextBridge.exposeInMainWorld("ch", {
     upload: (request) => ipcRenderer.invoke("files:upload", request),
     quickLook: (url, name) => ipcRenderer.invoke("files:quickLook", { url, name }),
     save: (url, name) => ipcRenderer.invoke("files:save", { url, name }),
+    saveMany: (items, title) => ipcRenderer.invoke("files:saveMany", { items, title }),
     addToCalendar: (ics, name) => ipcRenderer.invoke("files:addToCalendar", { ics, name }),
     uploadForm: (request) => ipcRenderer.invoke("files:uploadForm", request),
     clipboardImage: () => ipcRenderer.invoke("clipboard:image"),
@@ -94,6 +95,12 @@ contextBridge.exposeInMainWorld("ch", {
       return ipcRenderer.invoke("files:videoInfo", filePath);
     },
     putFile: (request) => ipcRenderer.invoke("files:putFile", request),
+    /** One part of a multipart upload: bytes [start, end) of the file, to its presigned URL. */
+    putPart: (request) => ipcRenderer.invoke("files:putPart", request),
+    /** Staff "Download all": a folder picked once, then each clip saved under it. */
+    pickFolder: (title) => ipcRenderer.invoke("files:pickFolder", { title }),
+    saveInto: (request) => ipcRenderer.invoke("files:saveInto", request),
+    showInFolder: (filePath) => ipcRenderer.invoke("files:showInFolder", filePath),
     cancelPut: (id) => ipcRenderer.send("files:putCancel", id),
     onPutProgress: listen("files:putProgress"),
   },
@@ -107,5 +114,6 @@ contextBridge.exposeInMainWorld("ch", {
     popout: (target) => ipcRenderer.send("window:popout", target),
     onFullscreen: listen("window:fullscreen"),
     onFocus: listen("window:focus"),
+    onEscape: listen("window:escape"),
   },
 });

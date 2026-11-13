@@ -121,7 +121,9 @@ export interface Bridge {
   files: {
     upload(request: { route: string; name: string; type: string; bytes: ArrayBuffer; access?: "public" | "private"; clientPayload?: string }): Promise<UploadResult>;
     quickLook(url: string, name: string): Promise<{ ok: boolean }>;
-    save(url: string, name: string): Promise<{ ok: boolean }>;
+    save(url: string, name: string): Promise<{ ok: boolean; canceled?: boolean }>;
+    /** Several files into one folder the member picks once; video files stream to disk. */
+    saveMany(items: { url: string; name: string }[], title?: string): Promise<{ ok: boolean; canceled?: boolean }>;
     addToCalendar(ics: string, name: string): Promise<{ ok: boolean }>;
     clipboardImage(): Promise<Uint8Array | null>;
     putVideo(url: string, type: string, bytes: ArrayBuffer): Promise<{ ok: boolean; status?: number; error?: string }>;
@@ -129,6 +131,11 @@ export interface Bridge {
     pickVideo(): Promise<LocalVideoFile | null>;
     videoInfo(file: File): Promise<LocalVideoFile | null>;
     putFile(request: { id: string; url: string; type: string; filePath: string }): Promise<{ ok: boolean; status?: number; error?: string }>;
+    putPart(request: { id: string; url: string; filePath: string; start: number; end: number }): Promise<{ ok: boolean; status?: number; error?: string }>;
+    pickFolder(title: string): Promise<string | null>;
+    /** Saves `url` to <folder>/<parts…> (each part cleaned); only a folder from pickFolder. */
+    saveInto(request: { folder: string; parts: string[]; url: string }): Promise<{ ok: boolean; path?: string; status?: number; error?: string }>;
+    showInFolder(filePath: string): Promise<void>;
     cancelPut(id: string): void;
     onPutProgress: Listen<{ id: string; sent: number; total: number }>;
   };
@@ -141,6 +148,8 @@ export interface Bridge {
     popout(target: { kind: "dm" | "channel" | "thread" | "deal" | "lesson" | "settings" | "huddle"; id: string; title?: string }): void;
     onFullscreen: Listen<boolean>;
     onFocus: Listen<boolean>;
+    /** Esc pressed while a frame inside the page (the booking pop-up) has focus; main window only. */
+    onEscape: Listen<void>;
   };
 }
 

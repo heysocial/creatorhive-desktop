@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { WEEKEND_STARTER, openUpgrade, useFeedAccess, useHubReady } from "../../lib/access";
-import { UpgradeDialog } from "../learn/Courses";
 import { ArrowUp, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, Lock, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
@@ -728,12 +727,6 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
   useEffect(() => {
     if (access.limited ? filter === "all" || !access.canRead(filter) : !access.canRead(filter) && filter !== "all") setFilter(access.home);
   }, [access, filter]);
-  const [upgrade, setUpgrade] = useState(false);
-  useEffect(() => {
-    const show = () => setUpgrade(true);
-    window.addEventListener("ch:upgrade", show);
-    return () => window.removeEventListener("ch:upgrade", show);
-  }, []);
   /*
     The tabs: the Weekend Starter group first on The Weekend Starter (after
     All for the team); a limited plan's other tabs locked.
@@ -832,14 +825,14 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
       <div className="mhead">
         <h1>Home</h1>
         <div className="seg home-tabs">
-          {access.limited && access.group ? null : <button className={`${filter === "all" ? "on" : ""} ${lockedTab("all") ? "locked" : ""}`} onClick={() => (lockedTab("all") ? setUpgrade(true) : setFilter("all"))}>{lockedTab("all") ? <Lock className="tab-lock" /> : null}All</button>}
+          {access.limited && access.group ? null : <button className={`${filter === "all" ? "on" : ""} ${lockedTab("all") ? "locked" : ""}`} onClick={() => (lockedTab("all") ? openUpgrade() : setFilter("all"))}>{lockedTab("all") ? <Lock className="tab-lock" /> : null}All</button>}
           {tabs.map((c, index) => (
             <span key={c.key} style={{ display: "contents" }}>
               <button className={`${filter === c.key ? "on" : ""} ${lockedTab(c.key) ? "locked" : ""}`} title={lockedTab(c.key) ? `${c.label}: part of the UGC Academy` : c.label}
-                onClick={() => (lockedTab(c.key) ? setUpgrade(true) : setFilter(c.key))}>
+                onClick={() => (lockedTab(c.key) ? openUpgrade() : setFilter(c.key))}>
                 {lockedTab(c.key) ? <Lock className="tab-lock" /> : null}<span>{c.emoji}</span><span className="lbl">{c.label}</span>{!lockedTab(c.key) && unread[c.key] ? <i className="udot" /> : null}
               </button>
-              {access.limited && access.group && index === 0 ? <button className={`locked ${filter === "all" ? "on" : ""}`} onClick={() => setUpgrade(true)}><Lock className="tab-lock" />All</button> : null}
+              {access.limited && access.group && index === 0 ? <button className={`locked ${filter === "all" ? "on" : ""}`} onClick={() => openUpgrade()}><Lock className="tab-lock" />All</button> : null}
             </span>
           ))}
         </div>
@@ -873,7 +866,6 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
         </div>
         <WeekPanel />
       </div>
-      {upgrade ? <UpgradeDialog onClose={() => setUpgrade(false)} /> : null}
       {openPost ? <PostSheet postId={openPost} commentId={openPost === openPostId ? commentId : undefined} user={user} onClose={() => { setOpenPost(null); if (openPostId) nav.open({ kind: "feed" }); }} /> : null}
     </div>
   );

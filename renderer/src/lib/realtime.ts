@@ -38,6 +38,9 @@ export function useRealtimeRefresh(userId: string, { sidebar = true }: { sidebar
             // A mention, reply or reaction aimed at me, or something read on another device: the bell and Activity.
             soon(["notifications"]);
             soon(["activity"], 250);
+            // The personal video editor moves by notification (ready to review, a new version, changes, approved).
+            soon(["video-edits"], 300);
+            soon(["improve", "videos"], 300);
             break;
           case "huddles:changed":
             soon(["hey-social", "huddles"], 150);
@@ -50,6 +53,8 @@ export function useRealtimeRefresh(userId: string, { sidebar = true }: { sidebar
           default:
             soon(["channels"]);
             soon(["conversations"]);
+            // A student's DM changes her card's unread count and thread.
+            soon(["video-edits"], 1200);
             soon([...HS_KEY]);
         }
         return;

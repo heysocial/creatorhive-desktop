@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { AtSign, Bell, CheckCheck, Heart, Megaphone, MessageCircle, MessagesSquare } from "lucide-react";
+import { AtSign, Bell, CheckCheck, Clapperboard, Heart, Megaphone, MessageCircle, MessagesSquare } from "lucide-react";
 import { queryClient } from "../../lib/api";
 import {
   ACTIVITY_KEY, markAllActivityRead, openActivityItem, openActivityThread, useActivity, useActivityThreads,
@@ -36,6 +36,8 @@ const listView = (filter: ActivityFilter) => (filter === "all" ? { kind: "activi
 const replies = (n: number) => (n === 1 ? "1 new reply" : `${n} new replies`);
 
 function KindIcon({ item }: { item: ActivityItem }) {
+  // The personal video editor (video_ready_for_review, video_new_version, video_changes_requested, video_approved, video_replaced, video_submission).
+  if (item.type.startsWith("video_")) return <span className="act-kind k-video"><Clapperboard /></span>;
   if (item.emoji) return <span className="act-kind emoji">{item.emoji}</span>;
   const icon = item.kind === "mention" ? <AtSign /> : item.kind === "thread" ? <MessagesSquare /> : item.kind === "reaction" ? <Heart />
     : item.type === "announcement" ? <Megaphone /> : <MessageCircle />;
@@ -47,7 +49,7 @@ function ItemRow({ item }: { item: ActivityItem }) {
     <button className={`act-row ${item.unread ? "unread" : ""}`} data-key={item.key} onClick={() => openActivityItem(item)}>
       <span className="act-av">
         {item.actor ? <Avatar name={item.actor.name} src={item.actor.avatarUrl} seed={item.actor.id} size={36} radius="9px" />
-          : <span className="t-ico"><Bell /></span>}
+          : <span className="t-ico">{item.type.startsWith("video_") ? <Clapperboard /> : <Bell />}</span>}
         <KindIcon item={item} />
       </span>
       <span className="act-text">

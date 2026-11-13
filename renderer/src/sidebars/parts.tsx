@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { Bell, ChevronDown, MessagesSquare, SquarePen } from "lucide-react";
+import { Bell, ChevronDown, Lock, MessagesSquare, SquarePen } from "lucide-react";
+import { openUpgrade } from "../lib/access";
 import { useActivityCounts } from "../lib/activity";
 import { ch, type NativeMenuItem } from "../lib/bridge";
 import { nav, useNav, type View } from "../lib/nav";
@@ -22,7 +23,7 @@ export function SidebarHead({ title, action, actionLabel = "New message" }: { ti
 }
 
 /** One row. Knows whether it's the open view, and offers a native right-click menu. */
-export function SidebarItem({ icon, label, tag, view, count, quietCount, honeyCount = false, meta, unread = false, extraMenu = [], onMenu }: {
+export function SidebarItem({ icon, label, tag, view, count, quietCount, honeyCount = false, meta, unread = false, extraMenu = [], onMenu, locked = false }: {
   icon: ReactNode;
   label: string;
   /** Drawn right after the label (a coming-soon channel's "Soon"). */
@@ -35,8 +36,19 @@ export function SidebarItem({ icon, label, tag, view, count, quietCount, honeyCo
   unread?: boolean;
   extraMenu?: NativeMenuItem[];
   onMenu?: (id: string) => void;
+  /** Part of the UGC Academy on this plan: a lock, and a click opens the sheet instead. */
+  locked?: boolean;
 }) {
   const { current } = useNav();
+  if (locked) {
+    return (
+      <button className="sb-item locked" aria-label={`${label}, part of the UGC Academy`} title={`${label} · Part of the UGC Academy`} onClick={openUpgrade}>
+        {icon}
+        <span className="label">{label}</span>
+        <Lock className="sb-lock" aria-hidden />
+      </button>
+    );
+  }
   const on = sameView(current.view, view);
 
   async function contextMenu() {

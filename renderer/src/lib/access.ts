@@ -16,6 +16,8 @@ export interface MeAccess {
   /** The areas the plan locks: "hub" on The Weekend Starter (servers from Nov 9 2026). */
   locked: string[];
   upgradeUrl: string | null;
+  /** What the UGC Academy includes, for the locked sheet (limited plans; null otherwise). Servers from Nov 12 2026. */
+  academyIncludes?: string[] | null;
   /** The feed categories a limited plan reads (null: every category). */
   feedCategories?: string[] | null;
   /** It may write nowhere in the feed. */
@@ -32,11 +34,24 @@ export interface MeAccess {
   starterContacts?: StarterContact[];
 }
 
+/**
+ * GET /api/me/access. Beside `access`, a Weekend Starter buyer's first steps
+ * (creatorhive-app docs/weekend-signup.md): `mustChangePassword` (still on the
+ * temporary password from the email) and `welcomePending` (the profile step).
+ */
+export interface MeAccessResponse {
+  access: MeAccess;
+  mustChangePassword?: boolean;
+  welcomePending?: boolean;
+}
+
+export const ME_ACCESS_KEY = ["me", "access"] as const;
+
 export function useMeAccess() {
   return useQuery({
-    queryKey: ["me", "access"],
+    queryKey: ME_ACCESS_KEY,
     staleTime: 300_000,
-    queryFn: () => api<{ access: MeAccess }>("/api/me/access"),
+    queryFn: () => api<MeAccessResponse>("/api/me/access"),
   });
 }
 
@@ -93,7 +108,13 @@ export function useFeedAccess() {
   };
 }
 
-/** Opens "Part of the UGC Academy" over Home (it listens for this). */
+/** The plan is known and locks this area ("channels", "events", "members", "leaderboard"…). */
+export function useAreaLocked(area: string): boolean {
+  const locked = useMeAccess().data?.access?.locked;
+  return Array.isArray(locked) && locked.includes(area);
+}
+
+/** Opens "Part of the UGC Academy" over whatever is showing (shell/Upgrade.tsx UpgradeHost listens for this). */
 export function openUpgrade() {
   window.dispatchEvent(new Event("ch:upgrade"));
 }

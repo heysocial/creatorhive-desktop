@@ -166,6 +166,10 @@ function KindIcon({ kind }: { kind: LivePopupKind }) {
   if (kind === "mention") {
     return <svg viewBox="0 0 16 16" aria-hidden><path d="M8 1.5a6.5 6.5 0 1 0 3.3 12.1l-.7-1.2A5.1 5.1 0 1 1 13.1 8v.7c0 .8-.5 1.3-1.1 1.3s-1-.5-1-1.3V4.6H9.7v.6A3.3 3.3 0 1 0 10.1 10a2.4 2.4 0 0 0 4.4-1.3V8A6.5 6.5 0 0 0 8 1.5zm0 8.4A1.9 1.9 0 1 1 8 6a1.9 1.9 0 0 1 0 3.9z" /></svg>;
   }
+  if (kind === "video") {
+    // A clapperboard: the personal video editor (uploads, versions, reviews).
+    return <svg viewBox="0 0 16 16" aria-hidden><path d="M2 6.5h12V13a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1zM1.8 5.3l-.4-1.5a1 1 0 0 1 .7-1.2L11.8.1a1 1 0 0 1 1.2.7l.4 1.5z" /></svg>;
+  }
   if (kind === "dm") {
     return <svg viewBox="0 0 16 16" aria-hidden><path d="M1.5 3h13v10h-13zM2.8 4.4 8 8.3l5.2-3.9z" /></svg>;
   }

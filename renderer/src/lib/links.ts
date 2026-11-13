@@ -40,6 +40,14 @@ export function locationForPath(target: string): Location | null {
   // Admin → Announcements: its notification and its Activity row open the whole message.
   const announcement = /^\/announcements\/([0-9a-f-]{36})$/i.exec(url.pathname)?.[1];
   if (announcement) return { ws: "ch", section: "home", view: { kind: "announcement", id: announcement } };
+  // The personal video editor: the student's review screen, and a student's card on the staff board.
+  if (/^\/(library|improve)\/videos\/review\/?$/.test(url.pathname)) {
+    const video = Number(params.get("video"));
+    return { ws: "ch", section: "learn", view: { kind: "video-review", video: video >= 1 && video <= 3 ? video : undefined } };
+  }
+  if (/^\/(library|improve)\/videos\/?$/.test(url.pathname)) return { ws: "ch", section: "learn", view: { kind: "learn", page: "improve" } };
+  const editCard = /^\/video-edits(?:\/([0-9a-f-]{36}))?\/?$/i.exec(url.pathname);
+  if (editCard) return { ws: "ch", section: "edits", view: { kind: "video-edits", cardId: editCard[1] } };
   const guide = /^\/library\/resources\/([\w-]+)$/.exec(url.pathname)?.[1];
   if (guide) return { ws: "ch", section: "learn", view: guide === "ai-script-writer" ? { kind: "script-writer" } : { kind: "improve-resource", slug: guide } };
 
