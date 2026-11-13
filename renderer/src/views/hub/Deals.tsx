@@ -71,7 +71,6 @@ export function Overview({ deals }: { deals: Deal[] }) {
   // A retainer's amount is one payment, so it would drag the average down: left out, as on the website.
   const averaged = live.filter((d) => d.payment_kind !== "retainer");
   const collected = cash?.tier.collectedThisMonth ?? 0;
-  const delta = cash ? collected - cash.activity.previous_month_collected_usd : 0;
   // Marked paid for a day still ahead: counted in Contracted until it lands, not in Collected.
   const landing = cash?.activity.landing ?? [];
   return (
@@ -85,7 +84,7 @@ export function Overview({ deals }: { deals: Deal[] }) {
             <button onClick={() => setOpen("potential")}><small>Potential</small><b className="muted-num">{money(total(pot))}</b><span>{plural(pot.length, "deal")}<ChevronRight /></span></button>
           </div>
         </div>
-        <div className="metric"><span className="ml"><Check />Collected</span><b>{money(collected)}</b><small>{cash ? `${delta >= 0 ? "+" : "−"}${money(Math.abs(delta))} vs last month` : " "}</small>
+        <div className="metric"><span className="ml"><Check />Collected</span><b>{money(collected)}</b><small>this month</small>
           {cash && cash.by_person.length > 1 ? <small>{cash.by_person.map((p) => `${p.initials} ${money(p.collected_usd)}`).join(" · ")}</small> : null}</div>
         <div className="metric"><span className="ml"><Layers />Active deals</span><b>{live.length}</b><small>across 3 sections</small></div>
         <div className="metric"><span className="ml"><ChartNoAxesColumn />Avg Deal Size</span><b>{money(averaged.length ? Math.round(total(averaged) / averaged.length) : 0)}</b><small>across active deals</small></div>
