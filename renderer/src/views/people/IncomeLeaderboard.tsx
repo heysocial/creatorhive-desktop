@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Award, Check, Crown, LockKeyhole, ShieldCheck, Sparkles, Star, TrendingUp } from "lucide-react";
+import { Award, Check, Crown, LockKeyhole, ShieldCheck, Sparkles, Star } from "lucide-react";
 import { api, ApiError } from "../../lib/api";
 import {
   BEE_TIERS, formatMoney, getIncomeProgress, LbAvatar, LeaderboardViewToggle, MemberName, openProfile, tierDisplayName,
@@ -48,11 +48,6 @@ export interface IncomeLeaderboardResponse {
 
 const TIER_ICONS = { newbie: Sparkles, hustle: Star, pro: Award, pink_queen: Crown } satisfies Record<BeeTierKey, typeof Sparkles>;
 
-function monthDelta(current: number, previous: number) {
-  const difference = current - previous;
-  if (difference === 0) return "Same pace as last month";
-  return `${difference > 0 ? "+" : "−"}${formatMoney(Math.abs(difference))} vs last month`;
-}
 
 export function IncomeLeaderboard({ data, loading, error, onRetry, onDataChange, onViewChange }: {
   data: IncomeLeaderboardResponse | null;
@@ -172,10 +167,8 @@ export function IncomeLeaderboard({ data, loading, error, onRetry, onDataChange,
                 <span>{formatMoney(data.self.amountUsd)} earned</span>
                 <b>{selfProgress.nextTier ? `${formatMoney(selfProgress.nextTier.minimum)} · ${selfNextTierName}` : "Top tier unlocked"}</b>
               </div>
-              <p className={data.self.amountUsd >= data.self.previousMonthAmountUsd ? styles.isUp : ""}>
-                <TrendingUp aria-hidden size={13} />
-                {data.self.amountUsd === 0 ? "Your first paid deal starts the climb." : monthDelta(data.self.amountUsd, data.self.previousMonthAmountUsd)}
-              </p>
+              {/* No comparison with last month (Simon, Nov 12 2026), as on the website. */}
+              {data.self.amountUsd === 0 ? <p>Your first paid deal starts the climb.</p> : null}
             </article>
             <TopEarner entry={data.board.topEarner} monthLabel={data.monthLabel} />
           </section>
