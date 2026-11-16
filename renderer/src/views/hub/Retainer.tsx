@@ -47,7 +47,8 @@ export function RetainerSection({ deal, onEditSchedule }: { deal: Deal; onEditSc
   const today = localToday();
   const next = r.next_due_on;
   const inDays = next ? daysBetween(today, next) : null;
-  const when = inDays === null ? "" : inDays === 0 ? "today" : inDays === 1 ? "tomorrow" : `in ${inDays} days`;
+  // A date a few days past is still due, not late (the server keeps it as the next payment for 3 days).
+  const when = inDays === null ? "" : inDays === 0 ? "today" : inDays === 1 ? "tomorrow" : inDays === -1 ? "yesterday, still due" : inDays < 0 ? `${-inDays} days ago, still due` : `in ${inDays} days`;
   const rhythm = r.interval === "month"
     ? `every month, on the ${ordinal(Number(r.anchor_on.slice(8, 10)))}`
     : `${r.every_label}, on ${new Date(`${r.anchor_on}T12:00:00`).toLocaleDateString("en-US", { weekday: "long" })}s`;
