@@ -184,15 +184,44 @@ const INVITE_ERRORS: Record<string, string> = {
   invalid_role: "Choose a valid role.",
   role_forbidden: "Only an owner can invite another team member.",
   account_exists: "An account already exists for this email.",
-  invalid_access_level: "Choose UGC Academy or UGC Starter.",
+  invalid_access_level: "Choose UGC Academy or The Weekend Starter.",
   starter_requires_student: "UGC Starter is for students only.",
+  weekend_requires_student: "The Weekend Starter is for students only.",
+  already_weekend: "This email is already on The Weekend Starter.",
+  deactivated: "This is a former member. Reactivate them first (Former members), then try again.",
+  staff: "This email belongs to a team member.",
+  guest: "This email is a Hey Social Inc. guest. Change their account by hand.",
 };
 
 /** One line of a bulk invite's outcome — see `POST /api/invites/bulk`. */
 type BulkInviteResult =
   | { email: string; status: "invited" | "invite_pending"; invite: Omit<InviteResult, "link">; link: string }
   | { email: string; status: "already_member"; deactivated: boolean }
-  | { email: string; status: "invalid" | "failed" };
+  | { email: string; status: "invalid" | "failed" }
+  | { email: string; status: "weekend"; weekend: WeekendResult };
+
+/**
+ * The Weekend Starter (Nov 16 2026): not an invite link. The server does what a
+ * Whop purchase does: a new email gets an account and the login email with a
+ * temporary password; an account gets the Weekend Starter and "You're in".
+ */
+type WeekendResult =
+  | { ok: true; email: string; outcome: "account_created" | "upgraded" | "invited" | "needs_attention"; emailSent: boolean }
+  | { ok: false; email: string; error: "already_weekend" | "deactivated" | "staff" | "guest" };
+
+const WEEKEND_REFUSED: Record<string, string> = {
+  already_weekend: "Already on The Weekend Starter",
+  deactivated: "Former member · reactivate first",
+  staff: "Team member · not changed",
+  guest: "Hey Social guest · not changed",
+};
+
+function weekendLabel(result: WeekendResult): { label: string; tone: Delivery } {
+  if (!result.ok) return { label: WEEKEND_REFUSED[result.error] ?? "Not changed", tone: "not_sent" };
+  if (result.outcome === "needs_attention") return { label: "Needs attention · see Admin → Weekend Starter", tone: "failed" };
+  const what = result.outcome === "account_created" ? "Account created" : result.outcome === "upgraded" ? "Account upgraded" : "Invite used";
+  return result.emailSent ? { label: `${what} · email sent`, tone: "sent" } : { label: `${what} · email failed`, tone: "failed" };
+}
 
 const BULK_INVITE_MAX = 50;
 
@@ -200,8 +229,13 @@ const BULK_ERRORS: Record<string, string> = {
   no_emails: "Paste at least one email address.",
   too_many: `Up to ${BULK_INVITE_MAX} emails at a time.`,
   role_forbidden: "Only an owner can invite another team member.",
-  invalid_access_level: "Choose UGC Academy or UGC Starter.",
+  invalid_access_level: "Choose UGC Academy or The Weekend Starter.",
   starter_requires_student: "UGC Starter is for students only.",
+  weekend_requires_student: "The Weekend Starter is for students only.",
+  already_weekend: "This email is already on The Weekend Starter.",
+  deactivated: "This is a former member. Reactivate them first (Former members), then try again.",
+  staff: "This email belongs to a team member.",
+  guest: "This email is a Hey Social Inc. guest. Change their account by hand.",
 };
 
 /** The pasted list as the server will read it: split, lower-cased, de-duplicated. */
@@ -220,6 +254,7 @@ function bulkResultLabel(result: BulkInviteResult): { label: string; tone: Deliv
       ? { label: "Former member · reactivate instead", tone: "not_sent" }
       : { label: "Already a member", tone: "not_sent" };
     case "invalid": return { label: "Not a valid email", tone: "failed" };
+    case "weekend": return weekendLabel(result.weekend);
     default: return { label: "Failed", tone: "failed" };
   }
 }
@@ -231,8 +266,12 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
   const [emails, setEmails] = useState("");
   const [bulkResults, setBulkResults] = useState<BulkInviteResult[] | null>(null);
   const [inviteRole, setInviteRole] = useState<"student" | "team">("student");
-  // The plan: the full UGC Academy, or UGC Starter for six months from when they join.
-  const [inviteAccess, setInviteAccess] = useState<"academy" | "starter">("academy");
+  // The plan: the full UGC Academy, or The Weekend Starter (as if bought on Whop).
+  // UGC Starter is no longer offered here (Nov 16 2026); its members are unchanged.
+  const [inviteAccess, setInviteAccess] = useState<"academy" | "first3">("academy");
+  const [weekendName, setWeekendName] = useState("");
+  const [weekendDone, setWeekendDone] = useState<WeekendResult | null>(null);
+  const weekend = inviteRole === "student" && inviteAccess === "first3";
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [created, setCreated] = useState<InviteResult | null>(null);
@@ -265,11 +304,18 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
       return;
     }
     try {
-      const data = await api<{ invite: Omit<InviteResult, "link">; link: string }>("/api/invites/create", {
+      const data = await api<{ invite?: Omit<InviteResult, "link">; link?: string; weekend?: WeekendResult }>("/api/invites/create", {
         method: "POST",
-        body: { email, role: inviteRole, accessLevel: inviteRole === "student" ? inviteAccess : "academy" },
+        body: {
+          email, role: inviteRole, accessLevel: inviteRole === "student" ? inviteAccess : "academy",
+          ...(weekend && weekendName.trim() ? { name: weekendName.trim() } : {}),
+        },
       });
-      setCreated({ ...data.invite, link: data.link });
+      if (data.weekend) {
+        setWeekendDone(data.weekend);
+        return;
+      }
+      setCreated({ ...data.invite!, link: data.link! });
       void queryClient.invalidateQueries({ queryKey: INVITES_KEY });
     } catch (error) {
       const data = error instanceof ApiError ? error.data : null;
@@ -299,7 +345,19 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
   }
 
   const description = bulkResults
-    ? `${bulkResults.filter((result) => result.status === "invited").length} of ${bulkResults.length} invited. Each has seven days to create their account.`
+    ? weekend
+      ? `${bulkResults.filter((result) => result.status === "weekend" && result.weekend.ok).length} of ${bulkResults.length} added to The Weekend Starter.`
+      : `${bulkResults.filter((result) => result.status === "invited").length} of ${bulkResults.length} invited. Each has seven days to create their account.`
+    : weekendDone
+    ? weekendDone.ok && weekendDone.outcome === "account_created"
+      ? "Their account is ready. The login email has the app buttons, their email and a temporary password (good for 30 days)."
+      : weekendDone.ok && weekendDone.outcome === "upgraded"
+        ? "They already had an account: The Weekend Starter is added to it, and the “You’re in” email tells them."
+        : weekendDone.ok && weekendDone.outcome === "invited"
+          ? "An invite was already waiting for this email; it now carries The Weekend Starter, and was sent again."
+          : "Recorded, but it needs a look in Admin → Weekend Starter."
+    : weekend
+    ? "Their account is made now. The login email has the app buttons and a temporary password; if they already have an account, it’s upgraded."
     : created
     ? created.deliveryStatus === "sent"
       ? "The invitation email was sent. Keep the private link as a fallback."
@@ -310,10 +368,10 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
 
   return (
     <Modal
-      title={bulkResults ? "Invites" : created ? "Invite ready" : mode === "many" ? "Invite members" : "Invite a member"}
+      title={bulkResults ? "Invites" : weekendDone ? "The Weekend Starter" : created ? "Invite ready" : mode === "many" ? "Invite members" : "Invite a member"}
       onClose={() => !submitting && onClose()}
       width={440}
-      foot={bulkResults ? <button className="btn honey mad-wide" onClick={onClose}>Done</button> : created ? <button className="btn honey mad-wide" onClick={() => void copy()}>{copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy invite link"}</button> : undefined}
+      foot={bulkResults || weekendDone ? <button className="btn honey mad-wide" onClick={onClose}>Done</button> : created ? <button className="btn honey mad-wide" onClick={() => void copy()}>{copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy invite link"}</button> : undefined}
     >
       <div className="mad-dialog">
         <p className="mad-desc">{description}</p>
@@ -329,6 +387,20 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
               );
             })}
           </ul>
+        ) : weekendDone ? (
+          <>
+            <div className="mad-created mad-created-stack">
+              <span className="selectable">{weekendDone.email}</span>
+              <span className="mad-chips">
+                <span className="mad-role">Student · The Weekend Starter</span>
+                <span className="mad-delivery" data-status={weekendLabel(weekendDone).tone}>{weekendLabel(weekendDone).label}</span>
+              </span>
+            </div>
+            <p className="mad-desc">
+              30 days of the Weekend Starter group from today, and $500 off the UGC Academy. It’s listed in Admin → Weekend Starter as Manual.
+              {weekendDone.ok && !weekendDone.emailSent && weekendDone.outcome === "account_created" ? " The email didn’t go out: send a new login email from Admin → Weekend Starter." : ""}
+            </p>
+          </>
         ) : created ? (
           <>
             <div className="mad-created">
@@ -391,17 +463,26 @@ export function InviteDialog({ role, onClose }: { role: "owner" | "team"; onClos
                     <input type="radio" name="invite-access" value="academy" checked={inviteAccess === "academy"} onChange={() => setInviteAccess("academy")} />
                     <span><b>UGC Academy</b><small>Everything: community, courses, coaching</small></span>
                   </label>
-                  <label className={inviteAccess === "starter" ? "on" : undefined}>
-                    <input type="radio" name="invite-access" value="starter" checked={inviteAccess === "starter"} onChange={() => setInviteAccess("starter")} />
-                    <span><b>UGC Starter</b><small>Six months from when they join: Script Writer, Hub, New Bee, DMs with Vince, Wins</small></span>
+                  <label className={inviteAccess === "first3" ? "on" : undefined}>
+                    <input type="radio" name="invite-access" value="first3" checked={inviteAccess === "first3"} onChange={() => setInviteAccess("first3")} />
+                    <span><b>The Weekend Starter</b><small>As if bought on Whop: account and login email now, 30 days of the group, $500 Academy credit</small></span>
                   </label>
                 </div>
               </fieldset>
             ) : null}
+            {weekend && mode === "one" ? (
+              <label className="mad-field">
+                <span>Name <small>(optional, for the email and their profile)</small></span>
+                <input className="field" type="text" maxLength={80} autoComplete="off" placeholder="Janelle Brooks"
+                  value={weekendName} onChange={(event) => setWeekendName(event.target.value)} disabled={submitting} />
+              </label>
+            ) : null}
             {formError ? <div className="mad-error" role="alert">{formError}</div> : null}
             <button type="submit" className="btn honey mad-wide" disabled={submitting}>
               {submitting ? <Loader2 className="spin" /> : null}
-              {mode === "many" ? (countEmails(emails) > 1 ? `Create ${countEmails(emails)} invites` : "Create invites") : "Create invite"}
+              {weekend
+                ? mode === "many" && countEmails(emails) > 1 ? `Add ${countEmails(emails)} to The Weekend Starter` : "Add to The Weekend Starter"
+                : mode === "many" ? (countEmails(emails) > 1 ? `Create ${countEmails(emails)} invites` : "Create invites") : "Create invite"}
             </button>
           </form>
         )}

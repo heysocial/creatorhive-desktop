@@ -63,6 +63,9 @@
 .mad-options small { color: var(--ink-3); font-size: 11.5px; line-height: 1.35; }
 
 .mad-created { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 600; font-size: 13.5px; }
+/* The Weekend Starter result: the email on its own line, the chips under it. */
+.mad-created.mad-created-stack { flex-direction: column; align-items: flex-start; gap: 8px; overflow-wrap: anywhere; }
+.mad-created-stack .mad-chips { flex-wrap: wrap; }
 .mad-chips { display: flex; align-items: center; gap: 6px; flex: none; }
 .mad-role { padding: 2px 8px; border-radius: 99px; background: var(--honey-soft); color: var(--honey-ink); font-size: 11px; white-space: nowrap; }
 
