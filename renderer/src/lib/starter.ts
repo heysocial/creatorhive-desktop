@@ -291,6 +291,19 @@ const codeOf = (error: unknown) => (error instanceof ApiError && typeof error.da
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const backoff = (attempt: number) => sleep(Math.min(30_000, 1000 * 2 ** attempt));
 
+/*
+  The moment the Mac goes offline, stop every part in flight: a request on a
+  dead connection doesn't fail by itself for a while (the main process drops a
+  silent one after 30 s). The loops see "cancelled" while offline, wait for the
+  connection (online()) and send that part again, without using up a try.
+*/
+if (typeof window !== "undefined") {
+  window.addEventListener("offline", () => {
+    for (const job of jobs.values()) for (const id of job.inFlight.keys()) ch.files.cancelPut(id);
+  });
+}
+const droppedOffline = (result: { ok: boolean; error?: string }) => !result.ok && result.error === "cancelled" && !navigator.onLine;
+
 /** While the Mac is offline: the tile says "Waiting for internet", and everything waits for the connection. */
 async function online(job: Job) {
   if (navigator.onLine) return;
@@ -416,6 +429,11 @@ async function sendWhole(job: Job) {
     const result = await ch.files.putFile({ id, url: ticket.uploadUrl, type: ticket.contentType, filePath: job.file.path });
     job.inFlight.delete(id);
     if (job.cancelled) return;
+    if (droppedOffline(result)) {
+      attempt -= 1;
+      showProgress(job);
+      continue;
+    }
     if (result.ok) {
       job.doneBytes = job.file.size;
       showProgress(job);
@@ -490,6 +508,10 @@ async function sendPart(job: Job, n: number) {
     const result = await ch.files.putPart({ id, url, filePath: job.file.path, start, end });
     job.inFlight.delete(id);
     if (job.cancelled) return;
+    if (droppedOffline(result)) {
+      showProgress(job);
+      continue;
+    }
     if (result.ok) {
       job.done.add(n);
       job.doneBytes += end - start;

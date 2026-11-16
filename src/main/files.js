@@ -184,7 +184,7 @@ function videoFileInfo(filePath) {
   A file (or, for a multipart upload, one part of it: bytes [start, end)) from
   disk to a presigned R2 URL. Never read into memory, never re-encoded.
   Progress goes back as `files:putProgress` under `id`. A connection that goes
-  quiet for a minute is dropped, so a dead network fails the part instead of
+  quiet for 30 seconds is dropped, so a dead network fails the part instead of
   hanging (the interface waits and sends that part again).
 */
 function putFile(sender, id, url, type, filePath, range = null) {
@@ -231,7 +231,7 @@ function putFile(sender, id, url, type, filePath, range = null) {
       response.on("end", () => finish({ ok: response.statusCode >= 200 && response.statusCode < 300, status: response.statusCode }));
       response.on("error", () => finish({ ok: false, error: "failed" }));
     });
-    request.setTimeout(60_000, () => request.destroy(new Error("timeout")));
+    request.setTimeout(30_000, () => request.destroy(new Error("timeout")));
     activePuts.set(id, request);
     let sent = 0;
     let lastReport = 0;
