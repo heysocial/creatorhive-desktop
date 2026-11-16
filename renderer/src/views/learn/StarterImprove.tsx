@@ -3,6 +3,7 @@ import { ArrowUpRight, Check, Lock, PlayCircle, Plus, Sparkles, Upload } from "l
 import { useCourses, type ImproveResource } from "../../lib/learn";
 import { editorChat, firstName, shortDay } from "../../lib/videoEdits";
 import { EditorCard, WhereTracker } from "./EditorParts";
+import { openAllVideos, openVideo } from "./StarterVideos";
 import { nav } from "../../lib/nav";
 import { openUpgrade } from "../../lib/access";
 import {
@@ -47,9 +48,7 @@ export function Thumb({ video, height }: { video: SubmissionVideo; height: numbe
   );
 }
 
-function openVideos() {
-  nav.open({ kind: "starter-videos" }, "learn", "ch");
-}
+const openVideos = openAllVideos;
 
 function StuckBox({ text }: { text: string }) {
   return (
@@ -96,7 +95,7 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
           if (!v) return <span key={slot} className="st-empty" style={{ height: 96 }} />;
           return (
             <div key={slot} className="ve-sub-slot mc-step-slot">
-              <button className="mc-step-btn" title="See your clips" onClick={openVideos}><Thumb video={v} height={editing ? 150 : 96} /></button>
+              <button className="mc-step-btn" title="See your clips" onClick={() => openVideo(slot, false)}><Thumb video={v} height={editing ? 150 : 96} /></button>
               <small>Video {slot} · {clipsLabel(list.length)}</small>
               {editing ? <span className="ve-sub-name"><small className="faint">{formatBytes(list.reduce((sum, c) => sum + c.sizeBytes, 0))}</small></span> : null}
             </div>
@@ -121,7 +120,7 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
           if (list[0]) {
             const total = list.length + ups.length;
             return (
-              <button key={slot} className="mc-step-slot mc-step-btn" onClick={openVideos}>
+              <button key={slot} className="mc-step-slot mc-step-btn" onClick={() => openVideo(slot, false)}>
                 <Thumb video={list[0]} height={120} />
                 <small>{clipsLabel(total)}{ups.length ? " · uploading" : ""}</small>
               </button>
@@ -130,7 +129,7 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
           const size = ups.reduce((sum, u) => sum + u.size, 0);
           const pct = size ? Math.round((ups.reduce((sum, u) => sum + u.sent, 0) / size) * 100) : 0;
           return (
-            <button key={slot} className="st-empty" style={{ height: 120 }} onClick={openVideos}>
+            <button key={slot} className="st-empty" style={{ height: 120 }} onClick={() => openVideo(slot, ups.length === 0)}>
               {ups.length ? <><span className="st-mini-bar"><i style={{ width: `${pct}%` }} /></span><small>{ups.some((u) => u.status === "failed") ? "Upload stopped" : `Uploading ${pct}%`}</small></>
                 : <><Plus /><small>Video {slot}</small></>}
             </button>
@@ -139,8 +138,8 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
       </div>
       <div className="st-progress"><span className="st-bar"><i style={{ width: `${(ready / 3) * 100}%` }} /></span><b>{ready} of 3 videos have clips</b></div>
       {submission?.unavailable ? <p className="faint">{submission.unavailable}</p> : null}
-      <button className="btn honey lg" onClick={openVideos}>
-        <Upload />{ready === 3 ? "Review and submit" : ready === 0 ? "Add your clips" : `Add clips to video ${next}`}
+      <button className="btn honey lg" onClick={() => (ready === 3 ? openVideos() : openVideo(next, !inFlight.some((u) => u.slot === next)))}>
+        <Upload />{ready === 3 ? (track.plan === "first3" ? "Add notes and submit" : "Review and submit") : ready === 0 ? "Add your clips" : `Add clips to video ${next}`}
       </button>
       {step.stuck ? <StuckBox text={step.stuck} /> : null}
     </div>

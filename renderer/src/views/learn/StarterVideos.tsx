@@ -1,5 +1,5 @@
-import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { Check, ChevronLeft, Lock, MessageCircle, Plus, RotateCw, WifiOff, X } from "lucide-react";
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { Check, ChevronLeft, ChevronRight, Lock, MessageCircle, Plus, RotateCw, WifiOff, X } from "lucide-react";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { useImprove } from "../../lib/learn";
 import { editorChat, firstName, shortDay } from "../../lib/videoEdits";
@@ -38,6 +38,24 @@ import "../../styles/starter.css";
 
 function back() {
   nav.open({ kind: "learn", page: "improve" }, "learn", "ch");
+}
+
+/* The video whose file dialog opens as soon as its screen shows (one time, not kept in history). */
+let pickOnOpen: number | null = null;
+
+/**
+  Opens one video's screen (website: /library/videos?video=N). With `pick`, the
+  file dialog opens straight away so she can choose all its clips at once.
+*/
+export function openVideo(slot: number, pick: boolean) {
+  pickOnOpen = pick ? slot : null;
+  nav.open({ kind: "starter-videos", video: slot }, "learn", "ch");
+}
+
+/** The overview with all 3 videos, notes and Submit (website: /library/videos). */
+export function openAllVideos() {
+  pickOnOpen = null;
+  nav.open({ kind: "starter-videos" }, "learn", "ch");
 }
 
 const ACCEPT = "video/*,.mov,.mp4,.m4v,.webm,.hevc,.3gp,.mkv,.avi";
@@ -148,6 +166,13 @@ function VideoCard({ slot, state, editable, locked }: { slot: number; state: Vid
     setNote(null);
     input.current?.click();
   }
+  // Opened from an empty Video N slot or "Next: Video N": the dialog opens at once.
+  useEffect(() => {
+    if (pickOnOpen !== slot) return;
+    pickOnOpen = null;
+    if (editable) choose();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   function picked(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     event.target.value = "";
@@ -190,7 +215,7 @@ function VideoCard({ slot, state, editable, locked }: { slot: number; state: Vid
   );
 }
 
-export function StarterVideos({ user }: { user: SessionUser }) {
+export function StarterVideos({ user, video }: { user: SessionUser; video?: number }) {
   const { data, isLoading, isError } = useSubmission();
   const uploads = useClipUploads();
   const [submitting, setSubmitting] = useState(false);
@@ -209,6 +234,8 @@ export function StarterVideos({ user }: { user: SessionUser }) {
   // The Weekend Starter: step 2 waits for the course.
   const courseFirst = useImprove().data?.starter?.steps.find((s) => s.id === "three_videos")?.locked ?? null;
   const editor = editorName ?? "our editor";
+  const one = video && video >= 1 && video <= 3 ? video : null;
+  const nextEmpty = one ? [1, 2, 3].map((n) => ((one + n - 1) % 3) + 1).find((slot) => slot !== one && clipsOf(state, slot).length === 0 && !uploads.some((u) => u.slot === slot)) ?? null : null;
 
   async function submit() {
     setSubmitting(true);
@@ -220,12 +247,29 @@ export function StarterVideos({ user }: { user: SessionUser }) {
     <div className="ve-with-dock">
     <div className="page">
       <div className="mhead">
-        <button className="btn ghost st-back" onClick={back}><ChevronLeft />Improve</button>
-        <h1>Submit your 3 videos</h1>
+        <button className="btn ghost st-back" onClick={back}><ChevronLeft />{one ? "Back to Improve" : "Improve"}</button>
+        <h1>{one ? `Video ${one}` : "Submit your 3 videos"}</h1>
         {editing?.editor ? <div className="acts"><button className="btn" onClick={() => editorChat.open()}><MessageCircle />Message {editorName}</button></div> : null}
       </div>
       <div className="scroll page-body st-videos">
-        <p className="st-lede">Add all the clips you filmed for each video. {editorName ? `${editorName}, your editor,` : "Our editor"} puts them together for you. We keep your files at full quality.</p>
+        {one ? (
+          <>
+            <div className="seg mc-switch" role="tablist" aria-label="Your 3 videos">
+              {[1, 2, 3].map((slot) => {
+                const n = clipsOf(state, slot).length + uploads.filter((u) => u.slot === slot).length;
+                return (
+                  <button key={slot} role="tab" aria-selected={slot === one} className={slot === one ? "on" : ""}
+                    onClick={() => slot !== one && openVideo(slot, false)}>
+                    Video {slot}{n ? <span className="mc-switch-n">{uploads.some((u) => u.slot === slot) ? null : <Check />}{n}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="st-lede">Add all the clips you filmed for this video. {editorName ?? "Our editor"} puts them together for you.</p>
+          </>
+        ) : (
+          <p className="st-lede">Add all the clips you filmed for each video. {editorName ? `${editorName}, your editor,` : "Our editor"} puts them together for you. We keep your files at full quality.</p>
+        )}
         {isLoading ? <div className="empty-state">Loading…</div> : null}
         {isError ? <div className="empty-state">Couldn't load your videos.</div> : null}
         {data?.unavailable ? <div className="empty-state">{data.unavailable}</div> : null}
@@ -242,12 +286,20 @@ export function StarterVideos({ user }: { user: SessionUser }) {
             </div>
           </div>
         ) : null}
-        {state && !(courseFirst && !submitted) ? (
+        {state && one && !(courseFirst && !submitted) ? (
+          <div className="mc-one">
+            <VideoCard key={one} slot={one} state={state} editable={editable} locked={locked} />
+          </div>
+        ) : null}
+        {state && one && !submitted && !courseFirst && nextEmpty ? (
+          <button className="btn honey lg mc-next" onClick={() => openVideo(nextEmpty, true)}>Next: Video {nextEmpty}<ChevronRight /></button>
+        ) : null}
+        {state && !one && !(courseFirst && !submitted) ? (
           <div className="st-slot-grid mc-cards">
             {[1, 2, 3].map((slot) => <VideoCard key={slot} slot={slot} state={state} editable={editable} locked={locked} />)}
           </div>
         ) : null}
-        {state && !submitted && !courseFirst ? (
+        {state && !submitted && !courseFirst && !(one && nextEmpty) ? (
           <div className="card st-submit ve-submit">
             <label className="ve-brief-field">
               <b>Notes for {editorName ?? "your editor"} <span className="faint">(optional)</span></b>

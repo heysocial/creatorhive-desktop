@@ -83,7 +83,7 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
     case "script-writer":
       return <ScriptWriter chatId={view.chatId} />;
     case "starter-videos":
-      return <StarterVideos user={user} />;
+      return <StarterVideos user={user} video={view.video} />;
     case "video-review":
       return <VideoReview user={user} video={view.video} />;
     case "video-edits":

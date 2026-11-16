@@ -28,7 +28,8 @@ export type View =
   | { kind: "resource"; id: string }
   | { kind: "improve-resource"; slug: string }
   | { kind: "script-writer"; chatId?: string }
-  | { kind: "starter-videos" }
+  /** "Submit your 3 videos"; with `video`, only that video (website /library/videos?video=N). */
+  | { kind: "starter-videos"; video?: number }
   /** The student's review of her edited videos (personal video editor). */
   | { kind: "video-review"; video?: number }
   /** Staff: the video editing board, with a card's panel open over it. */
