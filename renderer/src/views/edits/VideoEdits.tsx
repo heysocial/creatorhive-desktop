@@ -11,7 +11,7 @@ import { clock, dayLabel } from "../../lib/format";
 import {
   EDIT_STAGES, EDIT_STAGE_LABELS, STAGE_CLASS, cancelVersionUpload, daysUntil, dueIn, firstName, formatDueDate, formatMoment,
   clipsFor, dismissClipDownload, downloadClips, patchCard, planLabel, useClipDownloads, replyToStudent, shortDay, staffComment, uploadKey, uploadVersion, useVersionUploads, useVideoEditCard,
-  useVideoEditsBoard, versionsOf, type BoardCard, type EditStage, type StaffCard, type StaffEditVersion, type StaffOriginal,
+  useVideoEditsBoard, versionsOf, type BoardCard, type EditStage, type StaffCard, type StaffEditVersion, type StaffOriginal, type VideoSlotState,
 } from "../../lib/videoEdits";
 import { useLayer } from "../hub/parts";
 import { QuickPlayer, VideoStill, type PlayerSource } from "./Player";
@@ -79,6 +79,16 @@ function BoardCardView({ card, selected, ghost, onPointerDown }: { card: BoardCa
         })}
       </div>
       {card.clipCounts ? <span className="ve-clip-counts">{[1, 2, 3].map((slot) => card.clipCounts?.[slot] ?? 0).join(" · ")} clips</span> : null}
+      {card.videos ? (
+        // Each video's own stage (docs/per-video-send.md).
+        <div className="ve-card-videos">
+          {card.videos.map((video) => (
+            <span key={video.slot} className={`ve-card-video ${video.stage ? STAGE_CLASS[video.stage] : "unsent"}`}>
+              <b>{video.slot}</b>{video.stage ? EDIT_STAGE_LABELS[video.stage] : "Not sent"}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className="ve-card-chips">
         <DueChip card={card} />
         {card.member.plan !== "first3" ? <span className="ve-chip quiet">{planLabel(card.member.plan)}</span> : null}
@@ -218,13 +228,25 @@ function CardBody({ card, user, onClose, onPlay }: { card: StaffCard; user: Sess
   const first = firstName(card.member.name);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const download = useClipDownloads()[card.id];
   const newest = Math.max(0, ...card.edits.filter((e) => e.status === "ready").map((e) => e.version));
-  const primary = card.stage === "revisions" ? `Send v${Math.max(2, newest)} for review` : card.stage === "submitted" || card.stage === "in_editing" ? "Move to Ready to review" : null;
+  // Only videos she has sent move (docs/per-video-send.md); older servers: all 3.
+  const sentSlots = card.videos ? card.videos.filter((v) => v.stage !== null).map((v) => v.slot) : [1, 2, 3];
+  const unsentSlots = [1, 2, 3].filter((slot) => !sentSlots.includes(slot));
+  const readySlots = new Set(card.edits.map((e) => e.slot));
+  const missing = sentSlots.filter((slot) => !readySlots.has(slot));
+  const primary = sentSlots.length < 2 ? null
+    : card.stage === "revisions" ? `Send v${Math.max(2, newest)} for review` : card.stage === "submitted" || card.stage === "in_editing" ? "Move to Ready to review" : null;
+  const stageLabel = sentSlots.length === 3 ? "All 3 videos" : `${sentSlots.length === 1 ? "Video" : "Videos"} ${sentSlots.join(" and ")}`;
 
-  async function move(stage: EditStage) {
+  async function move(stage: EditStage, slot?: number) {
     setBusy(true);
-    setError(await patchCard(card.id, { stage }));
+    setError(null);
+    setNotice(null);
+    const failed = await patchCard(card.id, slot ? { stage, slot } : { stage });
+    setError(failed);
+    if (!failed && stage === "ready_to_review") setNotice(`${first} is told by notification and email${slot ? ` that Video ${slot} is ready` : ""}.`);
     setBusy(false);
   }
   async function stageMenu() {
@@ -255,13 +277,19 @@ function CardBody({ card, user, onClose, onPlay }: { card: StaffCard; user: Sess
       </header>
       <div className="ve-panel-body scroll">
         <div className="ve-stage-row">
-          <span className="ve-label">Stage</span>
+          <span className="ve-label">{stageLabel}</span>
           <button className={`stage-btn ${STAGE_CLASS[card.stage]}`} onClick={() => void stageMenu()} disabled={busy}>{EDIT_STAGE_LABELS[card.stage]}<ChevronDown /></button>
-          <span className="faint ve-hint">{primary ? `${first} is told by notification + email` : card.stage === "ready_to_review" ? `Waiting for ${first}'s review` : `${first} approved all 3`}</span>
+          <span className="faint ve-hint">{card.stage === "approved" ? `${first} approved ${sentSlots.length === 3 ? "all 3" : stageLabel}` : card.stage === "ready_to_review" ? `Waiting for ${first}'s review` : `${first} is told by notification + email`}</span>
           {primary ? <button className="btn honey" disabled={busy} onClick={() => void move("ready_to_review")}><Send />{busy ? "Moving…" : primary}</button> : null}
         </div>
+        {unsentSlots.length ? (
+          <p className="faint ve-stage-help">{first} sends each video on its own. Not sent yet: {unsentSlots.map((slot) => `Video ${slot}`).join(", ")}. Each video below moves on its own.</p>
+        ) : card.videos && missing.length && card.stage !== "approved" ? (
+          <p className="faint ve-stage-help">Moving the whole card to Ready to review needs an edited version of all 3 videos ({3 - missing.length} of 3 so far). Each video below can also move on its own.</p>
+        ) : null}
         <DueRow card={card} onError={setError} />
         {error ? <div className="ve-error" role="alert">{error}</div> : null}
+        {notice ? <div className="ve-notice" role="status">{notice}</div> : null}
         {card.brief ? (
           <div className="ve-brief">
             <b><NotebookPen />{first}'s notes · from the upload form</b>
@@ -278,7 +306,8 @@ function CardBody({ card, user, onClose, onPlay }: { card: StaffCard; user: Sess
         </div>
         {download?.error ? <div className="ve-error" role="alert">{download.error}</div> : null}
         {[1, 2, 3].map((slot) => (
-          <SlotRow key={slot} card={card} slot={slot} clips={clipsFor(card, slot)} versions={versionsOf(card.edits, slot)} onPlay={onPlay} />
+          <SlotRow key={slot} card={card} slot={slot} clips={clipsFor(card, slot)} versions={versionsOf(card.edits, slot)} onPlay={onPlay}
+            state={card.videos?.find((v) => v.slot === slot) ?? null} busy={busy} onMove={(stage) => void move(stage, slot)} />
         ))}
         <Thread card={card} user={user} />
       </div>
@@ -299,7 +328,13 @@ function DueRow({ card, onError }: { card: StaffCard; onError: (message: string 
   );
 }
 
-function SlotRow({ card, slot, clips, versions, onPlay }: { card: StaffCard; slot: number; clips: StaffOriginal[]; versions: StaffEditVersion[]; onPlay: (p: { source: PlayerSource; title: string }) => void }) {
+function SlotRow({ card, slot, clips, versions, onPlay, state, busy, onMove }: {
+  card: StaffCard; slot: number; clips: StaffOriginal[]; versions: StaffEditVersion[]; onPlay: (p: { source: PlayerSource; title: string }) => void;
+  /** This video's own stage (null from an older server). */
+  state: VideoSlotState | null;
+  busy: boolean;
+  onMove: (stage: EditStage) => void;
+}) {
   const uploads = useVersionUploads();
   const up = uploads[uploadKey(card.id, slot)];
   const input = useRef<HTMLInputElement>(null);
@@ -327,7 +362,14 @@ function SlotRow({ card, slot, clips, versions, onPlay }: { card: StaffCard; slo
     setPicked(null);
     setNote("");
   }
-  const drop = {
+  const notSent = Boolean(state && !state.stage);
+  async function slotMenu() {
+    if (!state?.stage) return;
+    const choice = await ch.menu.popup(EDIT_STAGES.map((stage) => ({ id: stage, label: EDIT_STAGE_LABELS[stage], checked: stage === state.stage })));
+    if (choice && choice !== state.stage) onMove(choice as EditStage);
+  }
+  const readyVersions = versions.filter((v) => v.status === "ready");
+  const drop = notSent ? {} : {
     onDragOver: (event: DragEvent) => { event.preventDefault(); setOver(true); },
     onDragLeave: () => setOver(false),
     onDrop: (event: DragEvent) => { event.preventDefault(); setOver(false); void take(event.dataTransfer.files[0]); },
@@ -335,7 +377,31 @@ function SlotRow({ card, slot, clips, versions, onPlay }: { card: StaffCard; slo
   const fileInput = <input ref={input} type="file" hidden accept="video/mp4,video/quicktime,.mp4,.mov,.m4v" onChange={(event: ChangeEvent<HTMLInputElement>) => { const f = event.target.files?.[0]; event.target.value = ""; void take(f); }} />;
 
   return (
-    <div className={`ve-slot ve-slot-multi ${over ? "over" : ""}`} {...drop}>
+    <div className={`ve-slot ve-slot-multi ${over ? "over" : ""} ${notSent ? "unsent" : ""}`} {...drop}>
+      {state ? (
+        // Each video moves on its own (docs/per-video-send.md).
+        state.stage ? (
+          <div className="ve-video-stage">
+            <b>Video {slot}</b>
+            <button className={`stage-btn ${STAGE_CLASS[state.stage]}`} onClick={() => void slotMenu()} disabled={busy}>{EDIT_STAGE_LABELS[state.stage]}<ChevronDown /></button>
+            <span className="faint">Sent {shortDay(state.sentAt)}{state.dueOn && state.stage !== "approved" ? ` · Due ${formatDueDate(state.dueOn, false)} (${dueIn(state.dueOn)})` : ""}</span>
+            <span className="ve-spacer" />
+            {state.stage === "submitted" || state.stage === "in_editing" || state.stage === "revisions" ? (
+              <button className="btn honey ve-small-primary" disabled={busy || readyVersions.length === 0}
+                title={readyVersions.length === 0 ? `Upload an edited version of Video ${slot} first` : undefined} onClick={() => onMove("ready_to_review")}>
+                <Send />{state.stage === "revisions" ? `Send v${readyVersions[0]?.version ?? 2} for review` : `Send Video ${slot} for review`}
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="ve-video-stage">
+            <b>Video {slot}</b>
+            <span className="ve-not-sent dashed">Not sent yet</span>
+            <span className="faint">{clips.length ? "She's still adding clips. You'll be told when she sends it." : "No clips yet."}</span>
+          </div>
+        )
+      ) : null}
+      {state?.note ? <div className="ve-video-note"><NotebookPen /><span>{state.note}</span></div> : null}
       <div className="ve-slot-original">
         <div className="ve-clip-head">
           <span className="ve-kicker ve-clip-title">
@@ -388,7 +454,7 @@ function SlotRow({ card, slot, clips, versions, onPlay }: { card: StaffCard; slo
               onChange={(event) => setNote(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void send(); }} />
             <div className="ve-note-acts"><button className="btn" onClick={() => setPicked(null)}>Cancel</button><button className="btn honey" onClick={() => void send()}><Upload />Upload v{nextVersion}</button></div>
           </div>
-        ) : versions.length ? (
+        ) : notSent ? null : versions.length ? (
           <button className="btn ve-upload-btn" onClick={() => input.current?.click()}><Upload />Upload v{nextVersion}</button>
         ) : (
           <button className="ve-dropzone" onClick={() => input.current?.click()}>

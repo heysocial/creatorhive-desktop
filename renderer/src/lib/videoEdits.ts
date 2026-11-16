@@ -109,6 +109,27 @@ export interface VideoEditor extends EditPerson {
   conversationId: string | null;
 }
 
+/**
+ * One of the 3 videos, sent to the editor on its own (creatorhive-app
+ * docs/per-video-send.md). Each sent video moves through the stages by itself.
+ */
+export interface VideoSlotState {
+  slot: number;
+  /** null = not sent yet. */
+  stage: EditStage | null;
+  sentAt: string | null;
+  stageChangedAt: string | null;
+  /** YYYY-MM-DD, "ready by": sent + 7 days unless Valentin changed it. */
+  dueOn: string | null;
+  /** Her note for the editor about this video (optional). */
+  note: string | null;
+  /** She can still add or remove this video's clips (not sent, or sent and editing hasn't started). */
+  canEditClips: boolean;
+  timeline: EditTimeline;
+  /** Plain words for the student: "Valentin is editing it. Ready by Thu, Nov 20." */
+  line: string;
+}
+
 export interface StudentEditState {
   stage: EditStage | null;
   stageChangedAt: string | null;
@@ -121,6 +142,8 @@ export interface StudentEditState {
   comments: EditComment[];
   editor: VideoEditor | null;
   nextLine: string | null;
+  /** Each video on its own, always 3 (Video 1, 2, 3). Older servers leave it out. */
+  videos?: VideoSlotState[];
 }
 
 export interface BoardCard {
@@ -138,6 +161,8 @@ export interface BoardCard {
   opened: boolean;
   approvedAt: string | null;
   sentAt: string | null;
+  /** Each video's own stage (null = not sent yet), Video 1, 2, 3. The card's `stage` is the least advanced sent one. */
+  videos?: Array<{ slot: number; stage: EditStage | null; dueOn: string | null }>;
 }
 
 export interface BoardResponse {
@@ -193,6 +218,8 @@ export interface StaffCard {
   thread: CardThreadItem[];
   conversationId: string | null;
   timeline: EditTimeline;
+  /** Each video's own stage, due date, note and tracker (always 3). Older servers leave it out. */
+  videos?: VideoSlotState[];
 }
 
 export interface EditUploadTicket {
@@ -253,6 +280,15 @@ export function dueIn(dueOn: string) {
 
 export const planLabel = (plan: string | null | undefined) => (plan === "first3" ? "Weekend Starter" : plan === "starter" ? "UGC Starter" : "Student");
 export const firstName = (name: string) => name.split(" ")[0] || name;
+
+/** "Video 2", "Video 2 and Video 3", "Video 1, Video 2 and Video 3". */
+export function listOf(slots: readonly number[]) {
+  const names = slots.map((slot) => `Video ${slot}`);
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** Whether a video's edit can be reviewed (approve / ask for changes) now. */
+export const reviewable = (stage: EditStage | null | undefined) => Boolean(stage) && stageIndex(stage!) >= stageIndex("ready_to_review");
 
 /** Versions of one slot, newest first. */
 export function versionsOf<T extends EditVersion>(edits: T[], slot: number): T[] {
@@ -412,14 +448,20 @@ function putCard(card: StaffCard) {
   void queryClient.invalidateQueries({ queryKey: BOARD_KEY });
 }
 
-/** Move a card (or change its due date). Refusals come back as the website's sentence. */
-export async function patchCard(id: string, patch: { stage?: EditStage; dueOn?: string }): Promise<string | null> {
+/**
+ * Move a card (or change its due date). With `slot`, that video alone
+ * (creatorhive-app docs/per-video-send.md); without it, every sent video.
+ */
+export async function patchCard(id: string, patch: { stage?: EditStage; dueOn?: string; slot?: number }): Promise<string | null> {
   const board = queryClient.getQueryData<BoardResponse | null>(BOARD_KEY);
-  if (board && patch.stage) {
+  if (board && patch.stage && !patch.slot) {
     // On the board at once; the server's answer replaces it.
     queryClient.setQueryData<BoardResponse | null>(BOARD_KEY, <BoardResponse>{
       ...board,
-      cards: board.cards.map((c) => (c.id === id ? { ...c, stage: patch.stage!, stageChangedAt: new Date().toISOString() } : c)),
+      cards: board.cards.map((c) => (c.id === id ? {
+        ...c, stage: patch.stage!, stageChangedAt: new Date().toISOString(),
+        videos: c.videos?.map((v) => (v.stage ? { ...v, stage: patch.stage! } : v)),
+      } : c)),
     });
   }
   try {
@@ -430,9 +472,9 @@ export async function patchCard(id: string, patch: { stage?: EditStage; dueOn?: 
     if (board) queryClient.setQueryData(BOARD_KEY, board);
     void queryClient.invalidateQueries({ queryKey: BOARD_KEY });
     if (error instanceof ApiError && error.data?.code === "NEEDS_VERSIONS" && typeof error.data.error !== "string") {
-      return "Each of the 3 videos needs an edited version before it's ready to review.";
+      return patch.slot ? `Upload an edited version of Video ${patch.slot} first.` : "Each of the 3 videos needs an edited version before it's ready to review.";
     }
-    return messageOf(error, "Couldn't move the card. Try again.");
+    return messageOf(error, patch.slot ? "Couldn't move that video. Try again." : "Couldn't move the card. Try again.");
   }
 }
 

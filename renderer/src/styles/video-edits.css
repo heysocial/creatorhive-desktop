@@ -359,3 +359,33 @@
 .ve-clip-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .ve-clip-title > span { white-space: nowrap; }
 .ve-clip-size { text-transform: none; letter-spacing: 0; font-weight: 500; opacity: 0.75; }
+
+/* Each video sent on its own (creatorhive-app docs/per-video-send.md). */
+.ve-card-videos { display: flex; flex-wrap: wrap; gap: 4px; }
+.ve-card-video { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px 0 2px; border-radius: 999px; font-size: 11.5px; font-weight: 650; background: var(--st-bg); color: var(--st-ink); white-space: nowrap; }
+.ve-card-video b { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 999px; font-size: 10.5px; background: color-mix(in srgb, currentColor 16%, transparent); }
+.ve-card-video.unsent { background: var(--card-3); color: var(--ink-3); }
+.ve-stage-help { font-size: 12.5px; line-height: 1.45; margin-top: -4px; }
+.ve-notice { padding: 9px 12px; border-radius: 10px; background: var(--ve-green-soft); color: var(--ve-green-ink); font-size: 13px; font-weight: 600; }
+.ve-video-stage { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.ve-video-stage > b { font-size: 14px; }
+.ve-video-stage .faint { font-size: 12.5px; }
+.ve-spacer { flex: 1; }
+.ve-small-primary.btn { height: 32px; padding: 0 12px; border-radius: 9px; font-size: 13px; }
+.ve-small-primary svg { width: 14px; height: 14px; }
+.ve-not-sent { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 650; color: var(--ink-3); background: var(--card-2); box-shadow: inset 0 0 0 .5px var(--line-strong); white-space: nowrap; }
+.ve-not-sent.dashed { box-shadow: none; border: 1px dashed var(--line-strong); }
+.ve-video-note { grid-column: 1 / -1; display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; line-height: 1.45; background: var(--honey-soft); border-radius: 10px; padding: 9px 12px; white-space: pre-wrap; user-select: text; }
+.ve-video-note svg { flex: none; width: 14px; height: 14px; margin-top: 3px; color: var(--honey-ink); }
+.ve-slot.unsent .ve-slot-edits { opacity: .55; }
+/* Student: "Where your videos are", one block per video. */
+.ve-video-tracks { display: flex; flex-direction: column; }
+.ve-video-track { display: flex; flex-direction: column; gap: 10px; padding: 16px 0; border-top: .5px solid var(--line); }
+.ve-video-track:first-child { border-top: 0; padding-top: 0; }
+.ve-video-track:last-child { padding-bottom: 0; }
+.ve-video-track-head { display: flex; align-items: center; gap: 10px; }
+.ve-video-track-head b { font-size: 15.5px; font-weight: 700; }
+.ve-video-track-line { font-size: 13.5px; line-height: 1.45; }
+.ve-text-link { align-self: flex-start; border: 0; background: none; padding: 0; font: inherit; font-size: 13.5px; font-weight: 650; color: var(--ink); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in srgb, var(--ink) 35%, transparent); }
+.ve-text-link:hover { text-decoration-color: var(--ink); }
+.ve-done-pill + .ve-done-pill { margin-left: 6px; }

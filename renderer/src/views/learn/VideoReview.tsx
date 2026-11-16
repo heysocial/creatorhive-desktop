@@ -10,6 +10,7 @@ import { Avatar } from "../../lib/ui";
 import {
   addStudentComment, deleteStudentComment, downloadFinal, editorChat, firstName, formatMoment, markWatched, reviewVideo, shortDay,
   useStudentEditing, versionsOf, type EditComment, type EditVersion, type ReviewState, type StudentEditState,
+  reviewable,
 } from "../../lib/videoEdits";
 import { useVideoSource, VideoStill } from "../edits/Player";
 import { EditorChatDock } from "./EditorParts";
@@ -103,6 +104,9 @@ function SlotReview({ slot, editing, user }: { slot: number; editing: StudentEdi
   useVideoSource(element, version);
   useEffect(() => { setDuration(version?.durationSeconds ?? 0); setTime(0); setMoment(null); }, [version?.id]);
 
+  // Each video is reviewed on its own once the editor sends it (docs/per-video-send.md); older servers: the card's stage.
+  const slotStage = editing.videos?.length ? editing.videos.find((v) => v.slot === slot)?.stage ?? null : editing.stage;
+  const canDecide = reviewable(slotStage);
   if (!version) {
     return <div className="empty-state">{firstName(editing.editor?.name ?? "Your editor")} is still editing Video {slot}.</div>;
   }
@@ -172,7 +176,7 @@ function SlotReview({ slot, editing, user }: { slot: number; editing: StudentEdi
       <div className="ve-side-col">
         <Comments slot={slot} version={version} comments={comments} user={user} lit={lit} onJump={jump}
           moment={moment ?? time} onClearMoment={() => setMoment(null)} />
-        <Decision slot={slot} version={version} review={review?.state ?? "pending"} decidedVersion={review?.editId === version.id}
+        <Decision slot={slot} version={version} review={review?.state ?? "pending"} decidedVersion={review?.editId === version.id} canDecide={canDecide}
           openNotes={comments.filter((c) => c.author.id === user.id && c.editId === version.id && !c.resolvedInVersion).length} />
       </div>
     </div>
@@ -236,7 +240,7 @@ function Comments({ slot, version, comments, user, lit, onJump, moment, onClearM
   );
 }
 
-function Decision({ slot, version, review, decidedVersion, openNotes }: { slot: number; version: EditVersion; review: ReviewState; decidedVersion: boolean; openNotes: number }) {
+function Decision({ slot, version, review, decidedVersion, canDecide, openNotes }: { slot: number; version: EditVersion; review: ReviewState; decidedVersion: boolean; canDecide: boolean; openNotes: number }) {
   const [busy, setBusy] = useState<null | "approve" | "changes" | "download">(null);
   const [error, setError] = useState<string | null>(null);
   async function decide(decision: "approve" | "changes") {
@@ -268,7 +272,7 @@ function Decision({ slot, version, review, decidedVersion, openNotes }: { slot: 
           <b>You asked for changes on Video {slot}</b>
           <p className="muted">Your notes went to your editor all at once. You'll get a notification when the new version is ready. Changed your mind?</p>
           <div className="ve-decision-acts">
-            <button className="btn honey lg" disabled={Boolean(busy)} onClick={() => void decide("approve")}><Check />{busy === "approve" ? "Approving…" : `Approve Video ${slot}`}</button>
+            <button className="btn honey lg" disabled={Boolean(busy) || !canDecide} onClick={() => void decide("approve")}><Check />{busy === "approve" ? "Approving…" : `Approve Video ${slot}`}</button>
           </div>
         </>
       ) : (
@@ -276,8 +280,8 @@ function Decision({ slot, version, review, decidedVersion, openNotes }: { slot: 
           <b>Happy with Video {slot}?</b>
           <p className="muted">Approve it and the final file is yours to download. Or send it back with your notes: your editor gets them all at once.</p>
           <div className="ve-decision-acts">
-            <button className="btn honey lg" disabled={Boolean(busy)} onClick={() => void decide("approve")}><Check />{busy === "approve" ? "Approving…" : `Approve Video ${slot}`}</button>
-            <button className="btn lg" disabled={Boolean(busy)} title={openNotes === 0 ? "Tip: click the timeline to add a note at the moment you'd like changed" : undefined} onClick={() => void decide("changes")}>
+            <button className="btn honey lg" disabled={Boolean(busy) || !canDecide} onClick={() => void decide("approve")}><Check />{busy === "approve" ? "Approving…" : `Approve Video ${slot}`}</button>
+            <button className="btn lg" disabled={Boolean(busy) || !canDecide} title={openNotes === 0 ? "Tip: click the timeline to add a note at the moment you'd like changed" : undefined} onClick={() => void decide("changes")}>
               <RotateCcw />{busy === "changes" ? "Sending…" : openNotes ? `Request changes (${openNotes} ${openNotes === 1 ? "note" : "notes"})` : "Request changes"}
             </button>
           </div>

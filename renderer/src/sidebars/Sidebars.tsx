@@ -284,7 +284,9 @@ function Learn() {
   const editing = useStudentEditing(Boolean(improve?.starter)).editing;
   // The Weekend Starter (and UGC Starter): the Academy guides are locked.
   const libraryLocked = useAreaLocked("library");
-  const reviewOpen = Boolean(editing?.stage && stageIndex(editing.stage) >= stageIndex("ready_to_review"));
+  // Each video is reviewed on its own (docs/per-video-send.md): open once any one is ready.
+  const reviewOpen = editing?.videos?.length ? editing.videos.some((v) => v.stage && stageIndex(v.stage) >= stageIndex("ready_to_review"))
+    : Boolean(editing?.stage && stageIndex(editing.stage) >= stageIndex("ready_to_review"));
   return (
     <>
       <SidebarHead title="Learn" />

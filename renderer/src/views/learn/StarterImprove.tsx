@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ArrowUpRight, Check, Lock, PlayCircle, Plus, Sparkles, Upload } from "lucide-react";
+import { ArrowUpRight, Check, Lock, PlayCircle, Plus, Send, Sparkles, Upload } from "lucide-react";
 import { useCourses, type ImproveResource } from "../../lib/learn";
 import { editorChat, firstName, shortDay } from "../../lib/videoEdits";
 import { EditorCard, WhereTracker } from "./EditorParts";
+import { StagePill } from "../edits/VideoEdits";
 import { openAllVideos, openVideo } from "./StarterVideos";
 import { nav } from "../../lib/nav";
 import { openUpgrade } from "../../lib/access";
@@ -14,9 +15,9 @@ import {
   resetsLabel,
   STARTER_GRADE_HELP,
   STARTER_RESOURCES,
-  canEditClipsNow,
   clipsLabel,
   clipsOf,
+  slotStates,
   useClipUploads,
   useSubmission,
   type StarterGrade,
@@ -65,18 +66,27 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
   const inFlight = useClipUploads();
   const state = submission?.state ?? null;
   const clips = (slot: number) => clipsOf(state, slot);
+  const editing = state?.editing;
+  const editorName = editing?.editor ? firstName(editing.editor.name) : "our editor";
+  const editor = editing?.editor ? editorName : "Valentin";
+  // Each video is sent on its own (docs/per-video-send.md); older servers: the whole card on every video.
+  const slots = slotStates(state);
+  const stageOf = (slot: number) => slots[slot - 1].stage;
+  const unsent = [1, 2, 3].filter((slot) => stageOf(slot) === null);
+  const sentCount = 3 - unsent.length;
+  const allSent = Boolean(state) && unsent.length === 0;
+  const anyEditable = slots.some((s) => s.canEditClips);
+  const prefix = track.plan === "first3" ? `Step ${step.number} · ` : "";
 
-  if (step.state === "done" || state?.status === "submitted") {
-    const editing = state?.editing;
-    const editorName = editing?.editor ? firstName(editing.editor.name) : "our editor";
-    const editable = canEditClipsNow(state);
+  if (step.state === "done" || allSent) {
+    const lastSent = slots.map((s) => s.sentAt).filter((at): at is string => Boolean(at)).sort().pop() ?? state?.submittedAt ?? null;
     return (
       <div className="card st-now">
         <div className="st-row-head">
           <div>
-            <b className="st-title">{track.plan === "first3" ? `Step ${step.number} · ` : ""}{step.title}{state?.submittedAt ? <span className="ve-done-pill"><Check />Submitted {shortDay(state.submittedAt)}</span> : null}</b>
+            <b className="st-title">{prefix}{step.title}{lastSent ? <span className="ve-done-pill"><Check />Sent {shortDay(lastSent)}</span> : null}</b>
             <span className="muted">
-              {editable ? `Sent. You can still add or remove clips until ${editorName} starts editing.`
+              {anyEditable ? `Your clips are with ${editorName}, at full quality. You can still add or remove clips until he starts editing.`
                 : editing ? <>Your clips are with {editorName}, at full quality. To change a clip now, <button className="ve-inline-link" onClick={() => editorChat.open()}>message him</button>.</>
                 : step.detail}
             </span>
@@ -92,44 +102,67 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
         <div className="st-slots">{[1, 2, 3].map((slot) => {
           const list = clips(slot);
           const v = list[0];
+          const stage = stageOf(slot);
           if (!v) return <span key={slot} className="st-empty" style={{ height: 96 }} />;
           return (
             <div key={slot} className="ve-sub-slot mc-step-slot">
               <button className="mc-step-btn" title="See your clips" onClick={() => openVideo(slot, false)}><Thumb video={v} height={editing ? 150 : 96} /></button>
-              <small>Video {slot} · {clipsLabel(list.length)}</small>
+              <span className="mc-step-cap"><small>Video {slot} · {clipsLabel(list.length)}</small>{stage && editing ? <StagePill stage={stage} small /> : null}</span>
               {editing ? <span className="ve-sub-name"><small className="faint">{formatBytes(list.reduce((sum, c) => sum + c.sizeBytes, 0))}</small></span> : null}
             </div>
           );
         })}</div>
-        {editable ? <button className="btn" onClick={openVideos}><Plus />Add or remove clips</button> : null}
+        {anyEditable ? <button className="btn" onClick={openVideos}><Plus />Add or remove clips</button> : null}
       </div>
     );
   }
 
   const filled = [1, 2, 3].filter((slot) => clips(slot).length > 0).length;
   const ready = state ? filled : step.count?.value ?? 0;
-  const next = [1, 2, 3].find((slot) => clips(slot).length === 0) ?? 3;
+  const nextEmpty = unsent.find((slot) => clips(slot).length === 0 && !inFlight.some((u) => u.slot === slot));
+  const unsentWithClips = unsent.filter((slot) => clips(slot).length > 0);
+  let button: { label: string; open: () => void; send: boolean } | null = null;
+  if (nextEmpty) button = { label: ready === 0 ? "Add your clips" : `Add clips to video ${nextEmpty}`, open: () => openVideo(nextEmpty, true), send: false };
+  else if (unsentWithClips.length === 1) button = { label: `Send Video ${unsentWithClips[0]} to ${editor}`, open: () => openVideo(unsentWithClips[0], false), send: true };
+  else if (unsentWithClips.length > 1) button = { label: unsentWithClips.length === 3 ? `Send your 3 videos to ${editor}` : `Send your videos to ${editor}`, open: openVideos, send: true };
+  else {
+    // Every video not sent yet is still uploading.
+    const uploading = unsent[0];
+    if (uploading) button = { label: `Add clips to video ${uploading}`, open: () => openVideo(uploading, false), send: false };
+  }
   return (
     <div className="card st-now">
-      <div className="st-row-head"><div><span className="st-eyebrow">Now</span><b className="st-title big">{step.title}</b></div>{track.plan === "first3" ? null : <GradePill grade={step.grade} />}</div>
-      <p className="st-lede">Film 3 videos and add all their clips here. <b>Our editor puts each one together for you</b>, so you start pitching with a finished portfolio.</p>
+      <div className="st-row-head">
+        <div>
+          <span className="st-eyebrow">Now</span>
+          <b className="st-title big">{prefix}{step.title}{sentCount > 0 ? <span className="ve-done-pill"><Send />{sentCount} of 3 sent</span> : null}</b>
+        </div>
+        {track.plan === "first3" ? null : <GradePill grade={step.grade} />}
+      </div>
+      <p className="st-lede">{sentCount > 0 ? <>Send each video to {editor} when it's ready. <b>He starts on it right away.</b></>
+        : <>Film 3 videos and add all their clips here, then send each one to {editor} (or all 3 together). <b>He puts each one together for you</b>, so you start pitching with a finished portfolio.</>}</p>
       <div className="st-slots">
         {[1, 2, 3].map((slot) => {
           const list = clips(slot);
           const ups = inFlight.filter((u) => u.slot === slot);
+          const stage = stageOf(slot);
           if (list[0]) {
             const total = list.length + ups.length;
             return (
-              <button key={slot} className="mc-step-slot mc-step-btn" onClick={() => openVideo(slot, false)}>
+              <button key={slot} className="mc-step-slot mc-step-btn" onClick={() => openVideo(slot, false)}
+                aria-label={`Video ${slot}, ${clipsLabel(total)}, ${stage ? "sent" : "not sent yet"}`}>
                 <Thumb video={list[0]} height={120} />
-                <small>{clipsLabel(total)}{ups.length ? " · uploading" : ""}</small>
+                <span className="mc-step-cap">
+                  <small>{clipsLabel(total)}{ups.length ? " · uploading" : ""}</small>
+                  {stage ? <StagePill stage={stage} small /> : <small className="faint">Not sent yet</small>}
+                </span>
               </button>
             );
           }
           const size = ups.reduce((sum, u) => sum + u.size, 0);
           const pct = size ? Math.round((ups.reduce((sum, u) => sum + u.sent, 0) / size) * 100) : 0;
           return (
-            <button key={slot} className="st-empty" style={{ height: 120 }} onClick={() => openVideo(slot, ups.length === 0)}>
+            <button key={slot} className="st-empty" style={{ height: 120 }} onClick={() => openVideo(slot, ups.length === 0 && slots[slot - 1].canEditClips)}>
               {ups.length ? <><span className="st-mini-bar"><i style={{ width: `${pct}%` }} /></span><small>{ups.some((u) => u.status === "failed") ? "Upload stopped" : `Uploading ${pct}%`}</small></>
                 : <><Plus /><small>Video {slot}</small></>}
             </button>
@@ -138,9 +171,7 @@ function VideosCard({ step, track }: { step: StarterStep; track: StarterTrack })
       </div>
       <div className="st-progress"><span className="st-bar"><i style={{ width: `${(ready / 3) * 100}%` }} /></span><b>{ready} of 3 videos have clips</b></div>
       {submission?.unavailable ? <p className="faint">{submission.unavailable}</p> : null}
-      <button className="btn honey lg" onClick={() => (ready === 3 ? openVideos() : openVideo(next, !inFlight.some((u) => u.slot === next)))}>
-        <Upload />{ready === 3 ? (track.plan === "first3" ? "Add notes and submit" : "Review and submit") : ready === 0 ? "Add your clips" : `Add clips to video ${next}`}
-      </button>
+      {button ? <button className="btn honey lg" onClick={button.open}>{button.send ? <Send /> : <Upload />}{button.label}</button> : null}
       {step.stuck ? <StuckBox text={step.stuck} /> : null}
     </div>
   );

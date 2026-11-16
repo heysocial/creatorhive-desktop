@@ -166,3 +166,17 @@ button.mc-mid { border: 0; background: transparent; font: inherit; font-size: 11
 .st-videos:has(.mc-one) > .ve-submit, .st-videos:has(.mc-one) > .st-sent { max-width: 760px; width: 100%; }
 .mc-next { align-self: flex-start; }
 .mc-next svg { width: 16px; height: 16px; }
+/* Each video sent on its own (creatorhive-app docs/per-video-send.md). */
+.mc-switch-sent { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 700; color: #2F7D4F; }
+.mc-switch-sent svg { width: 11px; height: 11px; stroke-width: 2.6; }
+.mc-sent-banner { align-items: center; }
+.mc-sent-banner > div { flex: 1; min-width: 0; }
+.mc-sent-banner .st-sent-tick { width: 34px; height: 34px; }
+.mc-sent-banner .st-sent-tick svg { width: 17px; height: 17px; stroke-width: 2.25; }
+.st-videos:has(.mc-one) > .mc-sent-banner, .st-videos:has(.mc-one) > .mc-send-one, .st-videos:has(.mc-one) > .mc-error { max-width: 760px; width: 100%; box-sizing: border-box; }
+.mc-send-one .btn svg, .ve-submit .mc-foot .btn svg { width: 16px; height: 16px; }
+.mc-next-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mc-next-row .muted { font-size: 13px; }
+.mc-step-cap { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.mc-error { display: block; }
+.ve-brief-field > .muted { font-size: 12.5px; }

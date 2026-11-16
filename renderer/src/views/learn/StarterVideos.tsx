@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { Check, ChevronLeft, ChevronRight, Lock, MessageCircle, Plus, RotateCw, WifiOff, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Lock, MessageCircle, Plus, RotateCw, Send, WifiOff, X } from "lucide-react";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { useImprove } from "../../lib/learn";
-import { editorChat, firstName, shortDay } from "../../lib/videoEdits";
+import { editorChat, firstName, listOf } from "../../lib/videoEdits";
+import { StagePill } from "../edits/VideoEdits";
 import { EditorChatDock } from "./EditorParts";
 import { nav } from "../../lib/nav";
 import {
@@ -11,13 +12,14 @@ import {
   addClips,
   cancelClip,
   clipCount,
-  canEditClipsNow,
   clipsLabel,
   clipsOf,
   formatDuration,
   readClip,
   removeClip,
   retryClip,
+  sendVideo,
+  slotStates,
   submitForEditing,
   useClipUploads,
   useSubmission,
@@ -34,6 +36,10 @@ import "../../styles/starter.css";
   on a video; each clip streams from disk straight to storage, in parts, and
   keeps going while she uses the rest of the app. Clips can be added or
   removed until the editor starts editing (`canEditClips`), then they lock.
+
+  Each video is sent on its own (docs/per-video-send.md): "Send Video N to
+  Valentin" on its page, with a note; the overview sends the rest together.
+  Only the video he started editing locks.
 */
 
 function back() {
@@ -121,7 +127,7 @@ function UploadTile({ up }: { up: ClipUpload }) {
   );
 }
 
-function VideoCard({ slot, state, editable, locked }: { slot: number; state: VideoSubmissionState; editable: boolean; locked: boolean }) {
+function VideoCard({ slot, state, editable, sent }: { slot: number; state: VideoSubmissionState; editable: boolean; sent: boolean }) {
   const clips = clipsOf(state, slot);
   const ups = useClipUploads().filter((u) => u.slot === slot);
   const max = state.maxClipsPerVideo ?? CLIPS_PER_VIDEO_MAX;
@@ -189,7 +195,7 @@ function VideoCard({ slot, state, editable, locked }: { slot: number; state: Vid
     <div className={`card mc-card ${over ? "over" : ""}`} {...dropProps}>
       <div className="mc-head">
         <b>Video {slot}</b>
-        {locked ? <span className="mc-sent"><Check />Sent · {clipsLabel(clips.length)}</span> : count ? <span className="muted">{clipsLabel(count)}</span> : null}
+        {sent ? <span className="mc-sent">{editable ? <Send /> : <Check />}Sent · {clipsLabel(editable ? count : clips.length)}</span> : count ? <span className="muted">{clipsLabel(count)}</span> : null}
       </div>
       {count === 0 && editable ? (
         <div className="mc-empty">
@@ -221,27 +227,55 @@ export function StarterVideos({ user, video }: { user: SessionUser; video?: numb
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [brief, setBrief] = useState("");
+  const [notes, setNotes] = useState<Record<number, string>>({});
   const state = data?.state ?? null;
   const editing = state?.editing ?? null;
   const editorName = editing?.editor ? firstName(editing.editor.name) : null;
-  const submitted = state?.status === "submitted";
-  const editable = canEditClipsNow(state);
-  const locked = submitted && !editable;
-  const filled = [1, 2, 3].filter((slot) => clipsOf(state, slot).length > 0).length;
+  const editor = editorName ?? "Valentin";
+  // Each video on its own (docs/per-video-send.md); older servers: the whole card on every video.
+  const slots = slotStates(state);
+  const slotOf = (slot: number) => slots[slot - 1];
+  const unsent = [1, 2, 3].filter((slot) => slotOf(slot).stage === null);
+  const sentSlots = [1, 2, 3].filter((slot) => slotOf(slot).stage !== null);
+  const allSent = Boolean(state) && unsent.length === 0;
+  const anySent = sentSlots.length > 0;
+  const anyLocked = slots.some((s) => !s.canEditClips);
+  const clipsIn = (slot: number) => clipsOf(state, slot).length;
+  const uploadsIn = (slot: number) => uploads.filter((u) => u.slot === slot).length;
+  const hasClips = (slot: number) => clipsIn(slot) + uploadsIn(slot) > 0;
   const busy = uploads.length > 0;
   const stuck = uploads.some((u) => u.status === "failed");
-  const ready = filled === 3 && !busy;
+  const unsentReady = unsent.length > 0 && unsent.every((slot) => clipsIn(slot) > 0) && !busy;
+  const sendAllLabel = unsent.length === 3 ? `Send all 3 to ${editor}` : `Send ${listOf(unsent)} to ${editor}`;
   // The Weekend Starter: step 2 waits for the course.
   const courseFirst = useImprove().data?.starter?.steps.find((s) => s.id === "three_videos")?.locked ?? null;
-  const editor = editorName ?? "our editor";
+  const gated = Boolean(courseFirst) && !anySent;
   const one = video && video >= 1 && video <= 3 ? video : null;
-  const nextEmpty = one ? [1, 2, 3].map((n) => ((one + n - 1) % 3) + 1).find((slot) => slot !== one && clipsOf(state, slot).length === 0 && !uploads.some((u) => u.slot === slot)) ?? null : null;
+  const current = one ? slotOf(one) : null;
+  // The next video not sent yet: an empty one first, in order after this one.
+  const after = one ? [1, 2, 3].map((n) => ((one + n - 1) % 3) + 1).filter((slot) => slot !== one && slotOf(slot).stage === null) : [];
+  const nextUnsent = after.find((slot) => !hasClips(slot)) ?? after[0] ?? null;
+  const oneUploading = one ? uploadsIn(one) > 0 : false;
+  const showSendOne = Boolean(one && current && current.stage === null && clipsIn(one!) > 0);
+  const canSendOne = showSendOne && !oneUploading;
 
   async function submit() {
     setSubmitting(true);
     setError(await submitForEditing(brief));
     setSubmitting(false);
   }
+  async function sendOne(slot: number) {
+    setSubmitting(true);
+    setError(await sendVideo(slot, notes[slot] ?? ""));
+    setSubmitting(false);
+  }
+  const goNext = (slot: number) => openVideo(slot, !hasClips(slot) && slotOf(slot).canEditClips);
+
+  const footLine = stuck ? "A clip didn't upload. Tap it to try again, or remove it."
+    : busy ? "Your clips are uploading. You can leave this screen."
+    : unsentReady ? (unsent.length === 3 ? "All 3 videos have clips. Check they are the right ones." : `${listOf(unsent)} ${unsent.length === 1 ? "has" : "have"} clips. Check they are the right ones.`)
+    : unsent.length === 3 ? "Add clips to all 3 videos to send them together, or send each one from its own page"
+    : `Add clips to ${listOf(unsent.filter((slot) => clipsIn(slot) === 0))} to send the rest`;
 
   return (
     <div className="ve-with-dock">
@@ -256,67 +290,107 @@ export function StarterVideos({ user, video }: { user: SessionUser; video?: numb
           <>
             <div className="seg mc-switch" role="tablist" aria-label="Your 3 videos">
               {[1, 2, 3].map((slot) => {
-                const n = clipsOf(state, slot).length + uploads.filter((u) => u.slot === slot).length;
+                const n = clipsIn(slot) + uploadsIn(slot);
+                const sent = slotOf(slot).stage !== null;
                 return (
                   <button key={slot} role="tab" aria-selected={slot === one} className={slot === one ? "on" : ""}
                     onClick={() => slot !== one && openVideo(slot, false)}>
-                    Video {slot}{n ? <span className="mc-switch-n">{uploads.some((u) => u.slot === slot) ? null : <Check />}{n}</span> : null}
+                    Video {slot}
+                    {sent ? <span className="mc-switch-sent"><Send />Sent</span>
+                      : n ? <span className="mc-switch-n">{uploadsIn(slot) ? null : <Check />}{n}</span> : null}
                   </button>
                 );
               })}
             </div>
-            <p className="st-lede">Add all the clips you filmed for this video. {editorName ?? "Our editor"} puts them together for you.</p>
+            {current?.stage ? null : <p className="st-lede">Add all the clips you filmed for this video. {editorName ?? "Our editor"} puts them together for you.</p>}
           </>
         ) : (
-          <p className="st-lede">Add all the clips you filmed for each video. {editorName ? `${editorName}, your editor,` : "Our editor"} puts them together for you. We keep your files at full quality.</p>
+          <p className="st-lede">Add all the clips you filmed for each video. Send each one to {editor} when it's ready, or all 3 together. We keep your files at full quality.</p>
         )}
         {isLoading ? <div className="empty-state">Loading…</div> : null}
         {isError ? <div className="empty-state">Couldn't load your videos.</div> : null}
         {data?.unavailable ? <div className="empty-state">{data.unavailable}</div> : null}
-        {courseFirst && !submitted ? (
+        {gated ? (
           <div className="card ve-locked-big"><Lock /><b>{courseFirst}</b><span className="muted">Go through the video course on Improve first, then your 3 videos open here.</span></div>
         ) : null}
-        {state && submitted ? (
+        {error ? <span className="st-error mc-error" role="alert">{error}</span> : null}
+        {state && !one && allSent ? (
           <div className="st-sent big">
             <span className="st-sent-tick"><Check /></span>
             <div>
-              <b>Submitted{state.submittedAt ? ` ${shortDay(state.submittedAt)}` : ""}, {editor} is on it</b>
-              <span>{editable ? `Sent. You can still add or remove clips until ${editorName ?? "your editor"} starts editing.`
-                : `Your clips are with ${editorName ?? "our editor"}, at full quality. To change a clip now, message him.`}</span>
+              <b>All 3 sent, {editor} is on it</b>
+              <span>{editing?.nextLine ?? "We'll tell you when your edited videos are ready to review."}</span>
             </div>
           </div>
         ) : null}
-        {state && one && !(courseFirst && !submitted) ? (
+        {state && one && current?.stage ? (
+          <div className="st-sent big mc-sent-banner" role="status">
+            <span className="st-sent-tick"><Send /></span>
+            <div>
+              <b>Video {one} is with {editor}</b>
+              <span>{current.line || "Sent."}</span>
+            </div>
+            <StagePill stage={current.stage} small />
+          </div>
+        ) : null}
+        {state && one && !gated ? (
           <div className="mc-one">
-            <VideoCard key={one} slot={one} state={state} editable={editable} locked={locked} />
+            <VideoCard key={one} slot={one} state={state} editable={slotOf(one).canEditClips} sent={slotOf(one).stage !== null} />
           </div>
         ) : null}
-        {state && one && !submitted && !courseFirst && nextEmpty ? (
-          <button className="btn honey lg mc-next" onClick={() => openVideo(nextEmpty, true)}>Next: Video {nextEmpty}<ChevronRight /></button>
+        {state && showSendOne && !gated ? (
+          <div className="card st-submit ve-submit mc-send-one">
+            <label className="ve-brief-field">
+              <b>A note for {editor} about Video {one} <span className="faint">(optional)</span></b>
+              <span className="muted">The brand you're aiming at, the music you like, captions or not, your favourite take…</span>
+              <textarea className="field area" maxLength={2000} rows={3} value={notes[one!] ?? ""}
+                onChange={(event) => setNotes((n) => ({ ...n, [one!]: event.target.value }))}
+                placeholder="Upbeat music but not too loud, white captions." />
+            </label>
+            <div className="mc-foot">
+              <button className="btn honey lg" disabled={!canSendOne || submitting} onClick={() => void sendOne(one!)}><Send />{submitting ? "Sending…" : `Send Video ${one} to ${editor}`}</button>
+              <span className="muted">{oneUploading ? "Wait for the clips to finish uploading, then send it." : `${editor} starts on it once you send it. You can still change its clips until he starts editing.`}</span>
+            </div>
+          </div>
         ) : null}
-        {state && !one && !(courseFirst && !submitted) ? (
+        {state && one && !gated && nextUnsent ? (
+          <div className="mc-next-row">
+            <button className={`btn lg mc-next ${showSendOne ? "" : "honey"}`} onClick={() => goNext(nextUnsent)}>Next: Video {nextUnsent}<ChevronRight /></button>
+            {current?.stage === null && clipsIn(one) === 0 ? (
+              <span className="muted">{busy ? "Your clips are uploading. You can leave this screen." : "Add clips to this video, then send it, or move on to the next one."}</span>
+            ) : null}
+          </div>
+        ) : null}
+        {state && one && !nextUnsent && allSent ? (
+          <div className="mc-next-row">
+            <span className="muted">All 3 videos are with {editor}.</span>
+            <button className="btn honey lg mc-next" onClick={back}>Back to Improve</button>
+          </div>
+        ) : null}
+        {state && !one && !gated ? (
           <div className="st-slot-grid mc-cards">
-            {[1, 2, 3].map((slot) => <VideoCard key={slot} slot={slot} state={state} editable={editable} locked={locked} />)}
+            {[1, 2, 3].map((slot) => <VideoCard key={slot} slot={slot} state={state} editable={slotOf(slot).canEditClips} sent={slotOf(slot).stage !== null} />)}
           </div>
         ) : null}
-        {state && !submitted && !courseFirst && !(one && nextEmpty) ? (
+        {state && !one && !allSent && !gated ? (
           <div className="card st-submit ve-submit">
             <label className="ve-brief-field">
-              <b>Notes for {editorName ?? "your editor"} <span className="faint">(optional)</span></b>
+              <b>Notes for {editor} <span className="faint">(optional)</span></b>
               <textarea className="field area" maxLength={2000} rows={3} value={brief} onChange={(event) => setBrief(event.target.value)}
                 placeholder="What are they for? Music you like, captions, a part to cut…" />
             </label>
             <div className="mc-foot">
-              <button className="btn honey lg" disabled={!ready || submitting} onClick={() => void submit()}>{submitting ? "Submitting…" : "Submit for editing"}</button>
-              <span className="muted">{filled < 3 ? "Add clips to all 3 videos to submit"
-                : stuck ? "A clip didn't upload. Tap it to try again, or remove it."
-                : busy ? "Your clips are uploading. You can leave this screen."
-                : "All 3 videos have clips. Check they are the right ones."}</span>
-              {error ? <span className="st-error">{error}</span> : null}
+              <button className="btn honey lg" disabled={!unsentReady || submitting} onClick={() => void submit()}><Send />{submitting ? "Sending…" : sendAllLabel}</button>
+              <span className="muted">{footLine}</span>
+              {sentSlots.length ? <span className="muted">{listOf(sentSlots)} {sentSlots.length === 1 ? "is" : "are"} already with {editor}.</span> : null}
             </div>
           </div>
         ) : null}
-        {state && submitted && editable && busy ? <span className="muted mc-note">Your clips are uploading. You can leave this screen.</span> : null}
+        {state && !one && allSent ? (
+          <span className="muted mc-note">{busy ? "Your clips are uploading. You can leave this screen."
+            : anyLocked ? `Your clips are with ${editor}, at full quality. To change a clip in a video he's editing, message him.`
+            : `Sent. You can still add or remove clips until ${editor} starts editing.`}</span>
+        ) : null}
       </div>
     </div>
     <EditorChatDock editing={editing} user={user} />

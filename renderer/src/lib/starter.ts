@@ -636,7 +636,47 @@ export function readClip(file: File, withStill = true): Promise<{ meta: VideoMet
   });
 }
 
-/** `brief`: "Notes for Valentin" (optional, up to 2000 characters). */
+/**
+ * "Send Video N to Valentin" (creatorhive-app docs/per-video-send.md), with its
+ * own optional note. Sending again is harmless.
+ */
+export async function sendVideo(slot: number, note = ""): Promise<string | null> {
+  try {
+    const text = note.trim().slice(0, 2000);
+    const { submission } = await api<{ submission: VideoSubmissionState }>(`/api/improve/videos/${slot}/send`, { method: "POST", body: text ? { note: text } : {} });
+    setSubmission(submission);
+    return null;
+  } catch (error) {
+    return messageOf(error, "Couldn't send. Try again.");
+  }
+}
+
+/**
+ * Each video's state, always 3: the server's per-video list, or (older
+ * servers) the whole card's state copied onto every video.
+ */
+export function slotStates(state: VideoSubmissionState | null | undefined): import("./videoEdits").VideoSlotState[] {
+  const list = state?.editing?.videos;
+  if (list?.length) return [1, 2, 3].map((slot) => list.find((v) => v.slot === slot) ?? emptySlot(slot, true));
+  const sent = state?.status === "submitted";
+  const editable = canEditClipsNow(state);
+  return [1, 2, 3].map((slot) => ({
+    ...emptySlot(slot, editable),
+    stage: sent ? state?.editing?.stage ?? "submitted" : null,
+    sentAt: sent ? state?.submittedAt ?? null : null,
+    dueOn: sent ? state?.editing?.dueOn ?? null : null,
+    timeline: state?.editing?.timeline ?? emptySlot(slot, editable).timeline,
+  }));
+}
+
+function emptySlot(slot: number, canEditClips: boolean): import("./videoEdits").VideoSlotState {
+  return {
+    slot, stage: null, sentAt: null, stageChangedAt: null, dueOn: null, note: null, canEditClips, line: "",
+    timeline: { submittedAt: null, inEditingAt: null, readyAt: null, revisionsAt: null, approvedAt: null },
+  };
+}
+
+/** `brief`: "Notes for Valentin" (optional, up to 2000 characters). Sends every video not sent yet. */
 export async function submitForEditing(brief = ""): Promise<string | null> {
   try {
     const note = brief.trim().slice(0, 2000);
@@ -644,7 +684,7 @@ export async function submitForEditing(brief = ""): Promise<string | null> {
     setSubmission(submission);
     return null;
   } catch (error) {
-    return messageOf(error, "Couldn't submit your videos. Try again.");
+    return messageOf(error, "Couldn't send. Try again.");
   }
 }
 

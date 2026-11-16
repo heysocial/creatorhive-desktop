@@ -5,9 +5,10 @@ import { useConversations } from "../../lib/api";
 import { nav } from "../../lib/nav";
 import { Avatar } from "../../lib/ui";
 import {
-  EDIT_STAGES, EDIT_STAGE_LABELS, STAGE_CLASS, editorChat, editorConversation, firstName, formatDueDate, shortDay, stageIndex,
-  useEditorChatOpen, type EditStage, type StudentEditState, type VideoEditor,
+  EDIT_STAGES, EDIT_STAGE_LABELS, STAGE_CLASS, editorChat, editorConversation, firstName, formatDueDate, reviewable, shortDay, stageIndex,
+  useEditorChatOpen, type EditStage, type EditTimeline, type StudentEditState, type VideoEditor,
 } from "../../lib/videoEdits";
+import { openVideo } from "./StarterVideos";
 import { Conversation } from "../messages/Conversation";
 import { StagePill } from "../edits/VideoEdits";
 import "../../styles/video-edits.css";
@@ -44,25 +45,45 @@ export function EditorCard({ editor }: { editor: VideoEditor }) {
   );
 }
 
-const TRACK_HINT: Record<EditStage, (e: StudentEditState) => string> = {
-  submitted: (e) => shortDay(e.timeline.submittedAt),
-  in_editing: (e) => (e.timeline.inEditingAt ? `Since ${shortDay(e.timeline.inEditingAt)}` : ""),
-  ready_to_review: (e) => (e.dueOn ? `By ${formatDueDate(e.dueOn, false)}` : ""),
-  revisions: () => "If you ask",
-  approved: () => "Download",
-};
-const TRACK_DONE: Record<EditStage, (e: StudentEditState) => string | null> = {
-  submitted: (e) => e.timeline.submittedAt,
-  in_editing: (e) => e.timeline.inEditingAt,
-  ready_to_review: (e) => e.timeline.readyAt,
-  revisions: (e) => e.timeline.revisionsAt,
-  approved: (e) => e.timeline.approvedAt,
-};
+/** The five steps of one video (or of all 3 together, from an older server). */
+function Steps({ stage, timeline: t, dueOn }: { stage: EditStage; timeline: EditTimeline; dueOn: string | null }) {
+  const current = stageIndex(stage);
+  const hint: Record<EditStage, string> = {
+    submitted: shortDay(t.submittedAt),
+    in_editing: t.inEditingAt ? `Since ${shortDay(t.inEditingAt)}` : "Next",
+    ready_to_review: t.readyAt ? `Sent ${shortDay(t.readyAt)}` : dueOn ? `By ${formatDueDate(dueOn, false)}` : "Soon",
+    revisions: t.revisionsAt ? `Since ${shortDay(t.revisionsAt)}` : "If you ask",
+    approved: t.approvedAt ? shortDay(t.approvedAt) : "Download",
+  };
+  // Revisions is a side trip: skipped when she approved first time.
+  const done = (step: EditStage) => {
+    if (stage === "approved") return step !== "revisions" || Boolean(t.revisionsAt);
+    return stageIndex(step) < current && !(step === "revisions" && !t.revisionsAt);
+  };
+  return (
+    <ol className="ve-track">
+      {EDIT_STAGES.map((step) => {
+        const state = done(step) ? "done" : step === stage ? "now" : "next";
+        return (
+          <li key={step} className={`ve-tstep ${state} ${state === "now" ? STAGE_CLASS[step] : ""}`}>
+            <span className="ve-tdot">{state === "done" ? <Check /> : state === "now" ? <i /> : null}</span>
+            <b>{EDIT_STAGE_LABELS[step]}</b>
+            <small>{hint[step]}</small>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
+/**
+  "Where your videos are": each video on its own line (docs/per-video-send.md),
+  its stage and five-step tracker; a video not sent yet says so.
+*/
 export function WhereTracker({ editing }: { editing: StudentEditState }) {
   if (!editing.stage) return null;
-  const current = stageIndex(editing.stage);
-  const canReview = current >= stageIndex("ready_to_review");
+  const videos = editing.videos?.length ? editing.videos : null;
+  const allApproved = videos ? videos.every((v) => v.stage === "approved") : editing.stage === "approved";
   return (
     <section className="card ve-where">
       <div className="ve-where-head">
@@ -70,27 +91,38 @@ export function WhereTracker({ editing }: { editing: StudentEditState }) {
           <h3>Where your videos are</h3>
           {editing.nextLine ? <p className="muted">{editing.nextLine}</p> : null}
         </div>
-        <StagePill stage={editing.stage} />
+        {videos ? null : <StagePill stage={editing.stage} />}
       </div>
-      <ol className="ve-track">
-        {EDIT_STAGES.map((stage, index) => {
-          const state = editing.stage === "approved" || index < current ? "done" : index === current ? "now" : "next";
-          const doneAt = TRACK_DONE[stage](editing);
-          const hint = state === "done" && doneAt && stage !== "approved" ? shortDay(doneAt) : state === "now" && stage === "approved" ? shortDay(doneAt) || "Download" : TRACK_HINT[stage](editing);
-          return (
-            <li key={stage} className={`ve-tstep ${state} ${state === "now" ? STAGE_CLASS[stage] : ""}`}>
-              <span className="ve-tdot">{state === "done" ? <Check /> : state === "now" ? <i /> : null}</span>
-              <b>{EDIT_STAGE_LABELS[stage]}</b>
-              <small>{hint}</small>
-            </li>
-          );
-        })}
-      </ol>
-      {canReview ? (
-        <button className="btn honey ve-where-btn" onClick={() => nav.open({ kind: "video-review" }, "learn", "ch")}>
-          <Eye />{editing.stage === "approved" ? "See and download your videos" : "Review your edited videos"}
-        </button>
-      ) : null}
+      {videos ? (
+        <div className="ve-video-tracks">
+          {videos.map((video) => (
+            <div key={video.slot} className="ve-video-track">
+              <div className="ve-video-track-head">
+                <b>Video {video.slot}</b>
+                {video.stage ? <StagePill stage={video.stage} small /> : <span className="ve-not-sent">Not sent yet</span>}
+              </div>
+              {video.line ? <p className="muted ve-video-track-line">{video.line}</p> : null}
+              {video.stage ? <Steps stage={video.stage} timeline={video.timeline} dueOn={video.dueOn} /> : null}
+              {reviewable(video.stage) ? (
+                <button className="ve-text-link" onClick={() => nav.open({ kind: "video-review", video: video.slot }, "learn", "ch")}>
+                  {video.stage === "approved" ? `Watch and download Video ${video.slot}` : `Review Video ${video.slot}`} →
+                </button>
+              ) : !video.stage ? (
+                <button className="ve-text-link" onClick={() => openVideo(video.slot, false)}>Open Video {video.slot} →</button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <>
+          <Steps stage={editing.stage} timeline={editing.timeline} dueOn={editing.dueOn} />
+          {reviewable(editing.stage) ? (
+            <button className="btn honey ve-where-btn" onClick={() => nav.open({ kind: "video-review" }, "learn", "ch")}>
+              <Eye />{allApproved ? "See and download your videos" : "Review your edited videos"}
+            </button>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }
