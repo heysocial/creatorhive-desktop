@@ -624,6 +624,93 @@ export function FormerMembers() {
   );
 }
 
+/* ---------- Weekend Starter ---------- */
+
+interface WeekendStarterRow { userId: string | null; name: string | null; email: string; avatarUrl: string | null; plan: string | null; at: string; expired: boolean; canResend: boolean }
+
+const WEEKEND_KEY = ["members", "weekend-starter"] as const;
+
+const shortDay = (iso: string) => {
+  const date = new Date(iso);
+  return date.toLocaleDateString(undefined, date.getFullYear() === new Date().getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+};
+
+/**
+ * The website's Members → Weekend Starter card (owner only, GET
+ * /api/members/weekend-starter): every buyer, Joined (with the date) and
+ * Pending (invited date, Send a new login email). Hidden while there are none.
+ */
+export function WeekendStarterMembers() {
+  const list = useQuery({ queryKey: WEEKEND_KEY, queryFn: async () => api<{ joined: WeekendStarterRow[]; pending: WeekendStarterRow[] }>("/api/members/weekend-starter") });
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const joined = list.data?.joined ?? [];
+  const pending = list.data?.pending ?? [];
+  const total = joined.length + pending.length;
+
+  async function resend(row: WeekendStarterRow) {
+    if (!row.userId || busyId) return;
+    setBusyId(row.userId);
+    setError(null);
+    setNotice(null);
+    try {
+      const data = await api<{ message?: string }>("/api/members/weekend-starter/resend", { method: "POST", body: { userId: row.userId } });
+      setNotice(data.message ?? `New login email sent to ${row.email}.`);
+      void list.refetch();
+    } catch (failure) {
+      const data = failure instanceof ApiError ? failure.data : null;
+      setError(typeof data?.message === "string" ? data.message : "Could not send the login email. Try again in a minute.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (list.isError) return <section className="mad-pending card"><div className="mad-error" role="alert">Could not load the Weekend Starter list.</div></section>;
+  if (total === 0) return null;
+  const who = (row: WeekendStarterRow, line: string) => (
+    <div className="mad-former">
+      <Avatar name={row.name ?? row.email} src={row.avatarUrl} seed={row.userId ?? row.email} size={32} />
+      <div className="mad-who">
+        <b className="selectable">{row.name ?? row.email}</b>
+        <span className="selectable">{row.name ? `${row.email} · ` : ""}{line}</span>
+      </div>
+    </div>
+  );
+  const plan = (row: WeekendStarterRow) => row.plan === "academy" ? " · UGC Academy" : row.plan === "starter" ? " · UGC Starter" : "";
+  return (
+    <section className="mad-pending card" aria-label="Weekend Starter">
+      <div className="mad-pending-head">
+        <div>
+          <h2>Weekend Starter · {total}</h2>
+          <p>Everyone who bought The Weekend Starter. Only you see this.</p>
+        </div>
+      </div>
+      {error ? <div className="mad-error" role="alert">{error}</div> : null}
+      {notice ? <div className="mad-notice" role="status">{notice}</div> : null}
+      <h3 className="mad-group">Joined · {joined.length}</h3>
+      {joined.length === 0 ? <div className="mad-line"><MailCheck /><span>Nobody yet</span></div> : null}
+      {joined.map((row) => (
+        <div className="mad-invite" key={row.userId ?? row.email}>{who(row, `Joined ${shortDay(row.at)}${plan(row)}`)}</div>
+      ))}
+      <h3 className="mad-group">Pending · {pending.length}</h3>
+      {pending.length === 0 ? <div className="mad-line"><MailCheck /><span>Everyone has signed in</span></div> : null}
+      {pending.map((row) => (
+        <div className="mad-invite" key={row.userId ?? row.email}>
+          {who(row, `Invited ${shortDay(row.at)}${row.expired ? (row.canResend ? " · temporary password expired" : " · invite expired") : ""}${row.canResend ? "" : " · invite link (resend it under Pending invites)"}`)}
+          {row.canResend ? (
+            <div className="mad-acts">
+              <button className="btn" disabled={Boolean(busyId)} onClick={() => void resend(row)}>
+                {busyId === row.userId ? <Loader2 className="spin" /> : <RefreshCw />}Send a new login email
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </section>
+  );
+}
+
 /** Put a saved member back into the directory, and drop their cached profile. */
 function updateMember(id: string, patch: Partial<AdminMember>) {
   queryClient.setQueryData<AdminMember[]>(["members"], (current) => current?.map((m) => m.id === id ? { ...m, ...patch } : m));

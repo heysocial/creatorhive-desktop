@@ -282,6 +282,8 @@ function Learn() {
   const inProgress = courses.filter((c) => c.completedCount > 0 && c.completedCount < c.lessonCount);
   // The personal video editor: once her edits are ready, the review screen has its own row.
   const editing = useStudentEditing(Boolean(improve?.starter)).editing;
+  // The Weekend Starter (and UGC Starter): the Academy guides are locked.
+  const libraryLocked = useAreaLocked("library");
   const reviewOpen = Boolean(editing?.stage && stageIndex(editing.stage) >= stageIndex("ready_to_review"));
   return (
     <>
@@ -291,7 +293,7 @@ function Learn() {
         <SidebarItem icon={<GraduationCap />} label="Courses" view={{ kind: "learn", page: "courses" }} meta={courses.length ? String(courses.length) : undefined} />
         <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} meta={grade === undefined ? undefined : typeof grade === "number" ? `${grade}%` : `Grade ${grade}`} />
         {reviewOpen ? <SidebarItem icon={<Eye />} label="Review your videos" view={{ kind: "video-review" }} meta={editing?.stage ? EDIT_STAGE_LABELS[editing.stage] : undefined} /> : null}
-        <SidebarItem icon={<BookOpen />} label="Resources" view={{ kind: "learn", page: "resources" }} />
+        <SidebarItem icon={<BookOpen />} label="Resources" view={{ kind: "learn", page: "resources" }} locked={libraryLocked} />
         <SidebarItem icon={<Spark />} label="AI Script Writer" view={{ kind: "script-writer" }} meta="Flagship" />
         {inProgress.length ? (
           <SidebarSection id="learn-progress" title="In progress">

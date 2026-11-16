@@ -33,6 +33,9 @@
 
 .mad-error { margin: 10px 14px; padding: 8px 11px; border-radius: 8px; background: rgba(217, 54, 54, .1); box-shadow: inset 0 0 0 .5px rgba(217, 54, 54, .3); color: #D93636; font-size: 12.5px; }
 .mad-error .link { margin-left: 6px; font-size: 12.5px; }
+/* Members → Weekend Starter (owner): the Joined and Pending groups. */
+.mad-group { margin: 0; padding: 10px 14px 4px; border-top: .5px solid var(--line, rgba(0,0,0,.08)); color: var(--ink-3); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.mad-notice { margin: 10px 14px; padding: 8px 11px; border-radius: 8px; background: rgba(46, 160, 67, .12); color: #2E8F45; font-size: 12.5px; }
 .mad-dialog .mad-error { margin: 0; }
 
 /* ---------- Dialogs ---------- */

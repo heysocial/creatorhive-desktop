@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "./api";
+import { api, queryClient } from "./api";
+import { nav, type Location } from "./nav";
 
 /*
   The member's plan, from the website (GET /api/me/access). The server
@@ -144,3 +145,40 @@ export function contactLabel(contact: StarterContact): string {
   const first = contact.name.split(" ")[0] || contact.name;
   return contact.title ? `${first} · ${contact.title}` : contact.name;
 }
+
+
+/*
+  Every way into a place (links, notifications, Activity, ⌘K, buttons) goes
+  through nav.open: a place the plan locks opens "Part of the UGC Academy"
+  instead of a screen that can only fail. The server refuses these anyway;
+  this is so the member sees why. Hub keeps its own locked screen (HubLocked).
+  Until the plan is known nothing is blocked (as before).
+*/
+const AREA_OF_VIEW: Partial<Record<string, string>> = {
+  channel: "channels", events: "events", leaderboard: "leaderboard", members: "members",
+  resource: "library", "improve-resource": "library",
+};
+
+export function lockedAreaOf(location: Location): string | null {
+  if (location.ws !== "ch") return null;
+  const view = location.view;
+  if (view.kind === "learn") return view.page === "resources" ? "library" : null;
+  return AREA_OF_VIEW[view.kind] ?? null;
+}
+
+function blockedByPlan(location: Location): boolean {
+  const access = queryClient.getQueryData<MeAccessResponse>(ME_ACCESS_KEY)?.access;
+  const locked = Array.isArray(access?.locked) ? access.locked : [];
+  const area = lockedAreaOf(location);
+  let blocked = area != null && locked.includes(area);
+  // A course the plan doesn't open (the server marks it on the course list).
+  if (!blocked && location.ws === "ch" && location.view.kind === "course") {
+    const id = location.view.id;
+    const courses = queryClient.getQueryData<{ id: string; slug?: string | null; locked?: boolean }[]>(["courses"]);
+    blocked = Boolean(courses?.find((course) => course.id === id || course.slug === id)?.locked);
+  }
+  if (blocked) openUpgrade();
+  return blocked;
+}
+
+nav.setOpenGuard(blockedByPlan);

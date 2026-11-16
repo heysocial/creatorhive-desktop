@@ -136,11 +136,19 @@ function go(to: Location) {
   });
 }
 
+let openGuard: ((location: Location) => boolean) | null = null;
+
 export const nav = {
   get: () => state.current,
   /** Open a view in the current workspace and section (or the one given). */
   open(view: View, section: Section = state.current.section, ws: WorkspaceKey = state.current.ws) {
+    // A place the member's plan locks opens "Part of the UGC Academy" instead (lib/access.ts installs it).
+    if (openGuard?.({ ws, section, view })) return;
     go({ ws, section, view });
+  },
+  /** lib/access.ts: returns true (and shows the upgrade dialog) for a place the plan locks. */
+  setOpenGuard(guard: ((location: Location) => boolean) | null) {
+    openGuard = guard;
   },
   /** Switch rail section; lands on whatever that section showed last. */
   section(section: Section, ws: WorkspaceKey = state.current.ws) {

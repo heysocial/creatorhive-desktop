@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { commands } from "../lib/commands";
 import { openPath } from "../lib/links";
 import { nav, type Location } from "../lib/nav";
+import { lockedAreaOf, openUpgrade, useHubAccess, useMeAccess } from "../lib/access";
 import { Avatar, channelName } from "../lib/ui";
 import { soonLast } from "../views/messages/ComingSoon";
 
@@ -64,6 +65,14 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
   const q = query.trim().toLowerCase();
 
   const heySocial = useHeySocialAccess().data === true;
+  // The plan's locks: a locked screen shows a lock and opens "Part of the UGC Academy".
+  const lockedAreas = useMeAccess().data?.access?.locked;
+  const hubOpen = useHubAccess().open;
+  const screenLocked = (location: Location) => {
+    if (location.view.kind === "hub") return !hubOpen;
+    const area = lockedAreaOf(location);
+    return area != null && Array.isArray(lockedAreas) && lockedAreas.includes(area);
+  };
   const chChannels = useChannels("creatorhive").data ?? [];
   const hsChannels = useChannels("heysocial", heySocial).data ?? [];
   const chDms = useConversations("creatorhive").data ?? [];
@@ -104,9 +113,9 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
         run: go({ ws, section: "home", view: { kind: "channel", id: c.id } }),
       }));
 
-    const screens = ranked(SCREENS, (s) => s.title, q ? 4 : 0).map<Row>((s) => ({
-      id: `screen:${s.title}`, group: "Go to", title: s.title, glyph: glyph(s.icon), hint: s.hint, run: go(s.location),
-    }));
+    const screens = ranked(SCREENS, (s) => s.title, q ? 4 : 0).map<Row>((s) => screenLocked(s.location)
+      ? { id: `screen:${s.title}`, group: "Go to", title: s.title, sub: "Part of the UGC Academy", glyph: glyph(<Lock />), run: openUpgrade }
+      : { id: `screen:${s.title}`, group: "Go to", title: s.title, glyph: glyph(s.icon), hint: s.hint, run: go(s.location) });
 
     const actions: Row[] = [
       { id: "new-message", group: "Actions", title: "New message", glyph: glyph(<MessageCircle />), hint: "⌘N", run: () => commands.run("new-message") },
@@ -125,8 +134,9 @@ export function QuickSwitcher({ onClose }: { onClose: () => void }) {
           sub: item.snippet ?? item.subtitle ?? undefined,
           glyph: group.type === "people"
             ? <Avatar name={item.title} src={item.avatarUrl} size={28} radius="8px" />
-            : glyph(group.type === "courses" ? <GraduationCap /> : group.type === "direct-messages" ? <MessageCircle /> : group.type === "feedback" ? <Hash /> : group.type === "people" ? <User /> : <FileText />),
-          run: () => openPath(item.href),
+            : item.locked ? glyph(<Lock />) : glyph(group.type === "courses" ? <GraduationCap /> : group.type === "direct-messages" ? <MessageCircle /> : group.type === "feedback" ? <Hash /> : group.type === "people" ? <User /> : <FileText />),
+          // A result from a part the plan locks (the server marks it): the upgrade dialog, not a page that can't load.
+          run: () => (item.locked ? openUpgrade() : void openPath(item.href)),
         })))
         // Someone already listed under Direct messages doesn't need repeating as a person.
         .filter((row) => !(row.id.startsWith("search:person:") && dms.some((dm) => dm.title === row.title)))
