@@ -184,7 +184,8 @@ function DealCard({ deal, shared, onDragStart, dragging }: { deal: Deal; shared:
         <PeopleChip deal={deal} shared={shared} />
       </div>
       {deal.deliverables ? <div className="dc-line">{deal.deliverables}</div> : null}
-      {deal.status === "pending_payment" && deal.payment_expected_at ? <div className={`dc-due ${deal.payment_expected_at < localToday() ? "late-text" : ""}`}>Payment expected {monDay(deal.payment_expected_at)}</div> : null}
+      {/* A retainer shows its next payment from its schedule (RetainerCardLines), never a one-off expected day. */}
+      {deal.status === "pending_payment" && deal.payment_kind !== "retainer" && deal.payment_expected_at ? <div className={`dc-due ${deal.payment_expected_at < localToday() ? "late-text" : ""}`}>Payment expected {monDay(deal.payment_expected_at)}</div> : null}
       {isDraftPending(deal.status) && deal.draft_due_at ? <div className="dc-due">Draft due {monDay(deal.draft_due_at)}</div> : null}
       {lands ? <div className="dc-when landing-text">{landsLabel(lands)}</div> : null}
       {closed ? <div className="dc-when closed-text">{closedUnpaidLine(deal)}</div> : null}
@@ -453,8 +454,14 @@ export function NeedsAttention({ deals }: { deals: Deal[] }) {
       if (days <= 7) out.push({ key: `${d.id}-draft`, id: d.id, title: `${d.brand_name} draft`, detail: due(days), priority: days, payment: false });
     }
     if (d.status === "pending_payment") {
-      const days = d.payment_expected_at ? daysBetween(today, d.payment_expected_at) : null;
-      out.push({ key: `${d.id}-pay`, id: d.id, title: `${d.brand_name} · ${money(d.amount_usd)}`, detail: days === null ? "Pending payment" : `Payment ${due(days)}`, priority: days ?? 8, payment: true });
+      // A retainer is due by its schedule: its next payment, still due (not overdue) a few days after it.
+      const retainerNext = d.payment_kind === "retainer" ? d.retainer?.next_due_on ?? null : null;
+      const expected = d.payment_kind === "retainer" ? retainerNext : d.payment_expected_at;
+      const days = expected ? daysBetween(today, expected) : null;
+      const detail = days === null ? "Pending payment"
+        : retainerNext && days < 0 ? `Payment due ${-days} day${days === -1 ? "" : "s"} ago, still due`
+        : `Payment ${due(days)}`;
+      out.push({ key: `${d.id}-pay`, id: d.id, title: `${d.brand_name} · ${money(d.amount_usd)}`, detail, priority: days ?? 8, payment: true });
     }
     return out;
   }).sort((a, b) => a.priority - b.priority).slice(0, 4);

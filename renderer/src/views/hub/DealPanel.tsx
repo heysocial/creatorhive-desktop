@@ -28,6 +28,16 @@ function urgency(deal: Deal): { text: string; late: boolean; landing?: boolean }
   if (lands) return { text: landsLabel(lands), late: false, landing: true };
   // Delivered and not paid: how long ago, red once it's overdue (14+ days), unless an expected payment day says more.
   const unpaid = deal.unpaid_days != null ? { text: unpaidText(deal.unpaid_days), late: Boolean(deal.payment_overdue) } : null;
+  // A retainer is due by its schedule: its next payment stays due (not late) a few days after it; a missed one is late.
+  if (deal.payment_kind === "retainer" && deal.retainer && deal.status === "pending_payment") {
+    const next = deal.retainer.next_due_on;
+    const late = deal.retainer.missed.length > 0;
+    if (!next) return { text: "Payment pending", late };
+    const days = daysBetween(today, next);
+    if (days < 0) return { text: `Next payment ${-days} ${days === -1 ? "day" : "days"} ago, still due`, late };
+    if (days === 0) return { text: "Next payment today", late };
+    return { text: `Next payment in ${days} ${days === 1 ? "day" : "days"}`, late };
+  }
   if (deal.status === "pending_payment") {
     if (!deal.payment_expected_at) return unpaid ?? { text: "Payment pending", late: false };
     const days = daysBetween(today, deal.payment_expected_at);
@@ -366,7 +376,7 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
               <span className="section-label">Payment</span>
               {/* Set by the server on the move to Delivered; changed or cleared in Edit deal, like the other dates. */}
               {isDeliveredOrLater(deal.status) ? <Row label="Delivered on">{deal.delivered_at ? shortDay(deal.delivered_at) : <button className="link" onClick={() => openDealForm({ deal })}>Add date</button>}</Row> : null}
-              {deal.payment_expected_at ? <Row label="Expected">{monDay(deal.payment_expected_at)}</Row> : null}
+              {deal.payment_expected_at && deal.payment_kind !== "retainer" ? <Row label="Expected">{monDay(deal.payment_expected_at)}</Row> : null}
               {deal.payment_terms_days != null ? <Row label="Terms">{deal.payment_terms_days === 0 ? "Due on receipt" : `Net ${deal.payment_terms_days}`}</Row> : null}
               {deal.payment_method_ref ? <Row label="Via">{deal.payment_method_ref.label}</Row> : null}
               {notContracted && deal.closed_unpaid_at ? <Row label="Not contracted">{shortDay(deal.closed_unpaid_at)} · Fell through</Row> : null}

@@ -144,7 +144,8 @@ function askPaymentDate(deal: Deal, status: DealStatus) {
   if (status === "completed" && deal.status !== "completed") {
     return new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "paid-on", deal, change: false, resolve }));
   }
-  if ((status !== "delivered" && status !== "pending_payment") || deal.payment_expected_at) return Promise.resolve({});
+  // A retainer is due by its schedule, so it is never asked for a one-off expected day.
+  if ((status !== "delivered" && status !== "pending_payment") || deal.payment_expected_at || deal.payment_kind === "retainer") return Promise.resolve({});
   return new Promise<Record<string, unknown> | null>((resolve) => show({ kind: "payment-date", deal, status, resolve }));
 }
 

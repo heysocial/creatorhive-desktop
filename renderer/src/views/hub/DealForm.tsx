@@ -329,7 +329,7 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
       deliverables: v.deliverables.trim(),
       notes: v.notes.trim(),
       draft_due_at: v.draftDue,
-      payment_expected_at: v.paymentExpected,
+      payment_expected_at: v.kind === "retainer" ? "" : v.paymentExpected,
       payment_terms_days: v.terms,
       deliverables_count: v.count,
       ...paidOn(),
@@ -531,7 +531,8 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
         {!editing ? <><label className="flabel">Brief · optional</label><NewDealBriefs value={briefs} onChange={setBriefs} /></> : null}
         <div className="grid4">
           <div><label className="flabel">Draft due</label><input className="field" type="date" value={v.draftDue} onChange={(e) => set("draftDue", e.target.value)} /></div>
-          <div><label className="flabel">Payment expected</label><input className="field" type="date" value={v.paymentExpected} onChange={(e) => set("paymentExpected", e.target.value)} /></div>
+          {/* A retainer is due by its schedule; it has no one-off expected day. */}
+          {v.kind !== "retainer" ? <div><label className="flabel">Payment expected</label><input className="field" type="date" value={v.paymentExpected} onChange={(e) => set("paymentExpected", e.target.value)} /></div> : null}
           <div><label className="flabel">Payment terms (days)</label><input className="field" type="number" min={0} max={365} value={v.terms} onChange={(e) => set("terms", e.target.value)} /></div>
           <div><label className="flabel">Deliverables count</label><input className="field" type="number" min={0} max={1000} value={v.count} onChange={(e) => set("count", e.target.value)} /></div>
         </div>
