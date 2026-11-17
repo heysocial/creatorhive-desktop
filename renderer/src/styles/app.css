@@ -605,6 +605,14 @@ html.is-popout body { background: var(--card); }
 .np-media img { width: 100%; height: 100%; object-fit: cover; }
 .np-media button { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; display: grid; place-items: center; }
 .np-media button svg { width: 12px; height: 12px; }
+/* The staged video: its frame, the upload's progress, then a play mark once Mux has it all. */
+.np-media .np-video { width: 150px; background: #1F1E1C; color: #fff; }
+.np-media .np-video img { position: absolute; inset: 0; opacity: .7; }
+.np-media .np-vlabel { position: relative; font-style: normal; font-size: 13px; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.np-media .np-vlabel svg { width: 22px; height: 22px; }
+.np-media .np-video.failed .np-vlabel { color: #FFB4A8; font-size: 12px; }
+.np-media .np-video .vbar { position: absolute; left: 10px; right: 10px; bottom: 10px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); overflow: hidden; }
+.np-media .np-video .vbar i { display: block; height: 100%; background: #fff; transition: width .2s; }
 .np-poll { display: flex; flex-direction: column; gap: 6px; }
 .np-poll .field { height: 34px; }
 .np-foot { display: flex; align-items: center; gap: 8px; }
@@ -761,6 +769,9 @@ html.is-popout body { background: var(--card); }
 .c-file .c-dl:hover { background: var(--sel); color: var(--ink); }
 .c-file .c-dl svg { width: 16px; height: 16px; }
 .c-video .video { width: 300px; }
+/* A post's video fills the media area in a 16:9 box; the poster is shown whole (contain), as on the website. */
+.post-video .video { width: 100%; }
+.post-video .video img { object-fit: contain; }
 
 /* "N new posts": pinned near the top of the feed while it scrolls. */
 .new-posts-pin { position: sticky; top: 12px; z-index: 5; height: 0; display: flex; justify-content: center; }

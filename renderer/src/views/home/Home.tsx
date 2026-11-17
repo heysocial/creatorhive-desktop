@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { WEEKEND_STARTER, openUpgrade, useFeedAccess, useHubReady } from "../../lib/access";
-import { ArrowUp, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, Lock, MessageCircle, MoreHorizontal, Pin, SquarePen, Wallet, X } from "lucide-react";
+import { ArrowUp, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, Lock, MessageCircle, MoreHorizontal, Pin, Play, SquarePen, Wallet, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
-import { api, queryClient, rateLimitMessage } from "../../lib/api";
+import { api, queryClient } from "../../lib/api";
 import {
-  CATEGORIES, POST_REACTIONS, addComment, newestPosts, onPostCreated, prependPosts, attachmentName, categoryOf, createPost, deleteComment, editComment, editPost, isImageUrl, likeComment, patchPost,
-  reactToPost, splitPostBody, useComments, watchCommentVideos, useFeed, usePinnedPosts, usePost, useUnreadCategories, vote,
+  CATEGORIES, POST_REACTIONS, POST_VIDEO_LIMIT, POST_VIDEO_SECONDS, addComment, newestPosts, onPostCreated, prependPosts, attachmentName, categoryOf, createPost, deleteComment, editComment, editPost, isImageUrl, likeComment, patchPost,
+  reactToPost, splitPostBody, uploadPostVideo, useComments, watchCommentVideos, watchPostVideos, useFeed, usePinnedPosts, usePost, useUnreadCategories, vote,
   type CategoryKey, type Comment, type Post,
 } from "../../lib/feed";
 import { ago, money } from "../../lib/format";
@@ -15,7 +15,9 @@ import { nav } from "../../lib/nav";
 import { Avatar } from "../../lib/ui";
 import { Badge } from "../messages/MessageRow";
 import { useMentionPicker } from "../messages/MentionPicker";
-import { useMembers } from "../../lib/community";
+import { localPosters, useMembers, type UploadedVideo } from "../../lib/community";
+import { VideoPlayer } from "../messages/VideoPlayer";
+import { videoThumbnail } from "../messages/Composer";
 import { WeekPanel } from "./Week";
 import { PostEditor } from "./PostEditor";
 import { Modal, Monogram } from "../hub/parts";
@@ -142,7 +144,29 @@ function Breakdown({ glance, pct, onClose }: { glance: Glance; pct: number; onCl
   );
 }
 
-/* ---------- Writing a post ---------- */
+/* ---------- Writing a post ----------
+   Up to four pictures, and one video (docs/post-videos.md on the website):
+   the video starts for Mux the moment it's picked, with its progress on the
+   tile, and Post waits for it to arrive before sending the post. */
+
+const POST_VIDEO_TYPES = /^video\/(mp4|quicktime|webm|x-m4v)$/;
+// The Mac sometimes leaves a video's type blank: its extension decides.
+const isPostVideo = (file: File) => POST_VIDEO_TYPES.test(file.type) || (!file.type && /\.(mp4|mov|m4v|webm)$/i.test(file.name));
+const isAnyVideo = (file: File) => file.type.startsWith("video/") || isPostVideo(file);
+const POST_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime,video/webm,video/x-m4v,.mp4,.mov,.m4v,.webm";
+
+interface StagedVideo {
+  key: string;
+  name: string;
+  preview: string | null;
+  progress: number;
+  state: "uploading" | "done" | "failed";
+  failedReason?: string;
+  done: Promise<UploadedVideo>;
+  abort: AbortController;
+}
+
+let videoKeys = 0;
 
 function NewPost({ user, open, draft, onOpen, onClose, allowed, start, prompt }: {
   user: SessionUser; open: boolean; draft: { category: CategoryKey; text: string } | null; onOpen: () => void; onClose: () => void;
@@ -159,6 +183,10 @@ function NewPost({ user, open, draft, onOpen, onClose, allowed, start, prompt }:
   useEffect(() => { if (!draft) setCategory(start); }, [draft, start]);
   const [media, setMedia] = useState<{ url: string; preview: string }[]>([]);
   const [uploading, setUploading] = useState(0);
+  const [video, setVideo] = useState<StagedVideo | null>(null);
+  const [waitingForVideo, setWaitingForVideo] = useState(false);
+  const latestVideo = useRef(video);
+  latestVideo.current = video;
   const [poll, setPoll] = useState<{ question: string; options: string[] } | null>(null);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +196,42 @@ function NewPost({ user, open, draft, onOpen, onClose, allowed, start, prompt }:
   useEffect(() => {
     if (open) box.current?.focus();
   }, [open]);
+
+  async function addFiles(files: File[]) {
+    setError(null);
+    const videos = files.filter(isAnyVideo);
+    if (videos.length) {
+      onOpen();
+      await addVideo(videos);
+    }
+    const others = files.filter((f) => !isAnyVideo(f));
+    if (others.length) await addImages(others);
+  }
+
+  /** One video per post: checked (type, 2 GB, 30 minutes), staged and sent to Mux at once. */
+  async function addVideo(files: File[]) {
+    if (video || files.length > 1) return setError("A post takes one video.");
+    const file = files[0];
+    if (!isPostVideo(file)) return setError("Choose an MP4, MOV, M4V or WebM video.");
+    if (file.size > POST_VIDEO_LIMIT) return setError("Video must be 2 GB or smaller");
+    // Read before staging, so a video over 30 minutes never starts uploading.
+    const { url: preview, duration } = await videoThumbnail(file);
+    if (duration > POST_VIDEO_SECONDS + 1) return setError("Videos must be 30 minutes or shorter.");
+    const key = `pv${++videoKeys}`;
+    const abort = new AbortController();
+    const update = (change: (v: StagedVideo) => StagedVideo) => setVideo((v) => (v?.key === key ? change(v) : v));
+    const done = uploadPostVideo(file, (progress) => update((v) => ({ ...v, progress })), abort.signal);
+    setVideo({ key, name: file.name, preview, progress: 0, state: "uploading", done, abort });
+    done.then(() => update((v) => ({ ...v, progress: 100, state: "done" })),
+      (failure) => update((v) => ({ ...v, state: "failed", failedReason: serverSentence(failure) ?? "The video didn't upload. Remove it and try again." })));
+  }
+
+  /** Removing the tile stops the upload. */
+  function removeVideo() {
+    video?.abort.abort();
+    setVideo(null);
+    setWaitingForVideo(false);
+  }
 
   async function addImages(files: File[]) {
     const images = files.filter((f) => /^image\/(jpeg|png|webp|gif)$/.test(f.type)).slice(0, 4 - media.length);
@@ -186,17 +250,32 @@ function NewPost({ user, open, draft, onOpen, onClose, allowed, start, prompt }:
     if (posting || uploading) return;
     const validPoll = poll && poll.question.trim() && poll.options.filter((o) => o.trim()).length >= 2
       ? { question: poll.question.trim(), options: poll.options.map((o) => o.trim()).filter(Boolean) } : null;
-    if (!text.trim() && media.length === 0) return;
+    if (!text.trim() && media.length === 0 && !video) return;
+    if (video?.state === "failed") return setError(video.failedReason ?? "The video didn't upload. Remove it and try again.");
     setPosting(true);
     setError(null);
+    const staged = video;
+    // A video still on its way to Mux: the post waits for it.
+    let uploaded: UploadedVideo | null = null;
+    if (staged) {
+      setWaitingForVideo(staged.state === "uploading");
+      uploaded = await staged.done.catch(() => null);
+      setWaitingForVideo(false);
+      // Removed while we waited (its abort is not a failure to show), or it failed: the tile says why.
+      if (!uploaded || latestVideo.current?.key !== staged.key) { setPosting(false); return; }
+      // Mux makes its own poster a little later; until then the frame taken on this Mac stands in.
+      if (staged.preview) localPosters.set(uploaded.uid, staged.preview);
+    }
     try {
-      await createPost({ text, category, mediaUrls: media.map((m) => m.url), poll: validPoll });
+      await createPost({ text, category, mediaUrls: media.map((m) => m.url), poll: validPoll, videoUploadToken: uploaded?.uploadToken });
       setText("");
       setMedia([]);
+      setVideo(null);
       setPoll(null);
       onClose();
     } catch (error) {
-      setError(rateLimitMessage(error) ?? "Couldn't post. Try again.");
+      // The website's sentence (an expired upload, a video too long, a limit), else the usual one.
+      setError(serverSentence(error) ?? "Couldn't post. Try again.");
     } finally {
       setPosting(false);
     }
@@ -206,18 +285,18 @@ function NewPost({ user, open, draft, onOpen, onClose, allowed, start, prompt }:
     return (
       <div className="card new-post-trigger" onClick={onOpen}
         onDragOver={(e) => e.dataTransfer.types.includes("Files") && e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); void addImages([...e.dataTransfer.files]); }}>
+        onDrop={(e) => { e.preventDefault(); void addFiles([...e.dataTransfer.files]); }}>
         <Avatar name={user.name} src={user.image} seed={user.id} size={36} />
         <span className="ph">{prompt ?? "Drop something worth talking about…"}</span>
-        <button className="iconbtn" title="Add pictures" onClick={(e) => { e.stopPropagation(); picker.current?.click(); }}><ImageIcon /></button>
-        <input ref={picker} type="file" accept="image/*" multiple hidden onChange={(e) => { void addImages([...(e.target.files ?? [])]); e.target.value = ""; }} />
+        <button className="iconbtn" title="Add pictures or a video" onClick={(e) => { e.stopPropagation(); picker.current?.click(); }}><ImageIcon /></button>
+        <input ref={picker} type="file" accept={POST_ACCEPT} multiple hidden onChange={(e) => { void addFiles([...(e.target.files ?? [])]); e.target.value = ""; }} />
       </div>
     );
   }
 
   return (
     <div className="card new-post" onDragOver={(e) => e.dataTransfer.types.includes("Files") && e.preventDefault()}
-      onDrop={(e) => { e.preventDefault(); void addImages([...e.dataTransfer.files]); }}>
+      onDrop={(e) => { e.preventDefault(); void addFiles([...e.dataTransfer.files]); }}>
       <div className="np-head">
         <Avatar name={user.name} src={user.image} seed={user.id} size={36} />
         <div className="seg">
@@ -229,13 +308,22 @@ function NewPost({ user, open, draft, onOpen, onClose, allowed, start, prompt }:
       </div>
       <textarea ref={box} value={text} onChange={(e) => setText(e.target.value)} placeholder={prompt ?? "Share a win, ask a question, or say hi…"} rows={4}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void post(); } if (e.key === "Escape") onClose(); }}
-        onPaste={(e) => { void pastedFiles(e).then((files) => files && addImages(files)); }} />
-      {media.length || uploading ? (
+        onPaste={(e) => { void pastedFiles(e).then((files) => files && addFiles(files)); }} />
+      {media.length || uploading || video ? (
         <div className="np-media">
+          {video ? (
+            <span className={`np-video ${video.state}`} title={video.name}>
+              {video.preview ? <img src={video.preview} alt="" /> : null}
+              <i className="np-vlabel">{video.state === "failed" ? "Didn’t upload" : video.state === "done" ? <Play /> : `${video.progress}%`}</i>
+              {video.state === "uploading" ? <i className="vbar"><i style={{ width: `${video.progress}%` }} /></i> : null}
+              <button onClick={removeVideo} aria-label="Remove video"><X /></button>
+            </span>
+          ) : null}
           {media.map((m) => <span key={m.url}><img src={m.preview} alt="" /><button onClick={() => setMedia((all) => all.filter((x) => x.url !== m.url))} aria-label="Remove"><X /></button></span>)}
           {Array.from({ length: uploading }, (_, i) => <span key={`u${i}`} className="uploading"><Loader2 className="spin" /></span>)}
         </div>
       ) : null}
+      {video?.state === "failed" ? <div className="signin-error">{video.failedReason}</div> : null}
       {poll ? (
         <div className="np-poll">
           <input className="field" placeholder="Ask a question" value={poll.question} maxLength={160} onChange={(e) => setPoll({ ...poll, question: e.target.value })} />
@@ -251,14 +339,14 @@ function NewPost({ user, open, draft, onOpen, onClose, allowed, start, prompt }:
       ) : null}
       {error ? <div className="signin-error">{error}</div> : null}
       <div className="np-foot">
-        <button className="iconbtn" title="Add pictures" onClick={() => picker.current?.click()}><ImageIcon /></button>
+        <button className="iconbtn" title="Add pictures or a video" onClick={() => picker.current?.click()}><ImageIcon /></button>
         {!poll ? <button className="btn" onClick={() => setPoll({ question: "", options: ["", ""] })}>Add a poll</button> : null}
-        <span className="faint" style={{ marginLeft: "auto", fontSize: 12 }}>⌘↩ to post</span>
-        <button className="btn honey" disabled={posting || uploading > 0 || (!text.trim() && media.length === 0)} onClick={() => void post()}>
+        <span className="faint" style={{ marginLeft: "auto", fontSize: 12 }}>{waitingForVideo ? `Posting when the video has uploaded (${video?.progress ?? 0}%)…` : "⌘↩ to post"}</span>
+        <button className="btn honey" disabled={posting || uploading > 0 || video?.state === "failed" || (!text.trim() && media.length === 0 && !video)} onClick={() => void post()}>
           {posting ? <Loader2 className="spin" /> : null}Post
         </button>
       </div>
-      <input ref={picker} type="file" accept="image/*" multiple hidden onChange={(e) => { void addImages([...(e.target.files ?? [])]); e.target.value = ""; }} />
+      <input ref={picker} type="file" accept={POST_ACCEPT} multiple hidden onChange={(e) => { void addFiles([...(e.target.files ?? [])]); e.target.value = ""; }} />
     </div>
   );
 }
@@ -347,6 +435,23 @@ function PostMedia({ urls }: { urls: string[] }) {
       ) : null}
     </>
   );
+}
+
+/*
+  A post's video (docs/post-videos.md on the website): under the words, the
+  width of the media area, a 16:9 box with the poster first. It plays here, as
+  a DM's or a comment's video does (VideoPlayer, signed the same way), and
+  shows "Processing…" until Mux is done (watchPostVideos asks every 4 s).
+*/
+function PostVideo({ post }: { post: Post }) {
+  const video = post.videoAttachments?.[0];
+  const status = video?.status;
+  useEffect(() => {
+    if (status === "processing") watchPostVideos(post);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per video and status, not per render of the post
+  }, [post.id, video?.uid, status]);
+  if (!video) return null;
+  return <div className="post-video"><VideoPlayer video={video} /></div>;
 }
 
 /**
@@ -454,6 +559,7 @@ export function PostCard({ post, user, onOpen }: { post: Post; user: SessionUser
         </div>
       </header>
       {editing ? <PostEditBox post={post} onClose={() => setEditing(false)} /> : <PostBody html={post.body} />}
+      {post.videoAttachments?.length ? <PostVideo post={post} /> : null}
       {post.mediaUrls.length && !editing ? <PostMedia urls={post.mediaUrls} /> : null}
       {post.poll ? <PollView post={post} readOnly={readOnly} /> : null}
       <footer>

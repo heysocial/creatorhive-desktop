@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
 import { api, ApiError, queryClient, rateLimitMessage } from "./api";
-import { putToMux, type Author, type Reactions, type UploadedVideo, type VideoAttachment } from "./community";
+import { putToMux, putToMuxInChunks, type Author, type Reactions, type UploadedVideo, type VideoAttachment } from "./community";
 
 export const CATEGORIES = [
   // The Weekend Starter group: only its buyers and the team ever get it (lib/access.ts useFeedAccess).
@@ -36,6 +36,8 @@ export interface Post {
   poll: Poll | null;
   reactions: Reactions;
   author: Author;
+  /** At most one video (docs/post-videos.md on the website), signed like a DM's; older servers leave it out. */
+  videoAttachments?: VideoAttachment[];
 }
 
 export interface Comment {
@@ -133,13 +135,74 @@ export function textToPostHtml(text: string) {
     `<p>${escape(para).replace(/https?:\/\/[^\s<]+/g, (url) => `<a href="${url}">${url}</a>`).replace(/\n/g, "<br>")}</p>`).join("");
 }
 
-export async function createPost(input: { text: string; category: CategoryKey; mediaUrls: string[]; poll?: { question: string; options: string[] } | null }) {
-  const { post } = await api<{ post: Post }>("/api/posts", {
-    method: "POST",
-    body: { body: textToPostHtml(input.text), filterTag: input.category, mediaUrls: input.mediaUrls, poll: input.poll ?? undefined, clientMutationId: crypto.randomUUID() },
-  });
+export async function createPost(input: { text: string; category: CategoryKey; mediaUrls: string[]; poll?: { question: string; options: string[] } | null; videoUploadToken?: string }) {
+  const body = {
+    body: textToPostHtml(input.text), filterTag: input.category, mediaUrls: input.mediaUrls, poll: input.poll ?? undefined, clientMutationId: crypto.randomUUID(),
+    ...(input.videoUploadToken ? { videoUploadToken: input.videoUploadToken } : {}),
+  };
+  // Mux takes a moment to see a video's last bytes: the post is refused with 409 until then. The same
+  // clientMutationId makes sending it again safe.
+  let post: Post;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      post = (await api<{ post: Post }>("/api/posts", { method: "POST", body })).post;
+      break;
+    } catch (error) {
+      if (!(input.videoUploadToken && error instanceof ApiError && error.status === 409 && attempt < 120)) throw error;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
   void queryClient.invalidateQueries({ queryKey: ["posts"] });
+  watchPostVideos(post);
   return post;
+}
+
+/* ---------- Post videos ----------
+   One video per post, up to 2 GB and 30 minutes (docs/post-videos.md on the
+   website). It goes to Mux before the post exists, in resumable chunks, and
+   the post is sent with its videoUploadToken. */
+
+export const POST_VIDEO_LIMIT = 2 * 1024 * 1024 * 1024;
+export const POST_VIDEO_SECONDS = 30 * 60;
+
+/** A new post's video straight to Mux, with progress; an abort (the tile removed) stops it. */
+export async function uploadPostVideo(file: File, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<UploadedVideo> {
+  const start = await api<{ uploadUrl: string; uploadToken: string; uid: string }>("/api/posts/videos/upload-url", {
+    method: "POST",
+    body: { fileName: file.name, mimeType: file.type || "video/mp4", sizeBytes: file.size, providers: ["mux"] },
+  });
+  await putToMuxInChunks(start.uploadUrl, file, onProgress, signal);
+  return { uploadToken: start.uploadToken, uid: start.uid, name: file.name };
+}
+
+const watchingPostVideos = new Set<string>();
+
+/**
+ * Until Mux has made a post's video playable, ask its status every 4 s and swap
+ * it in wherever the post is shown; stops at "ready" or "error". Anyone who can
+ * read the post may ask, so every card showing a processing video watches it.
+ */
+export function watchPostVideos(post: Post) {
+  for (const video of post.videoAttachments ?? []) {
+    if (video.status !== "processing" || watchingPostVideos.has(video.uid)) continue;
+    watchingPostVideos.add(video.uid);
+    let tries = 0;
+    const tick = async () => {
+      tries += 1;
+      try {
+        const { videoAttachment } = await api<{ videoAttachment: VideoAttachment }>(`/api/posts/${post.id}/videos/${video.uid}`);
+        patchPost(post.id, (p) => ({ ...p, videoAttachments: p.videoAttachments?.map((v) => (v.uid === video.uid ? videoAttachment : v)) }));
+        if (videoAttachment.status !== "processing") { watchingPostVideos.delete(video.uid); return; }
+      } catch (error) {
+        // The post (or its video) is gone: nothing left to wait for.
+        if (error instanceof ApiError && (error.status === 404 || error.status === 403)) { watchingPostVideos.delete(video.uid); return; }
+      }
+      // 30 minutes of footage can take a while; give up after about an hour.
+      if (tries < 900) setTimeout(() => void tick(), 4000);
+      else watchingPostVideos.delete(video.uid);
+    };
+    setTimeout(() => void tick(), 4000);
+  }
 }
 
 /** Mux takes a moment to see a video's bytes: the comment is refused with 409 until then, as channel finalize is. */
