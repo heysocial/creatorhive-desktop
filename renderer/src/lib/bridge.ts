@@ -68,6 +68,11 @@ export interface Bridge {
     onNavigate: Listen<string>;
     onUpdateReady: Listen<string>;
   };
+  errors?: {
+    /** An error for Admin → Bugs; the main process dedupes, caps and sends it (lib/errors.tsx). */
+    report(report: { kind: string; message: string; stack: string | null; componentStack: string | null; route: string }): void;
+    setScreen(screen: string): void;
+  };
   window: { onFullscreen: Listen<boolean>; onFocus: Listen<boolean> };
 }
 

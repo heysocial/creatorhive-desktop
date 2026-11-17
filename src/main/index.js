@@ -31,6 +31,7 @@ const { ORIGIN, IS_PREVIEW, RENDERER_URL, debug } = require("./config");
 const site = require("./site");
 const google = require("./google");
 const realtime = require("./realtime");
+const errors = require("./errors");
 
 /* Must match DESKTOP_NOTIFICATION_EVENT in the web app's lib/realtime/channels.ts. */
 const DESKTOP_NOTIFICATION_EVENT = "notification:desktop";
@@ -50,6 +51,9 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.setAppUserModelId(IS_PREVIEW ? "com.creatorhive.desktop.preview" : "com.creatorhive.desktop");
+
+// From here on, this process's errors and the windows' crashes go to Admin → Bugs (errors.js).
+errors.configure(ipcMain);
 
 /* ---------- Settings ---------- */
 

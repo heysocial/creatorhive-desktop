@@ -48,6 +48,12 @@ contextBridge.exposeInMainWorld("ch", {
     onNavigate: listen("navigate"),
     onUpdateReady: listen("update:ready"),
   },
+  errors: {
+    /** An error this window hit, for Admin → Bugs (sent by the main process; deduped and capped there). */
+    report: (report) => ipcRenderer.send("errors:report", report),
+    /** The screen this window shows ("Hub → Deals"), for a crash report that can't ask. */
+    setScreen: (screen) => ipcRenderer.send("errors:screen", screen),
+  },
   window: {
     onFullscreen: listen("window:fullscreen"),
     onFocus: listen("window:focus"),

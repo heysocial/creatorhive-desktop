@@ -6,6 +6,7 @@ import { openPath } from "./lib/links";
 import { nav, useNav } from "./lib/nav";
 import { useRealtimeRefresh } from "./lib/realtime";
 import { SignIn } from "./signin/SignIn";
+import { screenFor, setErrorScreen } from "./lib/errors";
 import { TopBar } from "./shell/TopBar";
 import { Rail } from "./shell/Rail";
 import { Sidebar } from "./sidebars/Sidebars";
@@ -125,6 +126,11 @@ export function App() {
       offAuth();
     };
   }, []);
+
+  // The screen an error report names (lib/errors.tsx).
+  const where = useNav().current;
+  const screen = auth.state === "signedIn" ? screenFor(where) : auth.state === "signedOut" ? "Sign in" : "Starting";
+  useEffect(() => setErrorScreen(screen), [screen]);
 
   if (auth.state === "loading") return <div className="signin" />;
   if (auth.state === "signedOut") return <SignIn onSignedIn={(user) => setAuth({ state: "signedIn", user })} />;
