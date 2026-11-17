@@ -9,6 +9,7 @@ import { InvoiceDetailsForm, useInvoiceProfile } from "../hub/InvoiceDetails";
 import { ThemePicker } from "../heysocial/ThemePicker";
 import { MemberTitles } from "./MemberTitles";
 import { setHelpButtonHidden, useSupport } from "../../lib/support";
+import { photoError } from "../../lib/photo-error";
 
 /* The Settings window (⌘,): what this Mac does, and your account on the server. */
 
@@ -227,9 +228,16 @@ function Account({ user }: { user: SessionUser }) {
               e.target.value = "";
               if (!file) return;
               setAvatarBusy(true);
-              const result = await ch.files.uploadForm({ path: "/api/profile/avatar", field: "file", name: file.name, type: file.type, bytes: await file.arrayBuffer() });
-              setAvatarBusy(false);
-              if (!result.ok) window.alert(result.error === "avatar_upload_rate_limited" ? photoWait(result.data) : result.error === "avatar_file_too_large" ? "That photo is over 3 MB." : "Couldn't change your photo.");
+              // The spinner clears whatever happens, including a throw.
+              let result: Awaited<ReturnType<typeof ch.files.uploadForm>>;
+              try {
+                result = await ch.files.uploadForm({ path: "/api/profile/avatar", field: "file", name: file.name, type: file.type, bytes: await file.arrayBuffer() });
+              } catch {
+                result = { ok: false, error: "offline" };
+              } finally {
+                setAvatarBusy(false);
+              }
+              if (!result.ok) window.alert(photoError(result.error, result.data));
               else profileChanged({ image: (result.data as { avatarUrl?: string } | undefined)?.avatarUrl ?? null });
               void profile.refetch();
             }} />
@@ -270,13 +278,6 @@ function Account({ user }: { user: SessionUser }) {
   );
 }
 
-/** "Try again in 7 minutes", from the wait the server sends with a rate limit. */
-function photoWait(data: unknown) {
-  const seconds = Number((data as { retryAfterSeconds?: unknown } | undefined)?.retryAfterSeconds);
-  if (!Number.isFinite(seconds) || seconds <= 0) return "You can change your photo again in a few minutes.";
-  const minutes = Math.ceil(seconds / 60);
-  return `You changed your photo recently. Try again in ${minutes === 1 ? "a minute" : `${minutes} minutes`}.`;
-}
 
 /*
   The main window is its own renderer with its own cache: tell every window the

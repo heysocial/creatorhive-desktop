@@ -4,6 +4,7 @@ import { api, ApiError, PASSWORD_REQUIRED_EVENT, queryClient } from "../lib/api"
 import { ch, type SessionUser } from "../lib/bridge";
 import { ME_ACCESS_KEY, useMeAccess } from "../lib/access";
 import { Avatar } from "../lib/ui";
+import { photoError } from "../lib/photo-error";
 
 /*
   The Weekend Starter's simpler sign-up (creatorhive-app docs/weekend-signup.md).
@@ -168,7 +169,7 @@ function Welcome({ user, onUser, onDone }: { user: SessionUser; onUser: (patch: 
       let avatarUrl = current;
       if (file) {
         const upload = await ch.files.uploadForm({ path: "/api/profile/avatar", field: "file", name: file.name, type: file.type, bytes: await file.arrayBuffer() });
-        if (!upload.ok) throw new Error(upload.error === "avatar_file_too_large" ? "That photo is over 3 MB. Pick a smaller one." : "Your photo couldn't be uploaded. Try again.");
+        if (!upload.ok) throw new Error(photoError(upload.error, upload.data));
         avatarUrl = (upload.data as { avatarUrl?: string } | undefined)?.avatarUrl ?? avatarUrl;
       }
       await api("/api/profile", { method: "PATCH", body: { gender, bio } });

@@ -219,21 +219,27 @@ async function apiStream({ path, body } = {}, onLine) {
 const FORM_ROUTES = [/^\/api\/profile\/avatar$/, /^\/api\/courses\/[0-9a-f-]{36}\/cover$/, /^\/api\/(dms|channels)\/[0-9a-f-]{36}\/voice$/];
 
 /** A one-file multipart upload to a site route (the profile photo, a voice memo), with any extra text fields. */
+const UPLOAD_FORM_TIMEOUT_MS = 60_000;
+
 async function uploadForm({ path, field, name, type, bytes, fields } = {}) {
   if (typeof path !== "string" || !FORM_ROUTES.some((r) => r.test(path)) || typeof field !== "string") return { ok: false, error: "bad_path" };
+  let signal = null;
   try {
     const form = new FormData();
     form.append(field, new Blob([Buffer.from(bytes)], { type: String(type || "application/octet-stream") }), String(name || "file"));
     for (const [key, value] of Object.entries(fields && typeof fields === "object" ? fields : {})) {
       if (typeof value === "string") form.append(key, value);
     }
-    const response = await appSession().fetch(`${ORIGIN}${path}`, { method: "POST", body: form, headers: { Origin: ORIGIN, Accept: "application/json" } });
+    // Every caller shows a spinner until this settles, so it always does:
+    // a request with no answer after a minute is aborted and reported.
+    signal = AbortSignal.timeout(UPLOAD_FORM_TIMEOUT_MS);
+    const response = await appSession().fetch(`${ORIGIN}${path}`, { method: "POST", body: form, headers: { Origin: ORIGIN, Accept: "application/json" }, signal });
     const data = await response.json().catch(() => null);
     // The failure's body too: a rate limit says how long to wait (retryAfterSeconds).
     return response.ok ? { ok: true, data } : { ok: false, status: response.status, error: data?.error ?? `HTTP ${response.status}`, data };
   } catch (error) {
     debug("upload form failed", error?.message);
-    return { ok: false, error: "offline" };
+    return { ok: false, error: signal?.aborted ? "timeout" : "offline" };
   }
 }
 
