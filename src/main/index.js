@@ -735,6 +735,9 @@ function setUnread(count) {
 }
 
 function scheduleBadgePoll() {
+  // The window is only destroyed while the app quits; stop polling then
+  // instead of touching it ("Object has been destroyed", bug c73aeecd).
+  if (mainWindow?.isDestroyed()) return;
   const focused = mainWindow?.isVisible() && mainWindow.isFocused();
   setTimeout(() => {
     void refreshBadge();
