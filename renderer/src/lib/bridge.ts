@@ -130,6 +130,8 @@ export interface Bridge {
     uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer; fields?: Record<string, string> }): Promise<{ ok: boolean; status?: number; error?: string; data?: unknown }>;
     pickVideo(): Promise<LocalVideoFile | null>;
     videoInfo(file: File): Promise<LocalVideoFile | null>;
+    /** A video file kept by path (null when it's gone or isn't a video). */
+    videoInfoAt(filePath: string): Promise<LocalVideoFile | null>;
     putFile(request: { id: string; url: string; type: string; filePath: string }): Promise<{ ok: boolean; status?: number; error?: string }>;
     putPart(request: { id: string; url: string; filePath: string; start: number; end: number }): Promise<{ ok: boolean; status?: number; error?: string }>;
     pickFolder(title: string): Promise<string | null>;

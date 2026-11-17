@@ -94,6 +94,8 @@ contextBridge.exposeInMainWorld("ch", {
       try { filePath = webUtils.getPathForFile(file); } catch { /* not a file on disk */ }
       return ipcRenderer.invoke("files:videoInfo", filePath);
     },
+    /** The same, for a path kept from an earlier pick (a post video's draft, after a restart). */
+    videoInfoAt: (filePath) => ipcRenderer.invoke("files:videoInfo", String(filePath || "")),
     putFile: (request) => ipcRenderer.invoke("files:putFile", request),
     /** One part of a multipart upload: bytes [start, end) of the file, to its presigned URL. */
     putPart: (request) => ipcRenderer.invoke("files:putPart", request),

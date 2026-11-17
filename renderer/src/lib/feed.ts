@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
 import { api, ApiError, queryClient, rateLimitMessage } from "./api";
-import { putToMux, putToMuxInChunks, type Author, type Reactions, type UploadedVideo, type VideoAttachment } from "./community";
+import { putToMux, type Author, type Reactions, type UploadedVideo, type VideoAttachment } from "./community";
 
 export const CATEGORIES = [
   // The Weekend Starter group: only its buyers and the team ever get it (lib/access.ts useFeedAccess).
@@ -135,21 +135,21 @@ export function textToPostHtml(text: string) {
     `<p>${escape(para).replace(/https?:\/\/[^\s<]+/g, (url) => `<a href="${url}">${url}</a>`).replace(/\n/g, "<br>")}</p>`).join("");
 }
 
-export async function createPost(input: { text: string; category: CategoryKey; mediaUrls: string[]; poll?: { question: string; options: string[] } | null; videoUploadToken?: string }) {
+export async function createPost(input: { text: string; category: CategoryKey; mediaUrls: string[]; poll?: { question: string; options: string[] } | null; videoUploadId?: string }) {
   const body = {
     body: textToPostHtml(input.text), filterTag: input.category, mediaUrls: input.mediaUrls, poll: input.poll ?? undefined, clientMutationId: crypto.randomUUID(),
-    ...(input.videoUploadToken ? { videoUploadToken: input.videoUploadToken } : {}),
+    ...(input.videoUploadId ? { videoUploadId: input.videoUploadId } : {}),
   };
-  // Mux takes a moment to see a video's last bytes: the post is refused with 409 until then. The same
-  // clientMutationId makes sending it again safe.
+  // A video Mux hasn't quite taken from R2 yet answers 409 NOT_READY: wait and send again. The same
+  // clientMutationId makes that safe.
   let post: Post;
   for (let attempt = 0; ; attempt++) {
     try {
       post = (await api<{ post: Post }>("/api/posts", { method: "POST", body })).post;
       break;
     } catch (error) {
-      if (!(input.videoUploadToken && error instanceof ApiError && error.status === 409 && attempt < 120)) throw error;
-      await new Promise((r) => setTimeout(r, 500));
+      if (!(input.videoUploadId && error instanceof ApiError && error.status === 409 && error.data?.code === "NOT_READY" && attempt < 60)) throw error;
+      await new Promise((r) => setTimeout(r, 1000));
     }
   }
   void queryClient.invalidateQueries({ queryKey: ["posts"] });
@@ -159,21 +159,11 @@ export async function createPost(input: { text: string; category: CategoryKey; m
 
 /* ---------- Post videos ----------
    One video per post, up to 2 GB and 30 minutes (docs/post-videos.md on the
-   website). It goes to Mux before the post exists, in resumable chunks, and
-   the post is sent with its videoUploadToken. */
+   website). It goes to R2 before the post exists (lib/postVideo.ts), and the
+   post is sent with its videoUploadId. */
 
 export const POST_VIDEO_LIMIT = 2 * 1024 * 1024 * 1024;
 export const POST_VIDEO_SECONDS = 30 * 60;
-
-/** A new post's video straight to Mux, with progress; an abort (the tile removed) stops it. */
-export async function uploadPostVideo(file: File, onProgress: (pct: number) => void, signal?: AbortSignal): Promise<UploadedVideo> {
-  const start = await api<{ uploadUrl: string; uploadToken: string; uid: string }>("/api/posts/videos/upload-url", {
-    method: "POST",
-    body: { fileName: file.name, mimeType: file.type || "video/mp4", sizeBytes: file.size, providers: ["mux"] },
-  });
-  await putToMuxInChunks(start.uploadUrl, file, onProgress, signal);
-  return { uploadToken: start.uploadToken, uid: start.uid, name: file.name };
-}
 
 const watchingPostVideos = new Set<string>();
 

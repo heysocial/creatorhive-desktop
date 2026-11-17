@@ -329,61 +329,6 @@ export function putToMux(url: string, file: File, onProgress: (pct: number) => v
   });
 }
 
-/*
-  A video's bytes to its Mux upload URL in chunks, as the website sends a post's
-  video (lib/uploads/mux-upload.ts there): each chunk is a PUT with a
-  Content-Range, Mux answers 308 with `Range: bytes=0-N` for what it holds (200
-  or 201 once it has everything). A chunk that fails first asks what arrived (an
-  empty PUT over `bytes *`) and carries on from there, so a dropped connection
-  costs one chunk, not the whole of a 2 GB video. An abort stops it.
-*/
-const MUX_CHUNK_BYTES = 32 * 256 * 1024; // Mux wants a multiple of 256 KiB
-const MUX_RETRY_DELAYS = [0, 1_000, 3_000, 5_000, 10_000];
-
-export async function putToMuxInChunks(url: string, file: File, onProgress: (pct: number) => void, signal?: AbortSignal) {
-  const total = file.size;
-  const aborted = () => new DOMException("aborted", "AbortError");
-  const send = (contentRange: string, body: Blob | null, base = 0) => new Promise<number>((resolve, reject) => {
-    if (signal?.aborted) return reject(aborted());
-    const xhr = new XMLHttpRequest();
-    const stop = () => xhr.abort();
-    signal?.addEventListener("abort", stop, { once: true });
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Range", contentRange);
-    if (body) xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.min(99, Math.round(((base + e.loaded) / total) * 100)));
-    xhr.onloadend = () => signal?.removeEventListener("abort", stop);
-    xhr.onload = () => {
-      if (xhr.status === 200 || xhr.status === 201) return resolve(total);
-      if (xhr.status === 308) {
-        const range = xhr.getResponseHeader("Range")?.match(/bytes=0-(\d+)/);
-        return resolve(range ? Number(range[1]) + 1 : 0);
-      }
-      // Gone or refused for good (an expired upload): trying again won't help.
-      const final = xhr.status >= 400 && xhr.status < 500 && xhr.status !== 408 && xhr.status !== 429;
-      reject(Object.assign(new Error(`upload ${xhr.status}`), { final }));
-    };
-    xhr.onerror = () => reject(new Error("upload failed"));
-    xhr.onabort = () => reject(aborted());
-    xhr.send(body);
-  });
-  let offset = 0;
-  while (offset < total) {
-    const from = offset;
-    for (let tries = 0; ; tries++) {
-      try {
-        // A retried chunk asks first: Mux may already hold some of it, or all.
-        const at = tries > 0 ? await send(`bytes */${total}`, null) : from;
-        offset = at >= total ? at : await send(`bytes ${at}-${Math.min(at + MUX_CHUNK_BYTES, total) - 1}/${total}`, file.slice(at, Math.min(at + MUX_CHUNK_BYTES, total)), at);
-        break;
-      } catch (error) {
-        if (signal?.aborted || (error as { final?: boolean }).final || tries >= MUX_RETRY_DELAYS.length) throw error;
-        await new Promise((r) => setTimeout(r, MUX_RETRY_DELAYS[tries]));
-      }
-    }
-  }
-  onProgress(100);
-}
-
 /** Mux takes a moment to see the bytes: finalize answers 409 until then. */
 async function finalize(where: Thread, body: Record<string, unknown>) {
   for (let attempt = 0; attempt < 120; attempt++) {
