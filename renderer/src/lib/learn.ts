@@ -18,7 +18,7 @@ export interface CourseSummary {
 export interface LessonSummary { id: string; title: string; videoUrl: string | null; durationSeconds: number | null; completed: boolean }
 export interface Module { id: string; title: string; description: string | null; lessons: LessonSummary[] }
 export interface Course { id: string; title: string; description: string | null; coverUrl: string | null; modules: Module[] }
-export interface Lesson { id: string; title: string; body: string; videoUrl: string | null; durationSeconds: number | null; moduleId: string; courseId: string; completed: boolean }
+export interface Lesson { id: string; title: string; body: string; videoUrl: string | null; videoEmbedUrl?: string | null; durationSeconds: number | null; moduleId: string; courseId: string; completed: boolean }
 
 export const useCourses = () => useQuery({ queryKey: ["courses"], queryFn: async () => (await api<{ courses: CourseSummary[] }>("/api/courses")).courses });
 export const useCourse = (id: string) => useQuery({ queryKey: ["course", id], queryFn: async () => (await api<{ course: Course }>(`/api/courses/${id}`)).course });
@@ -47,12 +47,35 @@ export async function setComplete(lesson: { id: string; courseId?: string }, cou
 
 /* ---------- Video: YouTube and Loom (and old Cloudflare Stream links), as the website plays them ---------- */
 
-export type Embed = { provider: "youtube" | "loom" | "stream"; id: string; src: string } | null;
+export type Embed = { provider: "youtube" | "loom" | "stream" | "mux"; id: string; src: string } | null;
 
-export function embedFor(url: string | null): Embed {
+/*
+  Mux: lessons uploaded from the course editor (Nov 17 2026). The server sends
+  the signed HLS URL as `videoUrl` and Mux's web player, with tokens, as
+  `videoEmbedUrl`. Every read mints new tokens, so the first player URL is kept
+  per lesson for 6 hours (tokens last 12): a refetch on focus must not reload
+  the player under someone watching.
+*/
+const muxEmbeds = new Map<string, { src: string; at: number }>();
+function stableMux(key: string, src: string) {
+  const kept = muxEmbeds.get(key);
+  if (kept && kept.src.split("?")[0] === src.split("?")[0] && Date.now() - kept.at < 6 * 3600_000) return kept.src;
+  muxEmbeds.set(key, { src, at: Date.now() });
+  return src;
+}
+
+export function embedFor(url: string | null, embedUrl?: string | null, lessonId = ""): Embed {
   if (!url) return null;
   let u: URL;
   try { u = new URL(url.trim()); } catch { return null; }
+  if (u.protocol === "https:" && u.hostname === "stream.mux.com") {
+    const id = u.pathname.replace(/^\//, "").replace(/\.m3u8$/, "");
+    if (!/^[A-Za-z0-9]{20,80}$/.test(id)) return null;
+    const token = u.searchParams.get("token");
+    const fallback = `https://player.mux.com/${id}${token && /^[\w.-]+$/.test(token) ? `?playback-token=${token}` : ""}`;
+    const given = embedUrl && embedUrl.startsWith(`https://player.mux.com/${id}`) ? embedUrl : fallback;
+    return { provider: "mux", id, src: stableMux(`${lessonId}:${id}`, given) };
+  }
   const host = u.hostname.replace(/^www\./, "").replace(/^m\./, "");
   if (host === "youtu.be") {
     const id = u.pathname.slice(1).split("/")[0];

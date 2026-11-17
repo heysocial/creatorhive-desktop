@@ -444,7 +444,7 @@ function youTubeId(input: string): string | null {
   return id && /^[\w-]+$/.test(id) ? id : null;
 }
 
-function videoProvider(value: string): "youtube" | "loom" | "stream" | null {
+function videoProvider(value: string): "youtube" | "loom" | "stream" | "mux" | null {
   if (youTubeId(value)) return "youtube";
   let url: URL;
   try {
@@ -455,6 +455,7 @@ function videoProvider(value: string): "youtube" | "loom" | "stream" | null {
   if (url.protocol !== "https:") return null;
   if (["loom.com", "www.loom.com"].includes(url.hostname) && /^\/share\/[a-zA-Z0-9]+\/?$/.test(url.pathname)) return "loom";
   const host = url.hostname;
+  if (host === "stream.mux.com" && /^\/[A-Za-z0-9]{20,80}(\.m3u8)?$/.test(url.pathname)) return "mux";
   const stream = host === "iframe.videodelivery.net" || host === "watch.videodelivery.net" || /^customer-[a-z0-9]+\.cloudflarestream\.com$/.test(host);
   if (stream && /^[0-9a-f]{32}$/.test(url.pathname.split("/").filter(Boolean)[0] ?? "")) return "stream";
   return null;
@@ -465,6 +466,7 @@ function VideoNote({ value }: { value: string }) {
   const provider = videoProvider(value);
   if (!provider) return <p className="ca-video-note bad">Not a link we recognise. Paste a Loom or YouTube link.</p>;
   if (provider === "stream") return <p className="ca-video-note bad">Cloudflare Stream has been cancelled — use a Loom or YouTube link.</p>;
+  if (provider === "mux") return <p className="ca-video-note">Uploaded video. To replace it, upload a new one in the course editor on the website.</p>;
   return <p className="ca-video-note">Recognised as {provider}.</p>;
 }
 

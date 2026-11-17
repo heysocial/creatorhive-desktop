@@ -197,7 +197,7 @@ export function CoursePage({ id, lessonId: requested }: { id: string; lessonId?:
   const index = lessons.findIndex((l) => l.id === lessonId);
   const prev = index > 0 ? lessons[index - 1] : null;
   const next = index >= 0 && index < lessons.length - 1 ? lessons[index + 1] : null;
-  const embed = embedFor(lesson.data?.videoUrl ?? null);
+  const embed = embedFor(lesson.data?.videoUrl ?? null, lesson.data?.videoEmbedUrl, lesson.data?.id);
   const frame = useRef<HTMLIFrameElement>(null);
   const yt = useYouTube(frame, embed?.provider === "youtube");
   const done = lessons.filter((l) => l.completed).length;
@@ -298,7 +298,7 @@ export function CoursePage({ id, lessonId: requested }: { id: string; lessonId?:
 /** The floating lesson window: just the video, kept above other windows. */
 export function LessonVideo({ courseId, lessonId, start = 0 }: { courseId: string; lessonId: string; start?: number }) {
   const lesson = useLesson(lessonId);
-  const embed = embedFor(lesson.data?.videoUrl ?? null);
+  const embed = embedFor(lesson.data?.videoUrl ?? null, lesson.data?.videoEmbedUrl, lesson.data?.id);
   void courseId;
   // A YouTube lesson carries on from where the main window's player was.
   const src = embed?.provider === "youtube" ? `${embed.src}&start=${start}&autoplay=1` : embed?.src;
