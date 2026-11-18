@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, ChevronDown, Clapperboard, Copy, Download, Film, Image as ImageIcon, Loader2, Lock,
-  MapPin, MessageSquarePlus, Music, Paperclip, PenLine, RotateCcw, SendHorizontal, Sparkles, Upload, X,
+  MapPin, MessageSquarePlus, Music, Paperclip, RotateCcw, SendHorizontal, Sparkles, Upload, X,
 } from "lucide-react";
 import { ch } from "../../lib/bridge";
 import { queryClient } from "../../lib/api";
@@ -155,9 +155,8 @@ export function VideoEditor() {
 
 function ToolTabs({ locked = false }: { locked?: boolean }) {
   return (
-    <div className="aive-tabs" role="tablist" aria-label="AI tools">
-      <button role="tab" onClick={() => nav.open({ kind: "script-writer" }, "learn", "ch")}><span className="aive-tab-ico sw"><PenLine /></span>Script Writer</button>
-      <button role="tab" className="on" aria-selected><span className="aive-tab-ico vee"><Clapperboard /></span>Video Editor{locked ? <Lock className="aive-tab-lock" /> : null}</button>
+    <div className="aive-tabs" aria-label="AI Video Editor">
+      <span className="on"><span className="aive-tab-ico vee"><Clapperboard /></span>Video Editor{locked ? <Lock className="aive-tab-lock" /> : null}</span>
     </div>
   );
 }
@@ -185,7 +184,7 @@ function VeLocked() {
         </div>
         <div className="aive-locked-card card">
           <div className="soon-icon" aria-hidden><Lock /></div>
-          <p>Drop in your clips and get back a finished video: your best takes, captions and music, in 9:16 and 4:5. The AI Video Editor is part of the UGC Academy.</p>
+          <p>Drop in your raw footage and photos. Get a brand-ready edit in under 60 seconds. The AI Video Editor is part of the UGC Academy.</p>
           <button className="btn honey lg" onClick={openUpgrade}>See the UGC Academy</button>
         </div>
       </div>
@@ -202,7 +201,7 @@ export function VideoEditorTile() {
       <span className="aive-entry-text">
         <small>AI Video Editor</small>
         <b>Edit it.</b>
-        <span className="muted">Drop in your clips. Get back your best takes, captions and music, ready to post.</span>
+        <span className="muted">Drop in your raw footage and photos. Get a brand-ready edit in under 60 seconds.</span>
       </span>
       <span className="aive-entry-cta">{locked ? <><Lock />UGC Academy</> : <>Open<ArrowRight /></>}</span>
     </button>
