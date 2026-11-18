@@ -2367,3 +2367,5 @@ html.is-popout body { background: var(--card); }
 .from-client b { color: var(--ink-2); font-weight: 650; }
 .from-client .link { font-size: 12.5px; }
 .cs-foot.three { grid-template-columns: 1fr 1fr 1fr; }
+/* The support "?" (styles/support.css: 42px, 18px from the corner) sits over the panel's bottom-right: keep New deal / Edit / Remove above it. */
+.client-side { padding-bottom: 70px; }
