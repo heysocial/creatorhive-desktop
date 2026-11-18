@@ -205,7 +205,14 @@ export function VideoEditorTile() {
 
 /* ---------- Chat (left) ---------- */
 
-function planToText(p: VeEditPlan): string {
+/** Lists stay lists whatever was saved: a text where a list belongs crashed the plan card (Nov 18). */
+function safePlan(raw: VeEditPlan): VeEditPlan {
+  const list = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]).filter((x) => x != null) : []);
+  return { ...raw, cuts: list(raw.cuts), steps: list(raw.steps), broll: list(raw.broll), assumptions: list<string>(raw.assumptions).map(String), qc_after_render: list<string>(raw.qc_after_render).map(String) };
+}
+
+function planToText(raw: VeEditPlan): string {
+  const p = safePlan(raw);
   const out: string[] = [];
   if (p.summary) out.push(p.summary, "");
   if (p.hook) out.push(`Hook: ${p.hook}`, "");
@@ -220,7 +227,8 @@ function planToText(p: VeEditPlan): string {
   return out.join("\n").trim();
 }
 
-function PlanCard({ plan }: { plan: VeEditPlan }) {
+function PlanCard({ plan: raw }: { plan: VeEditPlan }) {
+  const plan = safePlan(raw);
   const [copied, setCopied] = useState(false);
   return (
     <div className="aive-plan selectable">
