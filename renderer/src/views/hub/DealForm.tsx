@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, FileText, Link2, Loader2, Paperclip, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, FileText, Link2, Loader2, Paperclip, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, queryClient } from "../../lib/api";
 import { bytes, money } from "../../lib/format";
 import {
@@ -28,7 +29,10 @@ function amountRaw(typed: string) {
   return (at === -1 ? clean.slice(0, 9) : `${clean.slice(0, at).slice(0, 9)}.${clean.slice(at + 1).replace(/\./g, "")}`);
 }
 
-export interface FormStart { deal?: Deal; status?: DealStatus; brand?: string; duplicateOf?: Deal }
+/** A client from Past clients (`/api/hub/contacts`): what a new deal can start from. */
+export interface SavedContact { key: string; brand_name: string; contact_name: string | null; email: string | null; phone: string | null }
+
+export interface FormStart { deal?: Deal; status?: DealStatus; brand?: string; duplicateOf?: Deal; contact?: SavedContact }
 
 let open: (start: FormStart | null) => void = () => {};
 export const openDealForm = (start: FormStart) => open(start);
@@ -171,6 +175,73 @@ function EscapeLayer({ onEscape }: { onEscape: () => void }) {
   return null;
 }
 
+/* ---------- Pick a saved contact: fills Brand, Contact name, email and phone on a new deal ---------- */
+
+/** The four fields a saved contact fills; a part it doesn't have empties that box. */
+export function contactFields(c: SavedContact) {
+  return { brand: c.brand_name, name: c.contact_name ?? "", email: c.email ?? "", phone: c.phone ?? "" };
+}
+
+/** The same list Past clients loads (saved contacts and clients built from earlier deals). */
+function useSavedContacts(enabled: boolean) {
+  return useQuery({ queryKey: ["hub", "contacts"], enabled, queryFn: () => api<{ contacts: SavedContact[] }>("/api/hub/contacts") });
+}
+
+function ContactPicker({ contacts, onPick, onClose }: { contacts: SavedContact[]; onPick: (c: SavedContact) => void; onClose: () => void }) {
+  const [q, setQ] = useState("");
+  const [at, setAt] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  useLayer(onClose);
+
+  const list = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    return contacts
+      .filter((c) => !query || [c.brand_name, c.contact_name, c.email].some((x) => x?.toLowerCase().includes(query)))
+      .sort((a, b) => a.brand_name.localeCompare(b.brand_name, undefined, { sensitivity: "base" }));
+  }, [contacts, q]);
+
+  // A click anywhere else closes it (the "Pick a saved contact" link beside it toggles it itself).
+  useEffect(() => {
+    const down = (e: MouseEvent) => { const area = box.current?.parentElement; if (area && !area.contains(e.target as Node)) onClose(); };
+    document.addEventListener("mousedown", down, true);
+    return () => document.removeEventListener("mousedown", down, true);
+  }, [onClose]);
+
+  useEffect(() => { listRef.current?.querySelector(".cp-row.sel")?.scrollIntoView({ block: "nearest" }); }, [at]);
+
+  function onKey(e: React.KeyboardEvent) {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (list.length) setAt((i) => (i + (e.key === "ArrowDown" ? 1 : list.length - 1)) % list.length);
+    } else if (e.key === "Enter") {
+      // Picks the row; never saves the deal.
+      e.preventDefault();
+      e.stopPropagation();
+      if (list[at]) onPick(list[at]);
+    }
+  }
+
+  return (
+    <div ref={box} className="contact-picker" role="dialog" aria-label="Pick a saved contact">
+      <label className="search-inline"><Search /><input autoFocus placeholder="Search brand, name or email" value={q} aria-label="Search saved contacts"
+        onChange={(e) => { setQ(e.target.value); setAt(0); }} onKeyDown={onKey} /></label>
+      <div ref={listRef} className="cp-list" role="listbox">
+        {list.length === 0 ? <p className="faint cp-empty">No client matches “{q.trim()}”.</p> : null}
+        {list.map((c, i) => {
+          const sub = [c.contact_name, c.email].filter(Boolean).join(" · ");
+          return (
+            <button type="button" key={c.key} role="option" aria-selected={i === at} className={`cp-row ${i === at ? "sel" : ""}`}
+              onMouseMove={() => setAt(i)} onClick={() => onPick(c)}>
+              <b>{c.brand_name}</b>{sub ? <span>{sub}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Brief on a new deal: held until the deal exists, then attached (the website's NewDealBriefs) ---------- */
 
 type DraftBrief = { key: string; kind: "file"; file: File } | { key: string; kind: "link"; url: string; name: string };
@@ -267,6 +338,8 @@ function initial(start: FormStart): Values {
     email: d?.contact_email ?? "",
     name: d?.contact_name ?? "",
     phone: d?.contact_phone ?? "",
+    // New deal from a client on Past clients: the same four fields the picker fills.
+    ...(!d && start.contact ? contactFields(start.contact) : {}),
     sources: d?.deal_sources.map((s) => s.id) ?? [],
     industry: d?.industry_ref?.id ?? null,
     type: d?.deal_type ?? "ugc",
@@ -312,6 +385,10 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
   const sources = useSources().data ?? [];
   const industries = useIndustries().data ?? [];
   const methods = usePaymentMethods().data ?? [];
+  const savedContacts = useSavedContacts(!editing).data?.contacts ?? [];
+  const [picking, setPicking] = useState(false);
+  const [fromClient, setFromClient] = useState<string | null>(() => (!editing && start.contact ? start.contact.brand_name : null));
+  const closePicker = useCallback(() => setPicking(false), []);
   const brandInput = useRef<HTMLInputElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
   const set = <K extends keyof Values>(key: K, value: Values[K]) => setV((current) => ({ ...current, [key]: value }));
@@ -480,6 +557,19 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
             {amountUsd ? <span className="retainer-preview">About {money(retainerMonthly(amountUsd, v.interval))} a month · {money(retainerYearly(amountUsd, v.interval))} a year</span> : null}
             <p className="hint">Every payment is listed inside this one deal. No new deal each week.</p>
           </div>
+        ) : null}
+        {!editing && savedContacts.length ? (
+          <div className="pick-contact">
+            <button type="button" className="link" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>Pick a saved contact</button>
+            {picking ? (
+              <ContactPicker contacts={savedContacts} onClose={closePicker}
+                onPick={(c) => { setV((cur) => ({ ...cur, ...contactFields(c) })); setFromClient(c.brand_name); setPicking(false); if (error?.includes("email")) setError(null); brandInput.current?.focus(); }} />
+            ) : null}
+          </div>
+        ) : null}
+        {!editing && fromClient ? (
+          <div className="from-client">From your clients: <b>{fromClient}</b> · <button type="button" className="link"
+            onClick={() => { setV((cur) => ({ ...cur, brand: "", name: "", email: "", phone: "" })); setFromClient(null); brandInput.current?.focus(); }}>Clear</button></div>
         ) : null}
         <label className="flabel">Brand</label>
         <input ref={brandInput} className="field" value={v.brand} maxLength={120} required onChange={(e) => set("brand", e.target.value)} />

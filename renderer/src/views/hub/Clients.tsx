@@ -160,7 +160,7 @@ export function Clients() {
                 <StagePill status={d.status} small /><b>{money(d.amount_usd)}</b>
               </button>
             ))}
-            <button className="link add" onClick={() => openDealForm({ brand: current.brand_name })}>+ New deal for {current.brand_name}</button>
+            <button className="link add" onClick={() => openDealForm({ contact: current })}>+ New deal for {current.brand_name}</button>
             {current.brands.filter((b) => b.via !== "self").length ? (
               <>
                 <div className="section-label" style={{ marginTop: 10 }}>Linked brands</div>
@@ -170,7 +170,8 @@ export function Clients() {
                 ))}
               </>
             ) : null}
-            <div className="cs-foot">
+            <div className="cs-foot three">
+              <button className="btn" onClick={() => openDealForm({ contact: current })}><Plus />New deal</button>
               <button className="btn" onClick={() => setEditing(current)}><Pencil />Edit</button>
               <button className="btn" onClick={async () => {
                 if (!window.confirm(`Remove ${current.brand_name} from Past clients? Its deals stay.`)) return;
