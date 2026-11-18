@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { ch } from "../../lib/bridge";
 import {
-  EXPENSE_CATEGORIES, allDeals, categoryOf, cents, daysBetween, errorText, localToday, moneyWrite, monDay, useDeals, useExpenses, useMoney, useSubscriptions, withTz,
+  EXPENSE_CATEGORIES, TOO_MANY_DECIMALS, allDeals, categoryOf, cents, daysBetween, errorText, localToday, moneyWrite, monDay, parseUsd, usdInputValue, useDeals, useExpenses, useMoney, useSubscriptions, withTz,
   type Expense, type ExpenseCategory, type MoneySummary, type Subscription,
 } from "../../lib/hub";
 import { Modal, hubToast } from "./parts";
@@ -19,12 +19,12 @@ const ICONS: Record<ExpenseCategory, typeof Tag> = { editor: Clapperboard, va: H
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? "st" : n % 10 === 2 && n !== 12 ? "nd" : n % 10 === 3 && n !== 13 ? "rd" : "th"}`;
 
-/** "180" or "31.99" → cents; null when it isn't an amount. */
-function parseAmount(text: string): number | null {
-  const clean = text.replace(/[$,\s]/g, "");
-  if (!/^\d+(\.\d{0,2})?$/.test(clean)) return null;
-  const value = Math.round(Number(clean) * 100);
-  return value >= 1 ? value : null;
+/** "180" or "$1,250.75" → cents; "decimals" past two of them; null when it isn't an amount. */
+function parseAmount(text: string): number | "decimals" | null {
+  const value = parseUsd(text);
+  if (value === "decimals" || value === null) return value;
+  const amount = Math.round(value * 100);
+  return amount >= 1 ? amount : null;
 }
 
 function CategoryTile({ category, size = 36 }: { category: ExpenseCategory; size?: number }) {
@@ -213,7 +213,7 @@ const LAST_CATEGORY = "ch.hub.lastExpenseCategory";
 
 function ExpenseForm({ expense, onSwitch, onClose }: { expense?: Expense; onSwitch: () => void; onClose: () => void }) {
   const deals = allDeals(useDeals().data).slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-  const [amount, setAmount] = useState(expense ? (expense.amount_cents / 100).toFixed(2) : "");
+  const [amount, setAmount] = useState(expense ? usdInputValue(expense.amount_cents / 100) : "");
   const [name, setName] = useState(expense?.name ?? "");
   const [category, setCategory] = useState<ExpenseCategory>(() => expense?.category ?? ((localStorage.getItem(LAST_CATEGORY) as ExpenseCategory) || "other"));
   const [spentOn, setSpentOn] = useState(expense?.spent_on ?? localToday());
@@ -224,6 +224,7 @@ function ExpenseForm({ expense, onSwitch, onClose }: { expense?: Expense; onSwit
 
   async function save() {
     const value = parseAmount(amount);
+    if (value === "decimals") { setError(TOO_MANY_DECIMALS); return; }
     if (!value) { setError("Type the amount, like 180 or 31.99."); return; }
     if (!name.trim()) { setError("Say what it was for, like \"Maria R. · video editing\"."); return; }
     setBusy(true);
@@ -258,7 +259,7 @@ function ExpenseForm({ expense, onSwitch, onClose }: { expense?: Expense; onSwit
 
 function SubscriptionForm({ subscription, onSwitch, onClose }: { subscription?: Subscription; onSwitch: () => void; onClose: () => void }) {
   const today = localToday();
-  const [amount, setAmount] = useState(subscription ? (subscription.amount_cents / 100).toFixed(2) : "");
+  const [amount, setAmount] = useState(subscription ? usdInputValue(subscription.amount_cents / 100) : "");
   const [name, setName] = useState(subscription?.name ?? "");
   const [category, setCategory] = useState<ExpenseCategory>(subscription?.category ?? "software");
   const [renewsDay, setRenewsDay] = useState(subscription?.renews_day ?? Number(today.slice(8, 10)));
@@ -270,6 +271,7 @@ function SubscriptionForm({ subscription, onSwitch, onClose }: { subscription?: 
 
   async function save() {
     const value = parseAmount(amount);
+    if (value === "decimals") { setError(TOO_MANY_DECIMALS); return; }
     if (!value) { setError("Type the amount, like 9.99."); return; }
     if (!name.trim()) { setError("Name it, like CapCut or Canva."); return; }
     setBusy(true);

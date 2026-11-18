@@ -9,6 +9,7 @@ import {
 import type { NativeMenuItem } from "../../lib/bridge";
 import { money } from "../../lib/format";
 import { nav } from "../../lib/nav";
+import { PlatformFeeFields, feeBody, feeDraft } from "./PlatformFee";
 
 export function StagePill({ status, small = false }: { status: DealStatus; small?: boolean }) {
   return <span className={`stage-pill s-${status} ${small ? "sm" : ""}`}>{STATUS_LABELS[status]}</span>;
@@ -280,13 +281,17 @@ function PaidOnPrompt({ deal, change, resolve, close }: { deal: Deal; change: bo
   const latest = addDaysIso(today, MAX_PAID_DAYS_AHEAD);
   const was = change ? deal.paid_on ?? (deal.paid_at ? dayOf(deal.paid_at) : null) : null;
   const [date, setDate] = useState(was ?? today);
+  // Marking a one-time deal paid can say what the platform kept (Tara, Nov 18). Changing the day doesn't ask.
+  const askFee = !change && deal.payment_kind !== "retainer";
+  const [fee, setFee] = useState(() => feeDraft(null, null));
+  const feeResult = feeBody(fee, deal.amount_usd);
   const ahead = date > today;
-  const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= "2000-01-01" && date <= latest;
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= "2000-01-01" && date <= latest && (!askFee || feeResult.ok);
   const done = (value: Record<string, unknown> | null) => { resolve(value); close(); };
   const save = () => {
     if (!valid) return;
     if (change) done(date === was ? {} : { paid_on: date });
-    else done(date === today ? {} : { paid_on: date });
+    else done({ ...(date === today ? {} : { paid_on: date }), ...(askFee && feeResult.ok ? feeResult.body : {}) });
   };
   return (
     <Modal title={`When was ${deal.brand_name} paid?`} onClose={() => done(null)} width={440}
@@ -299,10 +304,11 @@ function PaidOnPrompt({ deal, change, resolve, close }: { deal: Deal; change: bo
       <input className="field" type="date" autoFocus value={date} min="2000-01-01" max={latest} aria-label="Paid on"
         onChange={(e) => setDate(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }} />
       <p className={`hint ${ahead && valid ? "landing-text" : ""}`}>
-        {!valid ? (date > latest ? "Up to a year from today." : "Pick a day.")
+        {!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < "2000-01-01" || date > latest ? (date > latest ? "Up to a year from today." : "Pick a day.")
           : ahead ? `Shows as "${landsLabel(date)}" and counts toward Cash from ${longDay(date)}.`
           : date === today ? "Counts toward Cash today." : `Counts toward Cash on ${longDay(date)}.`}
       </p>
+      {askFee ? <PlatformFeeFields amount={deal.amount_usd} value={fee} onChange={setFee} /> : null}
     </Modal>
   );
 }
@@ -349,7 +355,7 @@ function PaydayDialog({ deal, payday, close }: { deal: Deal; payday: Payday; clo
       <div ref={box} className="modal payday" role="dialog" aria-modal="true" aria-label="You got paid" tabIndex={-1}>
         <div className="pd-check">✓</div>
         <div className="pd-eyebrow">YOU GOT PAID</div>
-        <div className="pd-amount">{money(deal.amount_usd)}</div>
+        <div className="pd-amount">{money(deal.received_usd ?? deal.amount_usd)}</div>
         <div className="muted">{deal.brand_name} · deal completed 🎉</div>
         <div className="pd-month">
           <span><b>{deal.added_by && deal.updated_by && deal.added_by.id !== deal.updated_by.id ? `${deal.added_by.name.split(" ")[0]}'s ` : ""}{monthName} total</b></span>
@@ -360,7 +366,7 @@ function PaydayDialog({ deal, payday, close }: { deal: Deal; payday: Payday; clo
         <label className="toggle-row"><input type="checkbox" checked={withAmount} onChange={(e) => setWithAmount(e.target.checked)} />Include the amount in my post</label>
         <div className="pd-acts">
           <button className="btn honey lg" onClick={() => {
-            const text = withAmount ? `Just got paid ${money(deal.amount_usd)} by ${deal.brand_name} 🎉` : `Just got paid by ${deal.brand_name} 🎉`;
+            const text = withAmount ? `Just got paid ${money(deal.received_usd ?? deal.amount_usd)} by ${deal.brand_name} 🎉` : `Just got paid by ${deal.brand_name} 🎉`;
             close();
             // Leave the Hub on its page, not on this deal, for when they come back.
             const here = nav.get().view;

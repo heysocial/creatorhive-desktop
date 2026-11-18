@@ -7,7 +7,7 @@ import { openLink } from "../../lib/html";
 import { api, queryClient } from "../../lib/api";
 import {
   ADVANCE_STATUSES, BOARD_LABELS, STATUS_LABELS, boardOf, closedUnpaidLine, daysBetween, dealTypeLabel, deleteDeal, isActiveDeal, isClosedOutStatus, isDeliveredOrLater, isDraftPending, landsLabel, landsOn, localToday, monDay,
-  monDayYear, nextStatus, shortDay, staleText, unpaidText, useDeal, useDeals, withTz, type Deal, type DealStatus,
+  monDayYear, nextStatus, receivedUsd, shortDay, staleText, unpaidText, usd2, feeText, useDeal, useDeals, withTz, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { bytes, money } from "../../lib/format";
 import { nav } from "../../lib/nav";
@@ -391,6 +391,12 @@ export function DealPanel({ id, onClose, popout = false }: { id: string; onClose
                       {lands ? <small className="landing-text">Counts in Cash from then</small> : null}
                     </span>
                   ) : <button className="link" onClick={() => void changePaidOn(deal)}>Unknown · Add it</button>}
+                </Row>
+              ) : null}
+              {/* A platform kept part of it (Tara, Nov 18): the deal, the fee and what reached her. Changed in Edit deal. */}
+              {deal.status === "completed" && deal.payment_kind !== "retainer" && deal.platform_fee_usd ? (
+                <Row label="Received">
+                  <span className="fee-line selectable">Deal {usd2(deal.amount_usd)} · {feeText(deal.platform_fee_usd, deal.platform_fee_name)} · You received <b>{usd2(deal.received_usd ?? receivedUsd(deal.amount_usd, deal.platform_fee_usd))}</b></span>
                 </Row>
               ) : null}
             </section>

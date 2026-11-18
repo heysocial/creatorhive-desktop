@@ -624,8 +624,27 @@ function showPopup(popup) {
   send("popup:show", popup);
 }
 
+/*
+  A push that is only true until a moment carries `expiresAt` (the website's
+  lib/push/lifetime.ts): an event reminder, "starts in 10 minutes", expires
+  when the event starts. One that reaches the Mac after that — it was asleep,
+  or offline, and the connection caught up on wake — is not shown, and one on
+  screen is taken away when the moment passes (on wake, if it passed asleep).
+*/
+function expiresInMs(payload) {
+  if (typeof payload?.expiresAt !== "string") return null;
+  const at = Date.parse(payload.expiresAt);
+  return Number.isNaN(at) ? null : at - Date.now();
+}
+
 function showNotification(payload) {
   if (!payload || typeof payload.title !== "string") return;
+  const expiresIn = expiresInMs(payload);
+  if (expiresIn !== null && expiresIn <= 0) {
+    debug("notification skipped: expired", payload.title);
+    if (payload.tag) shownByTag.get(payload.tag)?.close();
+    return;
+  }
   const sender = payload.sender && typeof payload.sender.name === "string" ? payload.sender : null;
   if (sender && !locked && !payload.senderImageTried) {
     void senderImage(sender.avatar).then((image) => showNotification({ ...payload, senderImageTried: true, senderImage: image }));
@@ -693,6 +712,7 @@ function showNotification(payload) {
     shownByTag.set(payload.tag, notification);
   }
   notification.show();
+  if (expiresIn !== null) setTimeout(() => notification.close(), Math.min(expiresIn, 24 * 60 * 60 * 1000)).unref?.();
   // Like Slack: one bounce of the Dock icon, when CreatorHive isn't the app in front.
   if (IS_MAC && settings.bounceDock && !BrowserWindow.getFocusedWindow()) app.dock?.bounce("informational");
 }

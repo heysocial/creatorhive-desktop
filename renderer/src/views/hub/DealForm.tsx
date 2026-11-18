@@ -3,12 +3,30 @@ import { Check, FileText, Link2, Loader2, Paperclip, Pencil, Plus, Trash2, X } f
 import { api, ApiError, queryClient } from "../../lib/api";
 import { bytes, money } from "../../lib/format";
 import {
-  DEAL_STATUSES, DEAL_TYPES, MAX_PAID_DAYS_AHEAD, RETAINER_INTERVALS, retainerMonthly, retainerYearly, type RetainerInterval, STATUS_LABELS, UNPAID_REASON_LABELS, addDaysIso, createDeal, dayOf, landsLabel, longDay, createOption, deleteOption, errorText, isDeliveredOrLater, localToday, patchDeal, renameOption, useIndustries,
+  DEAL_STATUSES, DEAL_TYPES, MAX_PAID_DAYS_AHEAD, TOO_MANY_DECIMALS, parseUsd, usdInputValue, RETAINER_INTERVALS, retainerMonthly, retainerYearly, type RetainerInterval, STATUS_LABELS, UNPAID_REASON_LABELS, addDaysIso, createDeal, dayOf, landsLabel, longDay, createOption, deleteOption, errorText, isDeliveredOrLater, localToday, patchDeal, renameOption, useIndustries,
   usePaymentMethods, useSources, withTz, type Deal, type DealStatus, type DealType, type Option, type OptionKind, type UnpaidReason,
 } from "../../lib/hub";
 import { Modal, celebrate, hubToast, useLayer } from "./parts";
 import { addBriefLink, briefLink, uploadBrief } from "./DealPanel";
 import { openDeal } from "./Deals";
+import { PlatformFeeFields, feeBody, feeDraft, type FeeDraft } from "./PlatformFee";
+
+/*
+  The big amount as she types it: digits with thousands commas, and the cents
+  after a point ("1,250.75"). More than two decimals stay as typed and are
+  turned down on save, in words.
+*/
+function amountDisplay(raw: string) {
+  const [whole, ...rest] = raw.split(".");
+  const grouped = (whole.replace(/^0+(?=\d)/, "") || (rest.length ? "0" : "")).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return rest.length ? `${grouped}.${rest.join("")}` : grouped;
+}
+/** Keeps digits and the first point; drops "$", commas and anything else. */
+function amountRaw(typed: string) {
+  const clean = typed.replace(/[^\d.]/g, "");
+  const at = clean.indexOf(".");
+  return (at === -1 ? clean.slice(0, 9) : `${clean.slice(0, at).slice(0, 9)}.${clean.slice(at + 1).replace(/\./g, "")}`);
+}
 
 export interface FormStart { deal?: Deal; status?: DealStatus; brand?: string; duplicateOf?: Deal }
 
@@ -236,13 +254,15 @@ interface Values {
   draftDue: string; paymentExpected: string; terms: string; count: string; unpaidReason: UnpaidReason; unpaidNote: string;
   /* "How do you get paid?" (the website's hand-off §11.2): one payment, or a retainer paid again and again inside this deal. */
   kind: "one_time" | "retainer"; interval: RetainerInterval; anchorOn: string;
+  /* A Completed one-time deal's platform fee (Tara, Nov 18). */
+  fee: FeeDraft;
 }
 
 function initial(start: FormStart): Values {
   const d = start.deal ?? start.duplicateOf;
   const dup = Boolean(start.duplicateOf);
   return {
-    amount: d ? String(d.amount_usd) : "750",
+    amount: d ? usdInputValue(d.amount_usd) : "750",
     brand: dup ? `${d!.brand_name} (copy)` : d?.brand_name ?? start.brand ?? "",
     email: d?.contact_email ?? "",
     name: d?.contact_name ?? "",
@@ -267,6 +287,7 @@ function initial(start: FormStart): Values {
     kind: d?.payment_kind === "retainer" ? "retainer" : "one_time",
     interval: d?.retainer?.interval ?? "week",
     anchorOn: (!dup && d?.retainer?.anchor_on) || "",
+    fee: !dup && d?.status === "completed" ? feeDraft(d.platform_fee_usd, d.platform_fee_name) : feeDraft(null, null),
   };
 }
 
@@ -314,10 +335,16 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
     return v.paidOn === localToday() ? {} : { paid_on: v.paidOn || null };
   }
 
-  function body() {
+  const amountValue = parseUsd(v.amount || "0");
+  const amountUsd = typeof amountValue === "number" ? amountValue : null;
+  /* The fee goes with a Completed one-time deal only; leaving Completed clears it on the server. */
+  const feeShown = v.status === "completed" && v.kind === "one_time";
+
+  function body(fee: Record<string, unknown>) {
     return {
       brand_name: v.brand.trim(),
-      amount_usd: Number(v.amount.replace(/\D/g, "") || 0),
+      amount_usd: amountUsd ?? 0,
+      ...(feeShown ? fee : {}),
       contact_email: v.email.trim(),
       contact_name: v.name.trim(),
       contact_phone: v.phone.trim(),
@@ -354,11 +381,15 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
       emailInput.current?.focus();
       return;
     }
+    if (amountValue === "decimals") { setError(TOO_MANY_DECIMALS); return; }
+    if (amountUsd === null) { setError("Type the amount, like 750 or 487.50."); return; }
+    const fee = feeShown ? feeBody(v.fee, amountUsd) : { ok: true as const, body: {} };
+    if (!fee.ok) { setError(fee.error); return; }
     setSaving(true);
     setError(null);
     try {
       if (editing) {
-        const result = await patchDeal(start.deal!.id, body());
+        const result = await patchDeal(start.deal!.id, body(fee.body));
         celebrate(result.deal, result.payday);
         const change = brandChange(start.deal!, v);
         if (change.any) {
@@ -373,7 +404,7 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
         }
         onClose();
       } else {
-        const result = await createDeal(body());
+        const result = await createDeal(body(fee.body));
         if (briefs.length) await attachBriefs(result.deal.id, briefs);
         celebrate(result.deal, result.payday);
         onClose();
@@ -430,9 +461,9 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
         onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void save(); } }}>
         <div className="amount-row">
           <span className="dollar">$</span>
-          <input className="amount" inputMode="numeric" value={Number(v.amount || 0).toLocaleString("en-US")} aria-label="Amount"
-            style={{ width: `${Math.max(2, Number(v.amount || 0).toLocaleString("en-US").length) * 0.62 + 0.4}em` }}
-            onChange={(e) => set("amount", e.target.value.replace(/\D/g, "").slice(0, 8))} />
+          <input className="amount" inputMode="decimal" value={amountDisplay(v.amount)} placeholder="0" aria-label="Amount" aria-invalid={amountValue === "decimals" || undefined}
+            style={{ width: `${Math.max(2, amountDisplay(v.amount).length) * 0.62 + 0.4}em` }}
+            onChange={(e) => { set("amount", amountRaw(e.target.value)); if (error) setError(null); }} />
           <span className="muted">{v.kind === "retainer" ? "how much each time?" : "what's this deal worth?"}</span>
         </div>
         <label className="flabel">How do you get paid?</label>
@@ -446,7 +477,7 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
             <label className="flabel">First payment</label>
             <input className="field" type="date" value={v.anchorOn || localToday()} onChange={(e) => set("anchorOn", e.target.value)} />
             <p className="hint">{editing ? "Changing it moves the coming payments only. Payments you logged stay where they are." : "Sets the day it repeats on."}</p>
-            {Number(v.amount) > 0 ? <span className="retainer-preview">About {money(retainerMonthly(Number(v.amount), v.interval))} a month · {money(retainerYearly(Number(v.amount), v.interval))} a year</span> : null}
+            {amountUsd ? <span className="retainer-preview">About {money(retainerMonthly(amountUsd, v.interval))} a month · {money(retainerYearly(amountUsd, v.interval))} a year</span> : null}
             <p className="hint">Every payment is listed inside this one deal. No new deal each week.</p>
           </div>
         ) : null}
@@ -485,6 +516,7 @@ function DealFormDialog({ start, onClose }: { start: FormStart; onClose: () => v
             <p className={`hint ${v.paidOn > today ? "landing-text" : ""}`}>{!v.paidOn ? "Not counted in any month until you add the day it was paid."
               : v.paidOn > today ? `Shows as "${landsLabel(v.paidOn)}" and counts toward Cash from ${longDay(v.paidOn)}.`
               : v.paidOn === today ? "Counts toward Cash today, unless you pick another day." : "Counts toward that month in Cash."}</p>
+            {feeShown ? <div className="fee-narrow"><PlatformFeeFields amount={amountUsd} value={v.fee} onChange={(next) => { set("fee", next); if (error) setError(null); }} /></div> : null}
           </>
         ) : null}
         {v.status === "closed_unpaid" ? (

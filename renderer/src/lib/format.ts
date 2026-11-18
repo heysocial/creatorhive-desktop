@@ -54,8 +54,10 @@ const money2 = new Intl.NumberFormat("en-US", { style: "currency", currency: "US
 
 /** Whole dollars unless there are cents. */
 export function money(value: number | string | null | undefined, currency = "USD") {
-  const n = Number(value ?? 0);
-  if (!Number.isFinite(n)) return "$0";
+  const raw = Number(value ?? 0);
+  if (!Number.isFinite(raw)) return "$0";
+  // To the cent first, so a float sum ($449.99999…) never shows as $450.00.
+  const n = Math.round(raw * 100) / 100;
   if (currency !== "USD") {
     return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: Number.isInteger(n) ? 0 : 2 }).format(n);
   }
