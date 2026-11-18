@@ -2326,3 +2326,26 @@ html.is-popout body { background: var(--card); }
   .booking-body { background: #101010; }
   .booking-loading { color: #ABA69E; }
 }
+
+/* Platform fee (views/hub/PlatformFee.tsx): folded under the paid day or the amount, then Platform + Fee side by side and what she received. */
+.fee-fold { margin-top: 8px; }
+.fee-block { display: flex !important; flex-direction: column; gap: 6px !important; margin-top: 10px; padding: 10px 12px 8px; border-radius: 12px; background: var(--card-2); }
+.fee-fields { display: grid !important; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px !important; }
+.fee-fields label { display: flex; flex-direction: column; gap: 0 !important; min-width: 0; }
+.fee-fields .flabel { margin: 0 0 5px; }
+.fee-fields .field { width: 100%; height: 38px; }
+.fee-input { display: flex; align-items: center; gap: 4px; height: 38px; padding: 0 12px; border-radius: 10px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.fee-input:focus-within { box-shadow: inset 0 0 0 1px var(--blue), 0 0 0 4px rgba(10,132,255,.18); }
+.fee-input i { color: var(--ink-3); font-style: normal; font-weight: 600; }
+.fee-input input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font-size: 14px; outline: none; font-variant-numeric: tabular-nums; }
+.fee-foot { display: flex !important; flex-direction: row !important; align-items: center; justify-content: space-between; gap: 10px; min-height: 22px; }
+.fee-received { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.fee-received b { color: var(--ink); font-weight: 700; }
+.fee-line { font-variant-numeric: tabular-nums; }
+.rp-acts { display: inline-flex; align-items: center; gap: 10px; }
+.metric .fees-paid { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.metric .fees-paid .fl { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--ink-3); }
+.metric .fees-paid b { font-size: 17px; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.fee-narrow { max-width: 460px; }
+.fee-input input:focus, .fee-input input:focus-visible { box-shadow: none; outline: none; }
+.fee-foot .link { white-space: nowrap; flex-shrink: 0; }

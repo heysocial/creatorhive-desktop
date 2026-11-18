@@ -139,6 +139,14 @@ export interface Deal {
   retainer?: Retainer | null;
   /** What the expenses linked to this deal add up to, in cents ("Costs $180 · you kept $1,320"). */
   costs_cents?: number;
+  /*
+    A paid one-time deal's platform fee (Backstage, Fiverr…) and the platform's
+    name; `received_usd` is the amount less the fee, on a Completed one-time
+    deal only. `amount_usd` stays the full deal. Older servers leave them out.
+  */
+  platform_fee_usd?: number | null;
+  platform_fee_name?: string | null;
+  received_usd?: number | null;
 }
 
 export type RetainerInterval = "week" | "two_weeks" | "month";
@@ -153,6 +161,10 @@ export interface RetainerPayment {
   payment_method: string | null;
   payment_method_ref: Ref | null;
   note: string | null;
+  /* The platform's cut of this payment, and what she received. Older servers leave them out. */
+  platform_fee_usd?: number | null;
+  platform_fee_name?: string | null;
+  received_usd?: number | null;
 }
 export interface Retainer {
   interval: RetainerInterval;
@@ -168,6 +180,7 @@ export interface Retainer {
   upcoming: string[];
   missed: string[];
   paid_count: number;
+  /** What she received: payments less their platform fees. */
   paid_total_usd: number;
   /** Newest first. */
   payments: RetainerPayment[];
@@ -178,7 +191,49 @@ export const RETAINER_INTERVALS: { id: RetainerInterval; label: string }[] = [
 ];
 /** "About $1,083 a month": week × 52 / 12, two weeks × 26 / 12. */
 export const retainerMonthly = (amount: number, interval: RetainerInterval) => interval === "week" ? Math.round((amount * 52) / 12) : interval === "two_weeks" ? Math.round((amount * 26) / 12) : amount;
-export const retainerYearly = (amount: number, interval: RetainerInterval) => interval === "week" ? amount * 52 : interval === "two_weeks" ? amount * 26 : amount * 12;
+export const retainerYearly = (amount: number, interval: RetainerInterval) => roundCents(interval === "week" ? amount * 52 : interval === "two_weeks" ? amount * 26 : amount * 12);
+
+/* ---------- Amounts with cents (the website's lib/hub/cents.ts) ---------- */
+
+/** Rounded to the cent, so float sums never show as $449.99999. */
+export const roundCents = (dollars: number) => Math.round(dollars * 100) / 100;
+/** What she received: the amount less the platform fee, if any. */
+export const receivedUsd = (amount: number, fee: number | null | undefined) => roundCents(amount - (fee ?? 0));
+/** Whether an amount has cents worth showing ($487.50 does, $500 doesn't). */
+export const hasCents = (dollars: number) => Math.round(dollars * 100) % 100 !== 0;
+/** Always two decimals ("$450.00"), for the "You received" lines. */
+export const usd2 = (dollars: number) => `${dollars < 0 ? "−" : ""}$${Math.abs(roundCents(dollars)).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** An amount for a form field: "487.50", "500" (never "487.5"). */
+export const usdInputValue = (dollars: number) => (hasCents(dollars) ? dollars.toFixed(2) : String(Math.round(dollars)));
+/** The plain words for an amount with more than two decimals. */
+export const TOO_MANY_DECIMALS = "Amounts can have at most 2 decimals, like 487.50.";
+/**
+ * What a person typed — "487.50", "$1,250.75", "500" — as dollars; "decimals"
+ * when it has more than two of them; null when it isn't an amount at all.
+ */
+export function parseUsd(text: string): number | "decimals" | null {
+  const clean = text.replace(/[$,\s]/g, "");
+  if (!clean) return null;
+  if (/^\d*\.\d{3,}$/.test(clean)) return "decimals";
+  if (!/^(\d+(\.\d{0,2})?|\.\d{1,2})$/.test(clean)) return null;
+  const value = Number(clean);
+  return Number.isFinite(value) && value <= 100_000_000 ? roundCents(value) : null;
+}
+
+/* ---------- Platform fees ---------- */
+
+/** Offered in the Platform field before she has used any of her own. */
+export const DEFAULT_FEE_PLATFORMS = ["Backstage", "Fiverr", "Upwork", "Collabstr"];
+/** The platform names this Hub already used on deals and retainer payments, then the defaults, each once. */
+export function feePlatforms(deals: Deal[]) {
+  const seen = new Map<string, string>();
+  const add = (name: string | null | undefined) => { const n = name?.trim(); if (n && !seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n); };
+  for (const d of deals) { add(d.platform_fee_name); for (const p of d.retainer?.payments ?? []) add(p.platform_fee_name); }
+  DEFAULT_FEE_PLATFORMS.forEach(add);
+  return [...seen.values()];
+}
+/** "Fee $50.00 (Backstage)". */
+export const feeText = (fee: number, name: string | null | undefined) => `Fee ${usd2(fee)}${name ? ` (${name})` : ""}`;
 
 export interface Payday {
   month_label: string;
@@ -272,7 +327,11 @@ export interface Cash {
     closed_unpaid?: ClosedUnpaidSummary;
     /* Closed – Not contracted this calendar year; in no other figure, Didn't pay out included. Older servers leave it out. */
     closed_not_contracted?: ClosedOutSummary;
+    /* Platform fees on this month's money ("Fees paid"); every collected figure is already less them. Older servers leave it out. */
+    fees_this_month_usd?: number;
   };
+  /* The selected window (30 days here): net collected and the fees on it. Older servers leave `fees_usd` out. */
+  cash?: { collected_usd: number; fees_usd?: number };
 }
 
 export function useCash() {
@@ -430,8 +489,17 @@ export async function deleteDeal(id: string) {
 
 /* ---------- Retainer payments (the website's /api/hub/deals/[id]/payments) ---------- */
 
-export async function logPayment(dealId: string, body: { amount_usd: number; paid_on: string; payment_method_ref?: string | null; note?: string | null }) {
+export interface PaymentBody { amount_usd: number; paid_on: string; payment_method_ref?: string | null; note?: string | null; platform_fee_usd?: number | null; platform_fee_name?: string | null }
+
+export async function logPayment(dealId: string, body: PaymentBody) {
   const result = await api<{ deal: Deal | null; payday: Payday | null }>(withTz(`/api/hub/deals/${dealId}/payments`), { method: "POST", body });
+  if (result.deal) replaceDeal(result.deal);
+  void queryClient.invalidateQueries({ queryKey: ["hub"] });
+  return result;
+}
+
+export async function updatePayment(dealId: string, paymentId: string, body: Partial<PaymentBody>) {
+  const result = await api<{ deal: Deal | null }>(withTz(`/api/hub/deals/${dealId}/payments/${paymentId}`), { method: "PATCH", body });
   if (result.deal) replaceDeal(result.deal);
   void queryClient.invalidateQueries({ queryKey: ["hub"] });
   return result;
@@ -484,8 +552,11 @@ export interface Subscription {
   started_on: string; canceled_on: string | null; remind_day_before: boolean; next_renewal_on: string | null;
 }
 
-/** "$1,234.56", from cents. */
-export const cents = (value: number) => `${value < 0 ? "−" : ""}$${(Math.abs(value) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** "$1,234.56" from cents, or "$1,234" when there are none. */
+export const cents = (value: number) => {
+  const digits = Math.round(value) % 100 !== 0 ? 2 : 0;
+  return `${value < 0 ? "−" : ""}$${(Math.abs(Math.round(value)) / 100).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+};
 
 export function useMoney() {
   const src = useHubSource();

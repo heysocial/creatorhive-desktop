@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { CalendarDays, Check, Hourglass, Info, Loader2 } from "lucide-react";
 import {
-  cents, dayOf, daysBetween, endRetainer, errorText, isRetainer, localToday, logPayment, longDay, removePayment, usePaymentMethods, weekdayDay,
-  type Deal, type Retainer,
+  TOO_MANY_DECIMALS, cents, dayOf, daysBetween, endRetainer, errorText, feeText, isRetainer, localToday, logPayment, longDay, parseUsd, receivedUsd, removePayment, updatePayment, usd2, usdInputValue,
+  usePaymentMethods, weekdayDay, type Deal, type Retainer, type RetainerPayment,
 } from "../../lib/hub";
 import { money } from "../../lib/format";
 import { Modal, celebratePayment, hubToast } from "./parts";
+import { PlatformFeeFields, feeBody, feeDraft } from "./PlatformFee";
 
 /*
   A retainer in the deal pop-up (the website's hand-off §11.2): the next
@@ -33,13 +34,15 @@ export function RetainerAmount({ deal }: { deal: Deal }) {
 export function ProfitLine({ deal }: { deal: Deal }) {
   if (!deal.costs_cents) return null;
   const retainer = isRetainer(deal) ? deal.retainer : null;
-  const inCents = (retainer ? retainer.paid_total_usd : deal.amount_usd) * 100;
+  // What she received: a retainer's payments, or the deal less its platform fee.
+  const inCents = Math.round((retainer ? retainer.paid_total_usd : deal.received_usd ?? deal.amount_usd) * 100);
   const paid = retainer ? retainer.paid_count > 0 : deal.status === "completed" && Boolean(deal.paid_at);
   return <div className="dp-profit">Costs {cents(deal.costs_cents)} · {paid ? "you kept" : "you'll keep"} {cents(inCents - deal.costs_cents)}</div>;
 }
 
 export function RetainerSection({ deal, onEditSchedule }: { deal: Deal; onEditSchedule: () => void }) {
   const [logging, setLogging] = useState<string | null>(null);
+  const [editing, setEditing] = useState<RetainerPayment | null>(null);
   const [ending, setEnding] = useState(false);
   const [all, setAll] = useState(false);
   if (!isRetainer(deal)) return null;
@@ -83,9 +86,14 @@ export function RetainerSection({ deal, onEditSchedule }: { deal: Deal; onEditSc
         ))}
         {shown.map((p) => (
           <li key={p.id}><span className="rp-status paid"><Check /></span>
-            <span><b>{weekdayDay(p.paid_on)}</b><small className="paid-text">{p.landed ? "Paid" : "Lands then"}{p.payment_method_ref ? ` · ${p.payment_method_ref.label}` : ""}{p.note ? ` · ${p.note}` : ""}</small></span>
+            <span><b>{weekdayDay(p.paid_on)}</b><small className="paid-text">{p.landed ? "Paid" : "Lands then"}{p.payment_method_ref ? ` · ${p.payment_method_ref.label}` : ""}{p.note ? ` · ${p.note}` : ""}</small>
+              {/* The platform kept part of it: the payment, the fee and what reached her. */}
+              {p.platform_fee_usd ? <small className="fee-line">{usd2(p.amount_usd)} · {feeText(p.platform_fee_usd, p.platform_fee_name)} · You received {usd2(p.received_usd ?? receivedUsd(p.amount_usd, p.platform_fee_usd))}</small> : null}</span>
             <b className="rp-amt">{money(p.amount_usd)}</b>
-            <button className="link" onClick={() => void remove(p.id, `${weekdayDay(p.paid_on)} ${money(p.amount_usd)}`)}>Remove</button></li>
+            <span className="rp-acts">
+              <button className="link" onClick={() => setEditing(p)}>Edit</button>
+              <button className="link" onClick={() => void remove(p.id, `${weekdayDay(p.paid_on)} ${money(p.amount_usd)}`)}>Remove</button>
+            </span></li>
         ))}
         {!r.payments.length && !next ? <li className="faint">No payments logged yet.</li> : null}
       </ul>
@@ -93,27 +101,44 @@ export function RetainerSection({ deal, onEditSchedule }: { deal: Deal; onEditSc
       <p className="retainer-note faint"><Info />Each payment counts in the month it's paid: Cash, Paid this month, bee tier and leaderboard.</p>
       {!stopped ? <button className="link danger" onClick={() => setEnding(true)}>End retainer…</button> : null}
       {logging ? <LogPayment deal={deal} retainer={r} day={logging} onClose={() => setLogging(null)} /> : null}
+      {editing ? <LogPayment deal={deal} retainer={r} day={editing.paid_on} payment={editing} onClose={() => setEditing(null)} /> : null}
       {ending ? <EndRetainer deal={deal} retainer={r} onClose={() => setEnding(false)} /> : null}
     </section>
   );
 }
 
-function LogPayment({ deal, retainer, day, onClose }: { deal: Deal; retainer: Retainer; day: string; onClose: () => void }) {
+/** Log a payment, or (with `payment`) correct one already logged: amount, platform fee, day, method and note. */
+function LogPayment({ deal, retainer, day, payment, onClose }: { deal: Deal; retainer: Retainer; day: string; payment?: RetainerPayment; onClose: () => void }) {
   const methods = usePaymentMethods().data ?? [];
-  const [amount, setAmount] = useState(String(retainer.amount_usd));
-  const [paidOn, setPaidOn] = useState(day);
-  const [method, setMethod] = useState<string | null>(deal.payment_method_ref?.id ?? null);
-  const [note, setNote] = useState("");
+  const [amount, setAmount] = useState(usdInputValue(payment?.amount_usd ?? retainer.amount_usd));
+  const [fee, setFee] = useState(() => feeDraft(payment?.platform_fee_usd, payment?.platform_fee_name));
+  const [paidOn, setPaidOn] = useState(dayOf(day));
+  const [method, setMethod] = useState<string | null>(payment ? payment.payment_method_ref?.id ?? null : deal.payment_method_ref?.id ?? null);
+  const [note, setNote] = useState(payment?.note ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const month = MONTHS[Number(paidOn.slice(5, 7)) - 1] ?? "";
+  const parsed = parseUsd(amount);
+  const usd = typeof parsed === "number" && parsed > 0 ? parsed : null;
 
   async function save() {
-    const usd = Number(amount.replace(/[$,\s]/g, ""));
-    if (!Number.isInteger(usd) || usd < 1) { setError("Type the amount in whole dollars, like 250."); return; }
+    if (parsed === "decimals") { setError(TOO_MANY_DECIMALS); return; }
+    if (usd === null) { setError("Type the amount, like 250 or 487.50."); return; }
+    const feeResult = feeBody(fee, usd);
+    if (!feeResult.ok) { setError(feeResult.error); return; }
     setBusy(true);
     try {
-      const result = await logPayment(deal.id, { amount_usd: usd, paid_on: paidOn, ...(method ? { payment_method_ref: method } : {}), note: note.trim() || null });
+      if (payment) {
+        await updatePayment(deal.id, payment.id, {
+          amount_usd: usd, paid_on: paidOn, payment_method_ref: method, note: note.trim() || null,
+          // An edit always says the fee: what's typed, or none.
+          platform_fee_usd: null, platform_fee_name: null, ...feeResult.body,
+        });
+        onClose();
+        hubToast(`Payment updated · ${money(usd)}`);
+        return;
+      }
+      const result = await logPayment(deal.id, { amount_usd: usd, paid_on: paidOn, ...(method ? { payment_method_ref: method } : {}), note: note.trim() || null, ...feeResult.body });
       onClose();
       hubToast(`Payment logged · ${money(usd)} · counts toward ${month}`);
       celebratePayment(result.deal ?? deal, result.payday);
@@ -124,10 +149,11 @@ function LogPayment({ deal, retainer, day, onClose }: { deal: Deal; retainer: Re
   }
 
   return (
-    <Modal title={`Log a payment · ${deal.brand_name}`} onClose={onClose} width={460}
+    <Modal title={`${payment ? "Edit payment" : "Log a payment"} · ${deal.brand_name}`} onClose={onClose} width={460}
       foot={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn honey" disabled={busy} onClick={() => void save()}>{busy ? <Loader2 className="spin" /> : null}Save payment</button></>}>
       <div className="form-col money-form">
-        <label><span>Amount</span><span className="big-amount"><i>$</i><input autoFocus inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} /></span></label>
+        <label><span>Amount</span><span className="big-amount"><i>$</i><input autoFocus inputMode="decimal" value={amount} onChange={(e) => { setAmount(e.target.value); setError(""); }} /></span></label>
+        <PlatformFeeFields amount={usd} value={fee} onChange={(next) => { setFee(next); setError(""); }} />
         <label><span>Date paid</span><input className="field" type="date" value={paidOn} onChange={(e) => setPaidOn(e.target.value)} /><small className="faint">It counts toward {month}.</small></label>
         <div><span>Paid with</span><div className="chip-row">
           {methods.map((m) => <button key={m.id} type="button" className={`chip ${method === m.id ? "on" : ""}`} onClick={() => setMethod(m.id)}>{m.label}</button>)}
