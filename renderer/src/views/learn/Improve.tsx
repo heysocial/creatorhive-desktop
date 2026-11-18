@@ -8,6 +8,7 @@ import { StarterImprove } from "./StarterImprove";
 import { EditorChatDock } from "./EditorParts";
 import type { SessionUser } from "../../lib/bridge";
 import { useStudentEditing } from "../../lib/videoEdits";
+import { VideoEditorTile } from "./VideoEditor";
 
 function Ring({ pct }: { pct: number }) {
   const r = 46;
@@ -104,6 +105,7 @@ export function ImprovePage({ user }: { user: SessionUser }) {
             </div>
           </div>
         ) : null}
+        {data ? <VideoEditorTile /> : null}
         {resources && data && !data.starter ? (
           <section>
             <div className="sec-head"><h2>Resources</h2><span className="muted">Tools, scripts, and manuals to move faster.</span></div>

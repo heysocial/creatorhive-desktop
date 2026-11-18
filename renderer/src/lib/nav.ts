@@ -28,6 +28,8 @@ export type View =
   | { kind: "resource"; id: string }
   | { kind: "improve-resource"; slug: string }
   | { kind: "script-writer"; chatId?: string }
+  /** The AI Video Editor (Improve): Academy members and the team. */
+  | { kind: "video-editor" }
   /** "Submit your 3 videos"; with `video`, only that video (website /library/videos?video=N). */
   | { kind: "starter-videos"; video?: number }
   /** The student's review of her edited videos (personal video editor). */

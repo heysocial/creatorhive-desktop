@@ -165,6 +165,9 @@ async function toTemp(url, name) {
 }
 
 const VIDEO_EXT = new Set(["mov", "mp4", "m4v", "webm", "hevc", "3gp", "mkv", "avi"]);
+// The AI Video Editor also takes pictures (extra footage) and songs (music).
+const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "webp"]);
+const AUDIO_EXT = new Set(["mp3", "m4a", "wav", "aac"]);
 const activePuts = new Map();
 
 function videoFileInfo(filePath) {
@@ -175,6 +178,21 @@ function videoFileInfo(filePath) {
     const stat = fs.statSync(file);
     if (!stat.isFile()) return null;
     return { path: file, name: path.basename(file), size: stat.size };
+  } catch {
+    return null;
+  }
+}
+
+/** A video, picture or song on disk (the AI Video Editor's uploads), with its kind. */
+function mediaFileInfo(filePath) {
+  try {
+    const file = String(filePath || "");
+    const ext = path.extname(file).slice(1).toLowerCase();
+    const kind = VIDEO_EXT.has(ext) ? "video" : IMAGE_EXT.has(ext) ? "image" : AUDIO_EXT.has(ext) ? "audio" : null;
+    if (!file || !kind) return null;
+    const stat = fs.statSync(file);
+    if (!stat.isFile()) return null;
+    return { path: file, name: path.basename(file), size: stat.size, kind };
   } catch {
     return null;
   }
@@ -200,7 +218,7 @@ function putFile(sender, id, url, type, filePath, range = null) {
       resolve({ ok: false, error: "bad_url" });
       return;
     }
-    const info = videoFileInfo(filePath);
+    const info = mediaFileInfo(filePath);
     if (!info) {
       resolve({ ok: false, error: "no_file" });
       return;
@@ -318,6 +336,7 @@ function configure(ipcMain) {
     return videoFileInfo(result.filePaths[0]);
   });
   ipcMain.handle("files:videoInfo", (_event, filePath) => videoFileInfo(filePath));
+  ipcMain.handle("files:mediaInfo", (_event, filePath) => mediaFileInfo(filePath));
   ipcMain.handle("files:putFile", (event, { id, url, type, filePath } = {}) => putFile(event.sender, String(id), url, type, filePath));
   // One part of a multipart upload: bytes [start, end) of the file.
   ipcMain.handle("files:putPart", (event, { id, url, filePath, start, end } = {}) => putFile(event.sender, String(id), url, "", filePath, { start, end }));

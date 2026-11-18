@@ -130,6 +130,8 @@ export interface Bridge {
     uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer; fields?: Record<string, string> }): Promise<{ ok: boolean; status?: number; error?: string; data?: unknown }>;
     pickVideo(): Promise<LocalVideoFile | null>;
     videoInfo(file: File): Promise<LocalVideoFile | null>;
+    /** The AI Video Editor: a video, picture or song on disk (null when it's none of those). */
+    mediaInfo(file: File): Promise<LocalMediaFile | null>;
     /** A video file kept by path (null when it's gone or isn't a video). */
     videoInfoAt(filePath: string): Promise<LocalVideoFile | null>;
     putFile(request: { id: string; url: string; type: string; filePath: string }): Promise<{ ok: boolean; status?: number; error?: string }>;
@@ -165,3 +167,6 @@ export const ch = window.ch;
 
 /** A video on this Mac, picked or dropped, by path (its bytes stay on disk until the upload streams them). */
 export interface LocalVideoFile { path: string; name: string; size: number }
+
+/** A video, picture or song on this Mac (the AI Video Editor's uploads). */
+export interface LocalMediaFile extends LocalVideoFile { kind: "video" | "image" | "audio" }

@@ -27,6 +27,7 @@ import { VideoReview } from "./learn/VideoReview";
 import { VideoEditsBoard } from "./edits/VideoEdits";
 import { Resources } from "./learn/Resources";
 import { ScriptWriter } from "./learn/ScriptWriter";
+import { VideoEditor } from "./learn/VideoEditor";
 import { ImproveResource } from "./learn/ImproveResource";
 import { Activity } from "./activity/Activity";
 import { HsMentions, HsSaved, HsThreads } from "./heysocial/Lists";
@@ -82,6 +83,8 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
       return <Resources pageId={view.id} />;
     case "script-writer":
       return <ScriptWriter chatId={view.chatId} />;
+    case "video-editor":
+      return <VideoEditor />;
     case "starter-videos":
       return <StarterVideos user={user} video={view.video} />;
     case "video-review":

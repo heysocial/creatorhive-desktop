@@ -156,7 +156,7 @@ export function contactLabel(contact: StarterContact): string {
 */
 const AREA_OF_VIEW: Partial<Record<string, string>> = {
   channel: "channels", events: "events", leaderboard: "leaderboard", members: "members",
-  resource: "library", "improve-resource": "library",
+  resource: "library", "improve-resource": "library", "video-editor": "videoEditor",
 };
 
 export function lockedAreaOf(location: Location): string | null {

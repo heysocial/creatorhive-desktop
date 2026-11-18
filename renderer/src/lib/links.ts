@@ -48,6 +48,7 @@ export function locationForPath(target: string): Location | null {
   if (/^\/(library|improve)\/videos\/?$/.test(url.pathname)) return { ws: "ch", section: "learn", view: { kind: "learn", page: "improve" } };
   const editCard = /^\/video-edits(?:\/([0-9a-f-]{36}))?\/?$/i.exec(url.pathname);
   if (editCard) return { ws: "ch", section: "edits", view: { kind: "video-edits", cardId: editCard[1] } };
+  if (/^\/(library|improve)\/video-editor\/?$/.test(url.pathname)) return { ws: "ch", section: "learn", view: { kind: "video-editor" } };
   const guide = /^\/library\/resources\/([\w-]+)$/.exec(url.pathname)?.[1];
   if (guide) return { ws: "ch", section: "learn", view: guide === "ai-script-writer" ? { kind: "script-writer" } : { kind: "improve-resource", slug: guide } };
 

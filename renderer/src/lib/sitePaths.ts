@@ -26,6 +26,8 @@ export function sitePathFor({ ws, view }: Location): string {
       return `/resources?page=${view.id}`;
     case "script-writer":
       return "/library/resources/ai-script-writer";
+    case "video-editor":
+      return "/library/video-editor";
     case "starter-videos":
       return view.video ? `/library/videos?video=${view.video}` : "/library";
     case "video-review":

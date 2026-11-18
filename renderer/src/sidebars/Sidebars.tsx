@@ -284,6 +284,8 @@ function Learn() {
   const editing = useStudentEditing(Boolean(improve?.starter)).editing;
   // The Weekend Starter (and UGC Starter): the Academy guides are locked.
   const libraryLocked = useAreaLocked("library");
+  // The AI Video Editor is the Academy's (access area "videoEditor").
+  const videoEditorLocked = useAreaLocked("videoEditor");
   // Each video is reviewed on its own (docs/per-video-send.md): open once any one is ready.
   const reviewOpen = editing?.videos?.length ? editing.videos.some((v) => v.stage && stageIndex(v.stage) >= stageIndex("ready_to_review"))
     : Boolean(editing?.stage && stageIndex(editing.stage) >= stageIndex("ready_to_review"));
@@ -297,6 +299,7 @@ function Learn() {
         {reviewOpen ? <SidebarItem icon={<Eye />} label="Review your videos" view={{ kind: "video-review" }} meta={editing?.stage ? EDIT_STAGE_LABELS[editing.stage] : undefined} /> : null}
         <SidebarItem icon={<BookOpen />} label="Resources" view={{ kind: "learn", page: "resources" }} locked={libraryLocked} />
         <SidebarItem icon={<Spark />} label="AI Script Writer" view={{ kind: "script-writer" }} meta="Flagship" />
+        <SidebarItem icon={<Clapperboard />} label="AI Video Editor" view={{ kind: "video-editor" }} meta="New" locked={videoEditorLocked} />
         {inProgress.length ? (
           <SidebarSection id="learn-progress" title="In progress">
             {inProgress.map((c) => <SidebarItem key={c.id} icon={<PlayCircle />} label={c.title} view={{ kind: "course", id: c.id }} meta={`${percent(c)}%`} />)}

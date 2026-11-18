@@ -94,6 +94,12 @@ contextBridge.exposeInMainWorld("ch", {
       try { filePath = webUtils.getPathForFile(file); } catch { /* not a file on disk */ }
       return ipcRenderer.invoke("files:videoInfo", filePath);
     },
+    /** The AI Video Editor: a dropped or picked video, picture or song, by path, with its kind. */
+    mediaInfo: (file) => {
+      let filePath = "";
+      try { filePath = webUtils.getPathForFile(file); } catch { /* not a file on disk */ }
+      return ipcRenderer.invoke("files:mediaInfo", filePath);
+    },
     /** The same, for a path kept from an earlier pick (a post video's draft, after a restart). */
     videoInfoAt: (filePath) => ipcRenderer.invoke("files:videoInfo", String(filePath || "")),
     putFile: (request) => ipcRenderer.invoke("files:putFile", request),
