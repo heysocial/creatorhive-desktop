@@ -267,3 +267,15 @@
 .aive-entry-cta { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 10px; background: var(--honey); color: var(--on-honey); font-weight: 700; font-size: 13px; white-space: nowrap; }
 .aive-entry-cta svg { width: 14px; height: 14px; }
 .aive-entry.locked .aive-entry-cta { background: #2A2926; color: #D6D2CB; }
+
+/* Option A: the questions first, then "Ask the editor" once the preview is ready. */
+.aive-left .aive-msgs > :first-child { margin-top: 0; }
+.aive-chat-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.aive-chat-head b { font-size: 14.5px; }
+.aive-chat-head .aive-link:disabled { opacity: .5; }
+.aive-chat-hint { font-size: 12.5px; line-height: 1.45; color: var(--ink-3); text-align: center; padding: 8px 10px; }
+.aive-chat-gap { height: 12px; flex: none; }
+.aive-answer-rows { display: flex; flex-direction: column; gap: 6px; }
+.aive-answer-rows > div { display: grid; grid-template-columns: 96px 1fr; gap: 8px; font-size: 12.5px; line-height: 1.4; }
+.aive-answer-rows dt { color: var(--ink-3); }
+.aive-answer-rows dd { color: var(--ink); font-weight: 600; word-break: break-word; }

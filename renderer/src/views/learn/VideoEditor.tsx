@@ -38,18 +38,6 @@ const STATUS_LABEL: Record<VeStatus, string> = {
 /** With no song of their own: the library when it has tracks, else no music. */
 const NO_SONG: VeMusicChoice = VE_LIBRARY.tracks.length ? "auto" : "none";
 
-const STARTERS: Record<"ad" | "personal", string[]> = {
-  ad: [
-    "I have a raw talking-head clip for a brand ad and I'm not sure where to start.",
-    "Help me plan the edit for a 30-second product video.",
-    "Here's my script, can you plan the cuts and the b-roll?",
-  ],
-  personal: [
-    "I want to edit a video for my own Instagram and keep it authentic.",
-    "Help me plan a 'day in the life' video for my page.",
-    "Here's my script, can you plan the cuts and the b-roll?",
-  ],
-};
 
 const active = (p: VeProject | null) => !!p && (p.status === "queued" || p.status === "working" || p.finalizing);
 
@@ -122,9 +110,16 @@ export function VideoEditor() {
       ) : null}
       {home.data ? (
         <div className="aive-body">
-          <ChatPanel project={shown} mode={shown?.brief.type ?? draft.brief.type} outbox={outbox} onOutboxSent={() => setOutbox(null)}>
-            {!shown ? <BriefCard allowance={allowance} music={musicChoice} onStarted={(p) => { setDismissed(null); setOpenId(p.id); }} /> : null}
-          </ChatPanel>
+          {/* Option A: the questions until the preview is ready; then the chat is the editor you ask. */}
+          {shown && (shown.status === "preview_ready" || shown.status === "done" || shown.finalizing)
+            ? <ChatPanel project={shown} outbox={outbox} onOutboxSent={() => setOutbox(null)} />
+            : (
+              <aside className="aive-chat aive-left card">
+                <div className="aive-msgs scroll">
+                  {!shown ? <BriefCard allowance={allowance} music={musicChoice} onStarted={(p) => { setDismissed(null); setOpenId(p.id); }} /> : <YourAnswers project={shown} />}
+                </div>
+              </aside>
+            )}
           <Stage key={shown?.id ?? "new"} project={shown} allowance={allowance} onAgain={again}>
             <Options
               captionLook={shown ? shown.brief.captionLook : draft.brief.captionLook}
@@ -250,15 +245,41 @@ function PlanCard({ plan }: { plan: VeEditPlan }) {
 }
 
 const MAX_ATTACH_CHARS = 50_000;
+const EDIT_MYSELF = "I'd rather edit it myself. Give me the written plan.";
 
-function ChatPanel({ project, mode, outbox, onOutboxSent, children }: {
-  project: VeProject | null;
-  mode: "ad" | "personal";
+/** While the video is being made (or didn't work): what they answered, compact. */
+function YourAnswers({ project }: { project: VeProject }) {
+  const b = project.brief;
+  const music = project.files.find((f) => f.kind === "music")?.fileName;
+  const rows: [string, string][] = [
+    ["Making", b.type === "ad" ? "An ad for a brand" : "A video for my own page"],
+    ...(b.type === "ad" && b.brand.trim() ? [["Brand", b.brand.trim()] as [string, string]] : []),
+    ...(b.product.trim() ? [["About", b.product.trim()] as [string, string]] : []),
+    ["Who watches", VE_AUDIENCES.find((a) => a.v === b.audience)?.label ?? b.audience],
+    ["Captions", VE_CAPTION_LOOKS.find((l) => l.id === b.captionLook)?.name ?? b.captionLook],
+    ["Length", VE_LENGTHS.find((l) => l.id === b.length)?.label ?? b.length],
+    ["Music", music ?? (VE_LIBRARY.tracks.length ? "We pick" : "No music")],
+    ...(b.notes.trim() ? [["Script or notes", "Added"] as [string, string]] : []),
+    ...(b.cta.trim() ? [["At the end", b.cta.trim()] as [string, string]] : []),
+  ];
+  return (
+    <section className="aive-brief aive-answers-card" aria-label="Your answers">
+      <header className="aive-brief-head">
+        <span className="aive-brief-mark"><Check /></span>
+        <div><b>Your answers</b><small>{project.status === "error" ? "Make another video to try again with new answers." : "The chat opens here when your preview is ready."}</small></div>
+      </header>
+      <dl className="aive-answer-rows">{rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd className="selectable">{v}</dd></div>)}</dl>
+    </section>
+  );
+}
+
+/** "Ask the editor": the chat about this video, once its preview is ready. */
+function ChatPanel({ project, outbox, onOutboxSent }: {
+  project: VeProject;
   outbox: string | null;
   onOutboxSent: () => void;
-  children?: ReactNode;
 }) {
-  const projectId = project?.id ?? null;
+  const projectId = project.id;
   const chat = useVeChat(projectId);
   const [text, setText] = useState("");
   const [attachment, setAttachment] = useState<{ name: string; text: string } | null>(null);
@@ -316,20 +337,15 @@ function ChatPanel({ project, mode, outbox, onOutboxSent, children }: {
     setAttachment({ name: file.name, text: body });
   }
 
-  const empty = !chat.isLoading && messages.length === 0 && !pending;
-
   return (
     <aside className="aive-chat card">
+      <header className="aive-chat-head">
+        <b>Ask the editor</b>
+        <button className="aive-link" disabled={busy || outOfMessages} onClick={() => void send(EDIT_MYSELF)}>Edit it myself</button>
+      </header>
       <div className="aive-msgs scroll" ref={scroller}>
         {chat.isLoading ? <div className="aive-chat-empty"><Loader2 className="spin" /></div> : null}
-        {empty ? (
-          <div className="aive-chat-empty">
-            <span className="t-ico honey big"><Sparkles /></span>
-            <h3>What are we editing today?</h3>
-            <p className="muted">Drop your videos on the right and answer a few quick questions, or ask me anything about your edit. Not sure what to ask? Pick one below.</p>
-            <div className="aive-starters">{STARTERS[mode].map((s) => <button key={s} className="chip" disabled={busy || outOfMessages} onClick={() => void send(s)}>{s}</button>)}</div>
-          </div>
-        ) : null}
+        {!chat.isLoading && !messages.length && !pending ? <p className="aive-chat-hint">Ask for a change, or ask why we made a choice. Prefer to edit it yourself? Press Edit it myself for the written plan.</p> : null}
         {messages.map((m) => <Message key={m.id} message={m} />)}
         {pending ? (
           <>
@@ -337,19 +353,18 @@ function ChatPanel({ project, mode, outbox, onOutboxSent, children }: {
             <div className="aive-msg assistant"><div className="bubble faint"><Loader2 className="spin" /> Thinking…</div></div>
           </>
         ) : null}
-        {children}
       </div>
       {error ? <div className="aive-chat-error">{error}</div> : null}
       {attachment ? <div className="aive-attach-chip">{attachment.name}<button aria-label="Remove attachment" onClick={() => setAttachment(null)}><X /></button></div> : null}
       <div className="aive-composer">
         <input ref={fileRef} type="file" hidden accept=".txt,.srt,.vtt,.md,text/plain" onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = ""; }} />
         <button className="attach" title="Attach transcript" disabled={busy} onClick={() => fileRef.current?.click()}><Paperclip /></button>
-        <textarea rows={1} value={text} placeholder={outOfMessages ? "No messages left today" : "Ask for a change…"} maxLength={2000} disabled={busy || outOfMessages}
+        <textarea rows={1} value={text} placeholder={outOfMessages ? "No messages left today" : "Ask for a change or a question"} maxLength={2000} disabled={busy || outOfMessages}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(text); } }} />
         <button className={`send ${text.trim() || attachment ? "on" : ""}`} title="Send" disabled={busy || outOfMessages || (!text.trim() && !attachment)} onClick={() => void send(text)}><SendHorizontal /></button>
       </div>
-      {allowance ? <div className="aive-chat-meta faint">{allowance.messagesLeft} of {allowance.messagesLimit} messages left today</div> : null}
+      {allowance && allowance.messagesLeft <= 5 ? <div className="aive-chat-meta faint">{allowance.messagesLeft} {allowance.messagesLeft === 1 ? "message" : "messages"} left today</div> : <div className="aive-chat-gap" />}
     </aside>
   );
 }
