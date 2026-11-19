@@ -21,6 +21,7 @@ import { Clock3, Hourglass, Repeat, PlayCircle, Sparkles as Spark, FileText } fr
 import { percent, useCourses, useImprove, useImproveResources } from "../lib/learn";
 import { useResourcePages, useResourcesAccess } from "../views/learn/Resources";
 import { HeySocialSidebar } from "./HeySocialSidebar";
+import { RenameChannel } from "../views/heysocial/ChannelAdmin";
 import { AdminSidebar } from "./AdminSidebar";
 import { SoonTag, soonLast } from "../views/messages/ComingSoon";
 import { Clapperboard, Clock as ClockIcon, Eye, MessageCircle as Unread } from "lucide-react";
@@ -87,7 +88,7 @@ const pinnedIds = (contacts: StarterContact[], conversations: Conversation[]) =>
   .filter((c) => !c.isGroup && contacts.some((contact) => contact.id === c.other?.id))
   .map((c) => c.id));
 
-function ChannelList({ workspace }: { workspace: Workspace }) {
+function ChannelList({ workspace, isOwner = false }: { workspace: Workspace; isOwner?: boolean }) {
   // A plan without channels (UGC Starter, The Weekend Starter): one locked row, nothing asked for.
   const locked = useAreaLocked("channels") && workspace === "creatorhive";
   const { data, isLoading, isError } = useChannels(workspace, !locked);
@@ -95,6 +96,9 @@ function ChannelList({ workspace }: { workspace: Workspace }) {
     () => soonLast((data ?? []).filter((c) => c.joined || !c.isPrivate).sort((a, b) => channelName(a.name).localeCompare(channelName(b.name))), (c) => c, data),
     [data],
   );
+  // Rename channel (Nov 19 2026): the owner, CreatorHive's community channels, never a brand's; the server checks again.
+  const canRename = isOwner && workspace === "creatorhive";
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   return (
     <SidebarSection id={`${workspace}-channels`} title="Channels">
       {locked ? <SidebarItem icon={<Hash />} label="All channels" view={{ kind: "feed" }} locked /> : null}
@@ -104,8 +108,11 @@ function ChannelList({ workspace }: { workspace: Workspace }) {
       {channels.map((channel) => (
         <SidebarItem key={channel.id} icon={channel.isPrivate && !channel.comingSoon ? <Lock /> : <Hash />} label={channelName(channel.name)}
           tag={channel.comingSoon ? <SoonTag /> : undefined} view={{ kind: "channel", id: channel.id }}
-          count={channel.comingSoonLocked ? 0 : channel.mentionCount} unread={!channel.comingSoonLocked && channel.unreadCount > 0} />
+          count={channel.comingSoonLocked ? 0 : channel.mentionCount} unread={!channel.comingSoonLocked && channel.unreadCount > 0}
+          extraMenu={canRename && !channel.brand ? [{ type: "separator" }, { id: "rename", label: "Rename channel…" }] : undefined}
+          onMenu={canRename && !channel.brand ? (id) => { if (id === "rename") setRenaming(channel); } : undefined} />
       ))}
+      {renaming ? <RenameChannel channel={renaming} workspace="creatorhive" onClose={() => setRenaming(null)} /> : null}
     </SidebarSection>
   );
 }
@@ -135,7 +142,7 @@ function DmList({ workspace, limit = 12 }: { workspace: Workspace; limit?: numbe
   );
 }
 
-function CreatorHiveHome() {
+function CreatorHiveHome({ isOwner }: { isOwner: boolean }) {
   const today = useTodayCount();
   const nextEvent = useNextEventDay();
   const eventsLocked = useAreaLocked("events");
@@ -151,7 +158,7 @@ function CreatorHiveHome() {
         <SidebarItem icon={<Calendar />} label="Events" view={{ kind: "events" }} meta={nextEvent} locked={eventsLocked} />
         <SidebarItem icon={<Trophy />} label="Leaderboard" view={{ kind: "leaderboard" }} locked={leaderboardLocked} />
         <SidebarItem icon={<Users />} label="Members" view={{ kind: "members" }} locked={membersLocked} />
-        <ChannelList workspace="creatorhive" />
+        <ChannelList workspace="creatorhive" isOwner={isOwner} />
         <DmList workspace="creatorhive" />
       </div>
     </>
@@ -373,7 +380,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
       content = <AdminSidebar />;
       break;
     default:
-      content = current.ws === "hs" ? <HeySocialSidebar /> : <CreatorHiveHome />;
+      content = current.ws === "hs" ? <HeySocialSidebar /> : <CreatorHiveHome isOwner={user.role === "owner"} />;
   }
   return <aside className="sidebar" aria-label="Sidebar">{content}</aside>;
 }

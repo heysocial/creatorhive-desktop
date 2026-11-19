@@ -22,6 +22,8 @@ export interface Channel {
   comingSoonLocked?: boolean;
   /** The locked screen's headline, e.g. "Coming soon by the end of November". */
   comingSoonMessage?: string | null;
+  /** A brand's channel (Brand Side): its name belongs to the brand, so it's never renamed here. */
+  brand?: unknown;
 }
 
 export interface Participant {
