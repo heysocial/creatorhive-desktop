@@ -7,7 +7,8 @@ const duration = (s: number | null) => (s ? `${Math.floor(s / 60)}:${String(Math
 
 /*
   A message video. Mux videos play here (HLS through hls.js; Chromium has no
-  native HLS). Older Cloudflare videos open their player in the browser.
+  native HLS). Older Cloudflare videos open their player in the browser. Old
+  Slack videos (`playback: "file"`, kept in R2) are one MP4: <video> plays it.
 */
 export function VideoPlayer({ video }: { video: VideoAttachment }) {
   const [playing, setPlaying] = useState(false);
@@ -15,6 +16,11 @@ export function VideoPlayer({ video }: { video: VideoAttachment }) {
 
   useEffect(() => {
     if (!playing || !video.hlsUrl || !element.current) return;
+    if (video.playback === "file") {
+      element.current.src = video.hlsUrl;
+      void element.current.play().catch(() => {});
+      return;
+    }
     let destroyed = false;
     let hls: { destroy(): void } | null = null;
     void import("hls.js").then(({ default: Hls }) => {
@@ -33,7 +39,7 @@ export function VideoPlayer({ video }: { video: VideoAttachment }) {
       destroyed = true;
       hls?.destroy();
     };
-  }, [playing, video.hlsUrl]);
+  }, [playing, video.hlsUrl, video.playback]);
 
   if (video.unavailable || video.status === "error") {
     return <div className="video unavailable"><VideoOff />Video unavailable</div>;
