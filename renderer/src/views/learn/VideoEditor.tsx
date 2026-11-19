@@ -122,15 +122,10 @@ export function VideoEditor() {
             )}
           <Stage key={shown?.id ?? "new"} project={shown} allowance={allowance} onAgain={again}>
             <Options
-              captionLook={shown ? shown.brief.captionLook : draft.brief.captionLook}
               length={shown ? shown.brief.length : draft.brief.length}
               music={shownMusic}
               hasOwnMusic={shown ? shown.files.some((f) => f.kind === "music") : !!musicUpload}
               disabled={optionsDisabled}
-              onCaptionLook={(look) => {
-                if (!shown) return setDraft((d) => ({ brief: { ...d.brief, captionLook: look } }));
-                setOutbox(`Change the captions to “${VE_CAPTION_LOOKS.find((l) => l.id === look)?.name ?? look}”.`);
-              }}
               onLength={(next) => {
                 if (!shown) return setDraft((d) => ({ brief: { ...d.brief, length: next } }));
                 const label = VE_LENGTHS.find((l) => l.id === next)?.label ?? next;
@@ -540,8 +535,7 @@ function Field({ label, hint, htmlFor, children }: { label: string; hint?: strin
   );
 }
 
-function CaptionSample({ look, short = false }: { look: VeCaptionLook; short?: boolean }) {
-  if (short) return <span className={`sample sample-${look}`}>{look === "highlight" ? <>A<b>a</b></> : "Aa"}</span>;
+function CaptionSample({ look }: { look: VeCaptionLook }) {
   return <span className={`sample sample-${look}`}>{look === "highlight" ? <>your <b>words</b> here</> : "your words here"}</span>;
 }
 
@@ -598,11 +592,11 @@ function Stage({ project, allowance, onAgain, children }: { project: VeProject |
   );
 }
 
-/* ---------- Options (captions, music, length) ---------- */
+/* ---------- Options (music, length; captions are picked in the questions card, Simon Nov 19) ---------- */
 
-function Options({ captionLook, length, music, hasOwnMusic, disabled, onCaptionLook, onLength, onMusic }: {
-  captionLook: VeCaptionLook; length: VeLength; music: VeMusicChoice; hasOwnMusic: boolean; disabled: boolean;
-  onCaptionLook: (l: VeCaptionLook) => void; onLength: (l: VeLength) => void; onMusic: (m: VeMusicChoice) => void;
+function Options({ length, music, hasOwnMusic, disabled, onLength, onMusic }: {
+  length: VeLength; music: VeMusicChoice; hasOwnMusic: boolean; disabled: boolean;
+  onLength: (l: VeLength) => void; onMusic: (m: VeMusicChoice) => void;
 }) {
   const musicOptions: { id: VeMusicChoice; label: string }[] = [
     ...(hasOwnMusic ? [{ id: "own" as const, label: "Your music" }] : []),
@@ -616,10 +610,6 @@ function Options({ captionLook, length, music, hasOwnMusic, disabled, onCaptionL
   );
   return (
     <aside className={`aive-options scroll ${disabled ? "off" : ""}`} aria-label="Options">
-      <div role="radiogroup" aria-label="Captions">
-        <span className="aive-label">Captions</span>
-        {VE_CAPTION_LOOKS.map((l) => opt(captionLook === l.id, () => onCaptionLook(l.id), <><span className="aive-sample"><CaptionSample look={l.id} short /></span><span className="aive-opt-label">{l.name}</span></>, l.id))}
-      </div>
       <div role="radiogroup" aria-label="Music">
         <span className="aive-label">Music</span>
         {musicOptions.map((m) => opt(music === m.id, () => onMusic(m.id), <span className="aive-opt-label">{m.label}</span>, m.id))}

@@ -144,8 +144,6 @@
 .aive-opt:hover:not(:disabled):not(.on) { background: #262523; }
 .aive-opt.on { background: var(--honey); color: var(--on-honey); box-shadow: inset 0 -1px 0 rgba(0,0,0,.1); }
 .aive-options.off .aive-opt:not(.on) { opacity: .55; }
-.aive-sample { width: 40px; height: 24px; border-radius: 5px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #6B5B4B, #3B4A5A); font-size: 12px; font-weight: 800; flex: none; overflow: hidden; }
-.aive-sample .sample-classic, .aive-sample .sample-highlight, .aive-sample .sample-yellow { text-shadow: -.5px -.5px 0 #000, .5px -.5px 0 #000, -.5px .5px 0 #000, .5px .5px 0 #000; }
 
 /* Add your videos */
 .aive-drops { display: flex; flex-direction: column; gap: 12px; min-height: 0; padding-bottom: 6px; }
