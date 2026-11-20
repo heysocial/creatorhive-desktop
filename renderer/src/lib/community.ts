@@ -40,6 +40,8 @@ export interface VideoAttachment {
   /** Client-only: still uploading from this Mac, 0–100. */
   uploadProgress?: number | null;
   hlsUrl?: string | null;
+  /** "file": an old Slack video kept in R2; `hlsUrl` is then a plain MP4. */
+  playback?: "file";
   unavailable?: boolean;
 }
 

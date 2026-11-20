@@ -10,9 +10,13 @@ import "../../styles/admin-heysocial.css";
   Renaming and leaving a Hey Social Inc. channel from its sidebar menu, as the
   website's sidebar does: Rename for full members (the server checks they're
   in the channel), Leave for everyone.
+
+  RenameChannel also renames a CreatorHive community channel (workspace
+  "creatorhive", owner only, from the sidebar's right-click menu): PATCH
+  /api/channels/[id]/name. Only the name changes; links use the slug.
 */
 
-export function RenameChannel({ channel, onClose }: { channel: { id: string; name: string }; onClose: () => void }) {
+export function RenameChannel({ channel, onClose, workspace = "heysocial" }: { channel: { id: string; name: string }; onClose: () => void; workspace?: "heysocial" | "creatorhive" }) {
   const [name, setName] = useState(channelName(channel.name));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,9 +26,14 @@ export function RenameChannel({ channel, onClose }: { channel: { id: string; nam
     setSaving(true);
     setError(null);
     try {
-      await api(`/api/channels/${channel.id}`, { method: "PATCH", body: { name: name.trim() } });
-      void queryClient.invalidateQueries({ queryKey: keys.channels("heysocial") });
-      await refreshHs();
+      if (workspace === "creatorhive") {
+        await api(`/api/channels/${channel.id}/name`, { method: "PATCH", body: { name: name.trim() } });
+        await queryClient.invalidateQueries({ queryKey: keys.channels("creatorhive") });
+      } else {
+        await api(`/api/channels/${channel.id}`, { method: "PATCH", body: { name: name.trim() } });
+        void queryClient.invalidateQueries({ queryKey: keys.channels("heysocial") });
+        await refreshHs();
+      }
       onClose();
     } catch (e) {
       const text = (e as Error).message;
@@ -37,7 +46,7 @@ export function RenameChannel({ channel, onClose }: { channel: { id: string; nam
   return (
     <Modal title="Rename channel" onClose={onClose} width={440}
       foot={<>{error ? <span className="form-error">{error}</span> : null}<button className="btn" onClick={onClose}>Cancel</button><button className="btn honey" disabled={!name.trim() || saving} onClick={() => void save()}>{saving ? <Loader2 className="spin" /> : null}Save</button></>}>
-      <p className="hsc-lede">Everyone in the channel sees the new name. Links to it keep working.</p>
+      <p className="hsc-lede">{workspace === "creatorhive" ? "Everyone sees the new name. Messages, members and links to the channel stay as they are." : "Everyone in the channel sees the new name. Links to it keep working."}</p>
       <label className="flabel" htmlFor="hs-channel-new-name">Name</label>
       <input id="hs-channel-new-name" className="field hsc-field" autoFocus maxLength={50} value={name} onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter") void save(); }} />
