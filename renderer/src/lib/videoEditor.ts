@@ -480,7 +480,8 @@ export function clearVeFiles() {
 /* ---------- The questions, kept while the member moves around the app ---------- */
 
 export type VeQuestion = "type" | "brand" | "about" | "audience" | "captions" | "notes" | "cta";
-export type VeMusicChoice = "auto" | "own" | "none";
+/** No built-in music (Simon, Nov 20): their own song, or no music. */
+export type VeMusicChoice = "own" | "none";
 
 export interface VeDraft {
   /** The question the card is on. */

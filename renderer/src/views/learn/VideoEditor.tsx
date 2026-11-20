@@ -16,7 +16,6 @@ import {
   VE_AUDIENCES, VE_CAPTION_LOOKS, VE_CHANGE_PRESETS, VE_LENGTHS, VE_LIMITS, VE_STAGES,
   type VeAllowance, type VeBrief, type VeCaptionLook, type VeChatMessage, type VeEditPlan, type VeLength, type VeProject, type VeStatus, type VeUploadKind,
 } from "../../lib/videoEditorShared";
-import { VE_LIBRARY } from "../../lib/videoEditorLibrary";
 import "../../styles/video-editor.css";
 
 /*
@@ -35,8 +34,8 @@ const STATUS_LABEL: Record<VeStatus, string> = {
   queued: "In line", working: "Editing", preview_ready: "Preview", done: "Ready", error: "Didn't work", cancelled: "Stopped",
 };
 
-/** With no song of their own: the library when it has tracks, else no music. */
-const NO_SONG: VeMusicChoice = VE_LIBRARY.tracks.length ? "auto" : "none";
+/** With no song of their own: no music (there is no built-in music). */
+const NO_SONG: VeMusicChoice = "none";
 
 
 const active = (p: VeProject | null) => !!p && (p.status === "queued" || p.status === "working" || p.finalizing);
@@ -133,7 +132,7 @@ export function VideoEditor() {
               }}
               onMusic={(next) => {
                 if (!shown) return setDraft({ music: next });
-                setOutbox(next === "none" ? "No music, please." : next === "auto" ? "Pick the music for me." : "Use my own song.");
+                setOutbox(next === "none" ? "No music, please." : "Use my own song.");
               }}
             />
           </Stage>
@@ -261,7 +260,7 @@ function YourAnswers({ project }: { project: VeProject }) {
     ["Who watches", VE_AUDIENCES.find((a) => a.v === b.audience)?.label ?? b.audience],
     ["Captions", VE_CAPTION_LOOKS.find((l) => l.id === b.captionLook)?.name ?? b.captionLook],
     ["Length", VE_LENGTHS.find((l) => l.id === b.length)?.label ?? b.length],
-    ["Music", music ?? (VE_LIBRARY.tracks.length ? "We pick" : "No music")],
+    ["Music", music ?? "No music"],
     ...(b.notes.trim() ? [["Script or notes", "Added"] as [string, string]] : []),
     ...(b.cta.trim() ? [["At the end", b.cta.trim()] as [string, string]] : []),
   ];
@@ -600,7 +599,6 @@ function Options({ length, music, hasOwnMusic, disabled, onLength, onMusic }: {
 }) {
   const musicOptions: { id: VeMusicChoice; label: string }[] = [
     ...(hasOwnMusic ? [{ id: "own" as const, label: "Your music" }] : []),
-    ...(VE_LIBRARY.tracks.length ? [{ id: "auto" as const, label: "We pick" }] : []),
     { id: "none", label: "No music" },
   ];
   const opt = (on: boolean, onClick: () => void, children: ReactNode, key: string) => (
@@ -629,10 +627,8 @@ const AREAS: { kind: VeUploadKind; title: string; hint: string; pick: string; pi
   { kind: "clip", title: "Extra footage (optional)", hint: "Videos or pictures we can show while you talk, like your product or things you mention. Up to 12 files. Pictures: JPG, PNG or WEBP.", pick: "Add videos or pictures", pickMore: "Add more", multiple: true, icon: <ImageIcon /> },
   { kind: "reference", title: "A video you like (optional)", hint: "A video whose style you'd like yours to follow: the pace, the captions, the feel. Up to 2 minutes.", pick: "Choose a video", pickMore: "Replace it", multiple: false, icon: <Sparkles /> },
   {
-    kind: "music", title: "Music (optional, otherwise we pick)",
-    hint: VE_LIBRARY.tracks.length
-      ? "Your own song. Skip it and we pick one, or choose No music on the right if you'll add a trending sound inside TikTok or Instagram."
-      : "Optional. Skip it if you plan to add a trending sound inside TikTok or Instagram. Without a song, your video has no music.",
+    kind: "music", title: "Music (optional)",
+    hint: "Your own song. Skip it if you plan to add a trending sound inside TikTok or Instagram. Without a song, your video has no music.",
     pick: "Choose a song", pickMore: "Replace it", multiple: false, icon: <Music />,
   },
 ];
