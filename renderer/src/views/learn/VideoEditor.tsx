@@ -886,9 +886,46 @@ function Done({ project, onAgain }: { project: VeProject; onAgain: () => void })
           ))}
         </ul>
         {note ? <div className="aive-error">{note}</div> : null}
+        <ExportBox project={project} />
         <WhyAndNotices project={project} />
         <div className="aive-review-actions"><button className="btn honey lg" onClick={onAgain}>Make another video</button></div>
       </div>
+    </div>
+  );
+}
+
+/** "Export for editing" (Sebastian's, Nov 19): the edit in pieces for CapCut or another editor. Free. */
+function ExportBox({ project }: { project: VeProject }) {
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const ex = project.export;
+  async function start() {
+    setError(null);
+    try { setProject((await veApi.exportFiles(project.id)).project); }
+    catch (e) { setError(e instanceof Error ? e.message : "Something went wrong."); }
+  }
+  async function save() {
+    if (!ex?.url || !ex.name) return;
+    setSaving(true);
+    const r = await ch.files.save(ex.url, ex.name);
+    setSaving(false);
+    if (!r.ok && !r.canceled) {
+      setError("That download didn't finish. Try again.");
+      void queryClient.invalidateQueries({ queryKey: [...VE_KEY, "project", project.id] });
+    }
+  }
+  return (
+    <div className="aive-export">
+      <b>Need to change something yourself?</b>
+      <p className="muted">Get your video in pieces for CapCut or any editor: the edit without captions, you talking only, your extra clips, the music and a captions file. It doesn't use up any of your videos.</p>
+      {error || ex?.state === "error" ? <div className="aive-error">{error ?? ex?.message ?? "Something went wrong."}</div> : null}
+      {ex?.state === "ready" && ex.url ? (
+        <button className="btn" disabled={saving} onClick={() => void save()}>{saving ? <Loader2 className="spin" /> : <Download />}Download editing files{ex.bytes ? ` (${fmtBytes(ex.bytes)})` : ""}</button>
+      ) : ex?.state === "working" ? (
+        <p className="aive-export-working" role="status">{ex.message ?? "Getting your editing files ready"}{ex.progress > 0.02 ? ` (${Math.round(ex.progress * 100)}%)` : ""}. This takes a minute or two.</p>
+      ) : (
+        <button className="btn" onClick={() => void start()}>Export for editing</button>
+      )}
     </div>
   );
 }

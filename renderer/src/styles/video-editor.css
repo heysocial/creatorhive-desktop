@@ -223,6 +223,10 @@
 .aive-why, .aive-notice { padding: 12px; border-radius: 12px; background: #1A1918; box-shadow: inset 0 0 0 .5px #33312E; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
 .aive-why b { display: block; margin-bottom: 4px; color: var(--ink); font-size: 13px; }
 .aive-notice { background: rgba(255, 204, 4, .1); box-shadow: inset 0 0 0 .5px rgba(255, 204, 4, .35); color: #FFE27A; }
+.aive-export { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; border-radius: 12px; box-shadow: inset 0 0 0 .5px #33312E; }
+.aive-export b { font-size: 13px; }
+.aive-export p { font-size: 12.5px; line-height: 1.45; }
+.aive-export .aive-export-working { color: #FFE58A; }
 .aive-downloads { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .aive-downloads li { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 10px 10px 12px; border-radius: 12px; background: #1A1918; box-shadow: inset 0 0 0 .5px #33312E; }
 .aive-downloads li > span { flex: 1 1 140px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }

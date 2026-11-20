@@ -48,7 +48,7 @@ export function useVeProject(id: string | null) {
     queryFn: async () => (await api<{ project: VeProject }>(`/api/video-editor/projects/${id}`)).project,
     refetchInterval: (query) => {
       const p = query.state.data as VeProject | undefined;
-      return p && (p.status === "queued" || p.status === "working" || p.finalizing) ? 3_000 : false;
+      return p && (p.status === "queued" || p.status === "working" || p.finalizing || p.export?.state === "working") ? 3_000 : false;
     },
   });
 }
@@ -72,6 +72,7 @@ export const veApi = {
     api<{ project: VeProject }>(`/api/video-editor/projects/${id}/revise`, { method: "POST", body }),
   approve: (id: string) => api<{ project: VeProject }>(`/api/video-editor/projects/${id}/approve`, { method: "POST" }),
   cancel: (id: string) => api<{ project: VeProject }>(`/api/video-editor/projects/${id}/cancel`, { method: "POST" }),
+  exportFiles: (id: string) => api<{ project: VeProject }>(`/api/video-editor/projects/${id}/export`, { method: "POST" }),
   chat: (projectId: string | null, message: string) =>
     api<{ reply: VeChatMessage; project?: VeProject; allowance: VeAllowance }>("/api/video-editor/chat", { method: "POST", body: { ...(projectId ? { projectId } : {}), message } }),
 };

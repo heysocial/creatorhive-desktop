@@ -142,10 +142,21 @@ export interface VeProject {
   revisionsLeft: number;
   /** Final videos are being made (approve was pressed). */
   finalizing: boolean;
+  /** "Export for editing" (Sebastian's, Nov 19): the edit in pieces as one zip. Null until asked; free. */
+  export: VeExport | null;
   brief: VeBrief;
   files: { kind: VeUploadKind; fileName: string; thumbnailUrl: string | null }[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface VeExport {
+  state: "working" | "ready" | "error";
+  progress: number;
+  message: string | null;
+  url: string | null;
+  name: string | null;
+  bytes: number | null;
 }
 
 export interface VeProjectSummary {
