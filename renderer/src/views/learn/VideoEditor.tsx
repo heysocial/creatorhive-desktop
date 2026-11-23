@@ -227,11 +227,13 @@ function PlanCard({ plan: raw }: { plan: VeEditPlan }) {
   return (
     <div className="aive-plan selectable">
       <div className="aive-plan-head">
-        <b>Edit plan{plan.mode === "personal_brand" ? " · personal brand" : plan.mode === "ugc_ad" ? " · UGC ad" : ""}</b>
+        <b>Written edit plan{plan.mode === "personal_brand" ? " · personal brand" : plan.mode === "ugc_ad" ? " · UGC ad" : ""}</b>
         <button className="btn" onClick={() => { void navigator.clipboard.writeText(planToText(plan)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }); }}>
-          {copied ? <Check /> : <Copy />}{copied ? "Copied" : "Copy plan"}
+          {copied ? <Check /> : <Copy />}{copied ? "Steps copied as text" : "Copy steps as text"}
         </button>
       </div>
+      {/* Kiely (Nov 23) took Copy plan for a link to open in CapCut. It is only text; the files come from Export for editing. */}
+      <p className="aive-plan-hint">These are written steps to follow yourself in CapCut or any editor. Copying gives you text to paste into your notes, not a link and not your video. For the video files to open in CapCut, approve your preview, then press <b>Export for editing</b> on your finished video.</p>
       {plan.summary ? <p>{plan.summary}</p> : null}
       {plan.hook ? <section><h4>Hook</h4><p>{plan.hook}</p></section> : null}
       {plan.cuts?.length ? <section><h4>Cuts</h4><ul>{plan.cuts.map((c, i) => <li key={i}><code>{c.from} to {c.to}</code> {c.reason}</li>)}</ul></section> : null}
@@ -912,8 +914,8 @@ function ExportBox({ project }: { project: VeProject }) {
   }
   return (
     <div className="aive-export">
-      <b>Need to change something yourself?</b>
-      <p className="muted">Get your video in pieces for CapCut or any editor: the edit without captions, you talking only, your extra clips, the music and a captions file. It doesn't use up any of your videos.</p>
+      <b>Want to finish it yourself in CapCut?</b>
+      <p className="muted">Export for editing gives you the video files to open in CapCut or any editor, as one zip: the edit without captions, you talking only, your extra clips, the music and a captions file. It doesn't use up any of your videos.</p>
       {error || ex?.state === "error" ? <div className="aive-error">{error ?? ex?.message ?? "Something went wrong."}</div> : null}
       {ex?.state === "ready" && ex.url ? (
         <button className="btn" disabled={saving} onClick={() => void save()}>{saving ? <Loader2 className="spin" /> : <Download />}Download editing files{ex.bytes ? ` (${fmtBytes(ex.bytes)})` : ""}</button>
