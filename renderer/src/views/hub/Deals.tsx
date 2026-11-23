@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpRight, CalendarClock, CalendarDays, ChartNoAxesColumn, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Columns3, Download, Layers, Plus, Repeat, Sparkles, Table2 } from "lucide-react";
+import { ArrowUpRight, CalendarClock, CalendarDays, ChartNoAxesColumn, ChartNoAxesCombined, Check, CheckCircle2, ChevronDown, ChevronRight, CircleDollarSign, Clock3, Columns3, Download, Layers, MessageSquare, Play, Plus, Repeat, Sparkles, Table2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import {
   BOARDS, BOARD_LABELS, BOARD_STATUSES, CLOSED_OUT_TOTAL_LABELS, STATUS_LABELS, UNPAID_REASON_LABELS, active, addDaysIso, allDeals, closedUnpaidLine, contracted, dayOf, daysBetween, dealTypeLabel,
-  isActiveDeal, isClosedOutStatus, isCollected, isRetainer, weekdayDay, type Retainer, isDraftPending, isLanding, landsLabel, landsOn, localToday, monDay, monDayYear, potential, timingLine, total, useCash, useDeals,
+  isActiveDeal, isClosedOutStatus, isCollected, isRetainer, weekdayDay, type Retainer, isDraftPending, isLanding, landsLabel, landsOn, localToday, monDay, monDayYear, potential, sourcePath, timingLine, total, useCash, useDeals, useHubSource,
   type Board, type Cash, type ClosedOutSummary, type ClosedUnpaidSummary, type Deal, type DealStatus,
 } from "../../lib/hub";
 import { money, plural } from "../../lib/format";
@@ -22,15 +22,20 @@ const TIER_LABELS: Record<string, string> = { newbie: "New Bee", hustle: "Hustle
 const tierName = (tier: Cash["tier"]) => (tier.currentTier === "queen" ? tier.topTierName : TIER_LABELS[tier.currentTier] ?? tier.currentTier);
 
 /* The website's DesktopTierProgress: three segments New → Hustle → Pro → top tier. */
-function TierProgress({ cash }: { cash: Cash }) {
+function TierProgress({ cash, onOpen }: { cash: Cash; onOpen?: () => void }) {
   const { tier } = cash;
   const config = { newbie: [0, 1000, 0], hustle: [1000, 3000, 1], pro: [3000, 10000, 2] }[tier.currentTier as "newbie"];
   const interval = config ? Math.max(0, Math.min(100, ((tier.collectedThisMonth - config[0]) / (config[1] - config[0])) * 100)) : 100;
   const visual = config ? ((config[2] + interval / 100) / 3) * 100 : 100;
   const reached = ["newbie", "hustle", "pro", "queen"].indexOf(tier.currentTier);
   const markers = [["New Bee", "$0"], ["Hustle Bee", "$1K"], ["Pro Bee", "$3K"], [tier.topTierName, "$10K"]];
+  // The member's own Hub: the card opens what its number is made of (Missy, Nov 2026). Not in Admin → Hubs.
+  const open = onOpen ? {
+    role: "button", tabIndex: 0, "aria-haspopup": "dialog" as const, "aria-label": "See what counts: what makes up this month's tier",
+    onClick: onOpen, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpen(); } },
+  } : {};
   return (
-    <section className="tier-progress">
+    <section className={`tier-progress ${onOpen ? "clickable" : ""}`} {...open}>
       <div className="tp-summary">
         <div><span className="tp-tier"><Sparkles />{tierName(tier)}</span><p><b className="green">{money(tier.collectedThisMonth)}</b> collected this month</p></div>
         {tier.nextTier
@@ -39,7 +44,80 @@ function TierProgress({ cash }: { cash: Cash }) {
       </div>
       <div className="tp-track"><span style={{ width: `${visual}%` }} /><i style={{ left: "33.333%" }} /><i style={{ left: "66.666%" }} /></div>
       <div className="tp-markers">{markers.map(([label, amount], index) => <div key={label} className={index <= reached ? "reached" : ""}><span>{label}</span><small>{amount}</small></div>)}</div>
+      {onOpen ? <span className="tp-hint">See what counts<ChevronRight /></span> : null}
     </section>
+  );
+}
+
+/*
+  What the tier card's number is made of: the payments that landed this month
+  and what is still in the pipeline. Every figure comes from
+  GET /api/hub/cash/breakdown, which reads them the way the card does, so the
+  list adds up to the card (the website's TierBreakdown).
+*/
+interface BreakdownPerson { id: string; name: string; initials: string }
+interface Breakdown {
+  month_label: string;
+  tier: Cash["tier"];
+  collected_usd: number;
+  counted: { id: string; deal_id: string; brand_name: string; amount_usd: number; paid_at: string; source: "deal" | "retainer"; added_by: BreakdownPerson | null }[];
+  pipeline: { amount_usd: number; count: number; groups: {
+    key: "pending" | "production" | "pitching"; label: string; amount_usd: number; count: number;
+    deals: { id: string; brand_name: string; amount_usd: number; status: string; status_label: string; lands_on: string | null; expected_on: string | null; added_by: BreakdownPerson | null }[];
+  }[] };
+}
+const GROUP_ICONS = { pending: CircleDollarSign, production: Play, pitching: MessageSquare } as const;
+/* A day ("2026-11-28") as itself; a moment in her own time zone. */
+const breakdownDay = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+  ? new Date(`${value}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+  : new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+function TierBreakdownDialog({ onClose }: { onClose: () => void }) {
+  const src = useHubSource();
+  const query = useQuery({ queryKey: [...src.key, "cash", "breakdown"], staleTime: 0, queryFn: () => api<Breakdown>(sourcePath(src, "/cash/breakdown")) });
+  const data = query.data;
+  const go = (id: string) => { onClose(); openDeal(id); };
+  return (
+    <Modal width={540} onClose={onClose}
+      title={<span>{data ? `${data.month_label}: ${money(data.collected_usd)} · ${tierName(data.tier)}` : "This month's tier"}</span>}>
+      {data ? (
+        <div className="tb">
+          <section>
+            <div className="tb-head"><h3>Counts this month</h3><b className="green">{money(data.collected_usd)}</b></div>
+            {data.counted.length ? data.counted.map((p) => (
+              <button key={`${p.source}-${p.id}`} className="tb-row" onClick={() => go(p.deal_id)}>
+                <Monogram name={p.brand_name} size={26} />
+                <span><b>{p.brand_name}</b><small>Paid {breakdownDay(p.paid_at)}{p.source === "retainer" ? " · Retainer payment" : ""}{p.added_by ? ` · ${p.added_by.name}` : ""}</small></span>
+                <b className="green">{money(p.amount_usd)}</b>
+              </button>
+            )) : <p className="tb-none">Nothing paid yet in {data.month_label}. Mark a deal paid and it shows up here.</p>}
+          </section>
+          <section>
+            <div className="tb-head"><h3>Still in the pipeline</h3><b className="muted">{money(data.pipeline.amount_usd)}</b></div>
+            <p className="tb-sub">Not paid yet, so not counted.{data.pipeline.count ? ` ${plural(data.pipeline.count, "open deal")}.` : ""}</p>
+            {data.pipeline.groups.filter((g) => g.count > 0).map((g) => {
+              const Icon = GROUP_ICONS[g.key] ?? Clock3;
+              return (
+                <div key={g.key} className={`tb-group ${g.key}`}>
+                  <div className="tb-ghead"><Icon /><span>{g.label}</span><small>{g.count}</small><b>{money(g.amount_usd)}</b></div>
+                  {g.deals.map((d) => (
+                    <button key={d.id} className="tb-row" onClick={() => go(d.id)}>
+                      <Monogram name={d.brand_name} size={26} />
+                      <span><b>{d.brand_name}</b><small>{d.lands_on ? `Paid · lands ${breakdownDay(d.lands_on)}` : d.status_label}{!d.lands_on && d.expected_on ? ` · expected ${breakdownDay(d.expected_on)}` : ""}{d.added_by ? ` · ${d.added_by.name}` : ""}</small></span>
+                      <b>{money(d.amount_usd)}</b>
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+            {data.pipeline.count === 0 ? <p className="tb-none">No open deals right now.</p> : null}
+          </section>
+          <p className="tb-foot">Only money that has landed counts toward your tier. Pipeline deals count once you mark them paid.</p>
+        </div>
+      ) : query.isError ? (
+        <div className="tb-none">Couldn't load this right now. <button className="link" onClick={() => void query.refetch()}>Try again</button></div>
+      ) : <div className="tb-loading" aria-busy="true">{[0, 1, 2, 3].map((i) => <span key={i} />)}</div>}
+    </Modal>
   );
 }
 
@@ -64,7 +142,9 @@ export function DealListDialog({ title, deals, onClose }: { title: string; deals
 
 export function Overview({ deals }: { deals: Deal[] }) {
   const cash = useCash().data;
-  const [open, setOpen] = useState<null | "contracted" | "potential">(null);
+  const [open, setOpen] = useState<null | "contracted" | "potential" | "tier">(null);
+  // Only the member's own Hub opens the breakdown; Admin → Hubs reads someone else's through another source.
+  const own = useHubSource().base === "/api/hub";
   const inPlay = contracted(deals);
   const pot = potential(deals);
   const live = active(deals);
@@ -76,7 +156,7 @@ export function Overview({ deals }: { deals: Deal[] }) {
   const landing = cash?.activity.landing ?? [];
   return (
     <div className="card hub-overview">
-      {cash ? <TierProgress cash={cash} /> : <div className="tier-progress skel" />}
+      {cash ? <TierProgress cash={cash} onOpen={own ? () => setOpen("tier") : undefined} /> : <div className="tier-progress skel" />}
       <div className="hub-metrics">
         <div className="metric money-in-play">
           <span className="ml"><Clock3 />Money in Play</span>
@@ -106,6 +186,7 @@ export function Overview({ deals }: { deals: Deal[] }) {
       <DidntPayOut summary={cash?.activity.closed_unpaid} />
       <FellThrough summary={cash?.activity.closed_not_contracted} />
       {open === "contracted" ? <DealListDialog title="Contracted" deals={inPlay} onClose={() => setOpen(null)} /> : null}
+      {open === "tier" ? <TierBreakdownDialog onClose={() => setOpen(null)} /> : null}
       {open === "potential" ? <DealListDialog title="Potential" deals={pot} onClose={() => setOpen(null)} /> : null}
     </div>
   );

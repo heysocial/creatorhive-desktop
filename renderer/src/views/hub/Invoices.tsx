@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Download, FileText, Loader2, Pencil, Send } from "lucide-react";
 import { InvoiceEditor } from "./InvoiceEditor";
 import { InvoiceDetailsForm, useInvoiceProfile } from "./InvoiceDetails";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
-import { allDeals, isClosedOutStatus, isCollected, localToday, monDay, useDeals, type Deal } from "../../lib/hub";
+import { allDeals, isClosedOutStatus, isCollected, localToday, monDay, useDeals, withTz, type Deal } from "../../lib/hub";
 import { money } from "../../lib/format";
 import { Modal, Monogram } from "./parts";
 import { openDeal } from "./Deals";
@@ -24,8 +24,19 @@ export interface Invoice {
   billTo: { company: string; contactName: string; email: string; phone: string };
   projectTitle: string; projectDetails: string; lines: Line[]; subtotalCents: number; taxCents: number; totalCents: number;
   note: string; payment: Payment[]; status: "draft" | "sent"; sentAt: string | null; sentTo: string | null; sendCount: number; shareUrl: string;
+  /** Which invoice profile it's from: "main" or the extra one's id. Older servers leave it out. */
+  profileId?: string;
 }
-interface InvoiceResponse { invoicesEnabled: boolean; canEdit: boolean; invoice: Invoice | null; profileSetUp: boolean }
+export interface InvoiceProfileChoice { id: string; name: string; businessName: string; isMain: boolean; isSetUp: boolean }
+interface InvoiceResponse { invoicesEnabled: boolean; canEdit: boolean; invoice: Invoice | null; profileSetUp: boolean; profiles?: InvoiceProfileChoice[] }
+
+/* One row of Hub → Invoices (GET /api/hub/invoices). The server decides its state. */
+type ListState = "draft" | "sent" | "overdue" | "paid";
+interface InvoiceListItem {
+  id: string; dealId: string; brandName: string; number: string; totalCents: number; issuedOn: string; dueOn: string | null;
+  status: "draft" | "sent"; sentAt: string | null; state: ListState; daysOverdue: number; paidAt: string | null;
+  fromName: string; profileId: string; mine: boolean; updatedAt: string;
+}
 
 const cents = (n: number) => (n / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -53,16 +64,24 @@ function stateOf(invoice: Invoice, deal: Deal | undefined): State {
   if (invoice.status === "sent" && invoice.sentAt) return invoice.dueOn && invoice.dueOn < localToday() && !(deal && isClosedOutStatus(deal.status)) ? "overdue" : "sent";
   return "draft";
 }
-function stateLine(invoice: Invoice, deal: Deal | undefined) {
-  const s = stateOf(invoice, deal);
-  if (s === "paid") return `${invoice.number} · Paid ${monDay(deal!.paid_at!)}`;
-  if (s === "overdue") {
-    const days = Math.round((Date.now() - new Date(`${invoice.dueOn}T12:00:00`).getTime()) / 86_400_000);
-    return `${invoice.number} · Sent ${monDay(invoice.sentAt!)} · ${days} ${days === 1 ? "day" : "days"} overdue`;
+/* A day ("2026-12-03") as itself; a moment in her own time zone. */
+const listDay = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value)
+  ? new Date(`${value}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+  : new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+function listLine(invoice: InvoiceListItem) {
+  const parts = [invoice.number];
+  if (invoice.state === "paid" && invoice.paidAt) parts.push(`Paid ${listDay(invoice.paidAt)}`);
+  else if (invoice.state === "draft") parts.push(`Draft · made ${listDay(invoice.issuedOn)}`);
+  else {
+    if (invoice.sentAt) parts.push(`Sent ${listDay(invoice.sentAt)}`);
+    if (invoice.state === "overdue") parts.push(`${invoice.daysOverdue} ${invoice.daysOverdue === 1 ? "day" : "days"} overdue`);
+    else if (invoice.dueOn) parts.push(`Due ${listDay(invoice.dueOn)}`);
   }
-  if (s === "sent") return `${invoice.number} · Sent ${monDay(invoice.sentAt!)}${invoice.dueOn ? ` · due ${monDay(invoice.dueOn)}` : ""}`;
-  return `${invoice.number} · Draft${deal?.status === "delivered" ? " · deal delivered" : ""}`;
+  return parts.join(" · ");
 }
+const STATE_LABELS: Record<ListState, string> = { draft: "Draft", sent: "Sent", overdue: "Overdue", paid: "Paid" };
+const FILTERS: [Filter, string][] = [["all", "All"], ["draft", "Drafts"], ["sent", "Sent"], ["overdue", "Overdue"], ["paid", "Paid"]];
+type Filter = "all" | ListState;
 
 /** Makes the deal's invoice; false when your invoice details aren't set up yet. */
 async function createInvoice(deal: Deal): Promise<boolean> {
@@ -73,6 +92,7 @@ async function createInvoice(deal: Deal): Promise<boolean> {
     if (!(error instanceof ApiError && error.code === "ALREADY_EXISTS")) { window.alert("Couldn't create the invoice."); return true; }
   }
   await queryClient.invalidateQueries({ queryKey: ["hub", "invoice", deal.id] });
+  void queryClient.invalidateQueries({ queryKey: ["hub", "invoices"] });
   return true;
 }
 
@@ -148,6 +168,7 @@ function SendDialog({ invoice, deal, onClose }: { invoice: Invoice; deal: Deal |
     try {
       await api(`/api/hub/deals/${invoice.dealId}/invoice/send`, { method: "POST", body: { to: to.trim(), subject, message, sendMeACopy: copy } });
       await queryClient.invalidateQueries({ queryKey: ["hub", "invoice", invoice.dealId] });
+      void queryClient.invalidateQueries({ queryKey: ["hub", "invoices"] });
       onClose();
     } catch (e) {
       const code = e instanceof ApiError ? e.code : "";
@@ -210,67 +231,79 @@ export function InvoiceSection({ deal }: { deal: Deal }) {
   );
 }
 
-/** Hub → Invoices: every deal's invoice in one list. */
+/** Hub → Invoices: every invoice in one list, from one call (GET /api/hub/invoices); the preview reads only the picked deal's. */
 export function Invoices() {
   const deals = allDeals(useDeals().data);
-  const [filter, setFilter] = useState<"all" | "draft" | "sent" | "paid">("all");
+  const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<string | null>(null);
-  const results = useQueries({ queries: deals.map((d) => ({
-    queryKey: ["hub", "invoice", d.id],
+  const list = useQuery({
+    queryKey: ["hub", "invoices"],
     retry: false,
-    staleTime: 60_000,
     queryFn: async () => {
-      try { return await api<InvoiceResponse>(`/api/hub/deals/${d.id}/invoice`); } catch (error) {
-        if (error instanceof ApiError && error.status === 404) return null;
+      try { return (await api<{ invoices: InvoiceListItem[] }>(withTz("/api/hub/invoices"))).invoices; } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null; // invoices are off for this member
         throw error;
       }
     },
-  })) });
-  const loading = results.some((r) => r.isLoading);
-  const disabled = results.length > 0 && results.every((r) => r.isSuccess && r.data === null);
-  const invoices = useMemo(() => results.flatMap((r, i) => (r.data?.invoice ? [{ invoice: r.data.invoice, deal: deals[i] }] : []))
-    .sort((a, b) => (b.invoice.issuedOn + b.invoice.number).localeCompare(a.invoice.issuedOn + a.invoice.number)), [results, deals]);
-  const shown = invoices.filter(({ invoice, deal }) => {
-    const s = stateOf(invoice, deal);
-    return filter === "all" || (filter === "sent" ? s === "sent" || s === "overdue" : s === filter);
   });
-  useEffect(() => { if (!selected && shown[0]) setSelected(shown[0].invoice.id); }, [shown.length]);
-  const current = invoices.find((x) => x.invoice.id === selected) ?? shown[0];
-  const count = (f: typeof filter) => invoices.filter(({ invoice, deal }) => { const s = stateOf(invoice, deal); return f === "all" || (f === "sent" ? s === "sent" || s === "overdue" : s === f); }).length;
+  const invoices = list.data ?? [];
+  const counts = useMemo(() => {
+    const out: Record<Filter, number> = { all: invoices.length, draft: 0, sent: 0, overdue: 0, paid: 0 };
+    for (const invoice of invoices) out[invoice.state] += 1;
+    return out;
+  }, [invoices]);
+  const shown = filter === "all" ? invoices : invoices.filter((invoice) => invoice.state === filter);
+  const showFrom = new Set(invoices.map((invoice) => invoice.fromName)).size > 1;
+  const waiting = invoices.filter((invoice) => invoice.state === "sent" || invoice.state === "overdue").reduce((sum, invoice) => sum + invoice.totalCents, 0);
+  useEffect(() => { if (!selected && shown[0]) setSelected(shown[0].id); }, [shown.length]);
+  const current = invoices.find((x) => x.id === selected) ?? shown[0];
+  const detail = useInvoice(current?.dealId ?? "", Boolean(current));
+  const full = detail.data?.invoice && detail.data.invoice.id === current?.id ? detail.data.invoice : null;
+  const currentDeal = current ? deals.find((d) => d.id === current.dealId) : undefined;
 
   return (
     <div className="page inv-page">
       <div className="mhead">
         <h1>Invoices</h1><span className="sub">One per deal, all in one list</span>
         <div className="acts"><div className="seg">
-          {(["all", "draft", "sent", "paid"] as const).map((f) => <button key={f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>{f[0].toUpperCase() + f.slice(1)}{invoices.length ? ` ${count(f)}` : ""}</button>)}
+          {FILTERS.map(([f, label]) => <button key={f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>{label}{invoices.length ? ` ${counts[f]}` : ""}</button>)}
         </div></div>
       </div>
-      {disabled ? <div className="empty-state">Invoices aren't switched on for your account yet.</div> : (
+      {list.data === null ? <div className="empty-state">Invoices aren't switched on for your account yet.</div> : (
         <div className="inv-body">
           <div className="inv-list scroll">
-            {loading && invoices.length === 0 ? <div className="empty-state">Loading invoices…</div> : null}
-            {!loading && invoices.length === 0 ? <div className="empty-state">No invoices yet. Open a delivered deal and choose Create invoice.</div> : null}
-            {shown.map(({ invoice, deal }) => {
-              const s = stateOf(invoice, deal);
-              return (
-                <button key={invoice.id} className={`inv-row ${current?.invoice.id === invoice.id ? "on" : ""}`} onClick={() => setSelected(invoice.id)} onDoubleClick={() => openDeal(deal.id)}>
-                  <Monogram name={deal.brand_name} size={34} />
-                  <span><b>{deal.brand_name}</b><small className={s === "overdue" ? "late-text" : "muted"}>{stateLine(invoice, deal)}</small></span>
-                  <b className="amt">{money(invoice.totalCents / 100)}</b>
-                </button>
-              );
-            })}
+            {invoices.length ? (
+              <div className="inv-summary">
+                <span><b>{invoices.length}</b> {invoices.length === 1 ? "invoice" : "invoices"}</span>
+                {waiting > 0 ? <span><b>{money(waiting / 100)}</b> waiting to be paid</span> : null}
+                {counts.overdue > 0 ? <span className="late-text"><b>{counts.overdue}</b> overdue</span> : null}
+              </div>
+            ) : null}
+            {list.isLoading ? <div className="empty-state">Loading invoices…</div> : null}
+            {list.isError ? <div className="empty-state">Couldn't load your invoices. <button className="link" onClick={() => void list.refetch()}>Try again</button></div> : null}
+            {list.isSuccess && invoices.length === 0 ? <div className="empty-state">No invoices yet. Open a delivered deal and choose Create invoice.</div> : null}
+            {invoices.length > 0 && shown.length === 0 ? <div className="empty-state">No {FILTERS.find(([f]) => f === filter)?.[1].toLowerCase()} invoices.</div> : null}
+            {shown.map((invoice) => (
+              <button key={invoice.id} className={`inv-row ${current?.id === invoice.id ? "on" : ""}`} onClick={() => setSelected(invoice.id)} onDoubleClick={() => openDeal(invoice.dealId)}>
+                <Monogram name={invoice.brandName} size={34} />
+                <span>
+                  <b>{invoice.brandName}</b>
+                  <small className={invoice.state === "overdue" ? "late-text" : "muted"}>{listLine(invoice)}</small>
+                  {showFrom ? <small className="faint">From {invoice.fromName}{invoice.mine ? "" : " · your partner's"}</small> : null}
+                </span>
+                <span className="inv-end"><b className="amt">{money(invoice.totalCents / 100)}</b><span className={`inv-badge ${invoice.state}`}>{STATE_LABELS[invoice.state]}</span></span>
+              </button>
+            ))}
           </div>
           <div className="inv-preview scroll">
             {current ? (
               <>
                 <div className="inv-bar">
-                  <span className={`inv-badge ${stateOf(current.invoice, current.deal)}`}>{stateOf(current.invoice, current.deal)}</span>
-                  <button className="link" onClick={() => openDeal(current.deal.id)}>Open the deal</button>
-                  <span className="acts"><InvoiceActions invoice={current.invoice} deal={current.deal} /></span>
+                  <span className={`inv-badge ${current.state}`}>{STATE_LABELS[current.state]}</span>
+                  <button className="link" onClick={() => openDeal(current.dealId)}>Open the deal</button>
+                  {full ? <span className="acts"><InvoiceActions invoice={full} deal={currentDeal} /></span> : null}
                 </div>
-                <InvoicePaper invoice={current.invoice} />
+                {full ? <InvoicePaper invoice={full} /> : detail.isError ? <div className="empty-state">Couldn't load this invoice.</div> : <div className="empty-state">Loading…</div>}
               </>
             ) : null}
           </div>

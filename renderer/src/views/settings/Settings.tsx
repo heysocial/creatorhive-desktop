@@ -5,7 +5,7 @@ import { ch, type DesktopSettings, type SessionUser } from "../../lib/bridge";
 import { api, ApiError, queryClient, useHeySocialAccess } from "../../lib/api";
 import { Avatar } from "../../lib/ui";
 import { useShortcuts } from "../../overlays/Sheets";
-import { InvoiceDetailsForm, useInvoiceProfile } from "../hub/InvoiceDetails";
+import { InvoiceProfiles } from "../hub/InvoiceDetails";
 import { ThemePicker } from "../heysocial/ThemePicker";
 import { MemberTitles } from "./MemberTitles";
 import { setHelpButtonHidden, useSupport } from "../../lib/support";
@@ -147,11 +147,7 @@ function Shortcuts() {
 }
 
 function HubInvoices() {
-  const profile = useInvoiceProfile();
-  if (profile.isLoading) return <p className="muted">Loading…</p>;
-  if (profile.isError) return <p className="muted">Couldn't load your invoice details.</p>;
-  if (!profile.data) return <p className="muted">Invoices aren't switched on for your account yet.</p>;
-  return <div className="set-card idf-card"><InvoiceDetailsForm profile={profile.data} /></div>;
+  return <InvoiceProfiles />;
 }
 
 function Privacy() {

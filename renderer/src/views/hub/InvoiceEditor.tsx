@@ -2,8 +2,9 @@ import { useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Loader2, Plus, Trash2, X } from "lucide-react";
 import { api, ApiError, queryClient } from "../../lib/api";
-import type { Invoice } from "./Invoices";
-import { useLayer } from "./parts";
+import { openSettings } from "../../lib/links";
+import { useInvoice, type Invoice } from "./Invoices";
+import { Monogram, useLayer } from "./parts";
 
 /*
   Editing an invoice, as the website's editor does: every change saves itself
@@ -38,6 +39,11 @@ export function InvoiceEditor({ invoice, onClose }: { invoice: Invoice; onClose:
   }));
   const [taxText, setTaxText] = useState((invoice.taxCents / 100).toFixed(2));
   const [save, setSave] = useState<{ kind: "idle" | "saving" | "saved" | "error"; message?: string }>({ kind: "idle" });
+  // Send from (Kinzi, Nov 2026): which invoice profile this one is from. Switching swaps sender, payment and the note.
+  const profiles = useInvoice(invoice.dealId).data?.profiles ?? [];
+  const [sender, setSender] = useState(invoice.sender);
+  const [profileId, setProfileId] = useState(invoice.profileId ?? "main");
+  const [switching, setSwitching] = useState(false);
   const pending = useRef<Record<string, unknown>>({});
   const timer = useRef<number | null>(null);
 
@@ -56,6 +62,25 @@ export function InvoiceEditor({ invoice, onClose }: { invoice: Invoice; onClose:
     }
   }, [invoice.dealId]);
 
+  const switchProfile = async (id: string) => {
+    if (id === profileId || switching) return;
+    await flush();
+    setSwitching(true);
+    setSave({ kind: "saving" });
+    try {
+      const { invoice: saved } = await api<{ invoice: Invoice }>(`/api/hub/deals/${invoice.dealId}/invoice`, { method: "PATCH", body: { profileId: id } });
+      queryClient.setQueryData(["hub", "invoice", invoice.dealId], (old: { invoice: Invoice } | undefined) => (old ? { ...old, invoice: saved } : old));
+      setSender(saved.sender);
+      setDoc((d) => ({ ...d, note: saved.note }));
+      setProfileId(saved.profileId ?? id);
+      setSave({ kind: "saved" });
+    } catch (e) {
+      setSave({ kind: "error", message: e instanceof ApiError && e.code === "PROFILE_NOT_FOUND" ? "That profile was removed." : "Couldn't switch profile. Try again." });
+    } finally {
+      setSwitching(false);
+    }
+  };
+
   const change = (patch: Partial<Doc>, now = false) => {
     setDoc((d) => ({ ...d, ...patch }));
     pending.current = { ...pending.current, ...patch };
@@ -66,7 +91,7 @@ export function InvoiceEditor({ invoice, onClose }: { invoice: Invoice; onClose:
   };
 
   // Close (Esc, ✕) saves anything still waiting.
-  const close = useCallback(async () => { await flush(); void queryClient.invalidateQueries({ queryKey: ["hub", "invoice", invoice.dealId] }); onClose(); }, [flush, onClose, invoice.dealId]);
+  const close = useCallback(async () => { await flush(); void queryClient.invalidateQueries({ queryKey: ["hub", "invoice", invoice.dealId] }); void queryClient.invalidateQueries({ queryKey: ["hub", "invoices"] }); onClose(); }, [flush, onClose, invoice.dealId]);
   const box = useRef<HTMLDivElement>(null);
   useLayer(() => void close(), box);
 
@@ -84,6 +109,21 @@ export function InvoiceEditor({ invoice, onClose }: { invoice: Invoice; onClose:
           <button className="iconbtn" onClick={() => void close()} aria-label="Close"><X /></button>
         </div>
         <div className="modal-body ie-body">
+          <div className="section-label">From</div>
+          <div className="ie-from">
+            <div className="ie-from-who">
+              {sender.logoUrl ? <img src={sender.logoUrl} alt="" /> : <Monogram name={sender.businessName || sender.ownerName || "?"} size={30} />}
+              <span><b>{sender.businessName || sender.ownerName}</b><small className="muted">{profiles.length > 1 ? `${profiles.find((p) => p.id === profileId)?.name ?? "Removed"} profile` : "Your invoice details"}</small></span>
+            </div>
+            {profiles.length > 1 ? (
+              <label className="ie-from-pick">Send from
+                <select className="field" value={profileId} disabled={switching} onChange={(e) => void switchProfile(e.target.value)} aria-label="Which invoice profile this invoice is from">
+                  {profiles.map((p) => <option key={p.id} value={p.id} disabled={!p.isSetUp}>{p.name}{p.businessName && p.businessName !== p.name ? ` · ${p.businessName}` : ""}{p.isSetUp ? "" : " (not set up)"}</option>)}
+                  {!profiles.some((p) => p.id === profileId) ? <option value={profileId} disabled>Removed profile</option> : null}
+                </select>
+              </label>
+            ) : profiles.length === 1 ? <button className="link add" onClick={() => openSettings("hub")}>+ Add another profile</button> : null}
+          </div>
           <div className="ie-grid">
             <label>Invoice number<input className="field" value={doc.number} maxLength={40} onChange={(e) => change({ number: e.target.value })} /></label>
             <label>Issued<input className="field" type="date" value={doc.issuedOn} onChange={(e) => change({ issuedOn: e.target.value, ...(doc.termsDays != null ? { dueOn: addDays(e.target.value, doc.termsDays) } : {}) })} /></label>

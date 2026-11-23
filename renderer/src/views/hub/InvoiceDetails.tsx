@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
-import { Check, Loader2, Upload, X } from "lucide-react";
+import { Check, Loader2, Plus, Trash2, Upload, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
+import { Monogram } from "./parts";
 
 /*
   Your invoice details (the website's /settings/invoice): business, logo, how
@@ -18,8 +19,10 @@ export interface InvoiceProfile {
   paypal: string; paypalOn: boolean; zelle: string; zelleOn: boolean; cashapp: string; cashappOn: boolean;
   bankName: string; bankRouting: string; bankAccount: string; bankAccountLast4: string; bankOn: boolean;
   defaultTermsDays: number; numberPrefix: string; nextNumber: number; note: string; isSetUp: boolean;
+  /* Several profiles since Nov 2026 (Kinzi): "main" or the extra one's id, its raw label, the name shown and which is main. */
+  id?: string; label?: string; name?: string; isMain?: boolean;
 }
-type Form = Omit<InvoiceProfile, "logoUrl" | "bankAccountLast4" | "isSetUp" | "nextNumber"> & { nextNumber: string };
+type Form = Omit<InvoiceProfile, "logoUrl" | "bankAccountLast4" | "isSetUp" | "nextNumber" | "id" | "label" | "name" | "isMain"> & { nextNumber: string; label: string };
 
 const TERMS = [0, 7, 14, 15, 30, 45, 60, 90];
 const termsLabel = (days: number) => (days === 0 ? "Due on receipt" : `Net ${days}`);
@@ -36,12 +39,117 @@ export function useInvoiceProfile() {
   });
 }
 
-function formFrom(p: InvoiceProfile): Form {
-  const { logoUrl: _l, bankAccountLast4: _b, isSetUp: _s, nextNumber, ...rest } = p;
-  return { ...rest, nextNumber: String(nextNumber) };
+/** Every invoice profile, main first (GET /api/invoice-profiles). null when invoices are off. */
+export function useInvoiceProfiles() {
+  return useQuery({
+    queryKey: ["invoice-profiles"],
+    retry: false,
+    queryFn: async () => {
+      try { return await api<{ max: number; profiles: InvoiceProfile[] }>("/api/invoice-profiles"); }
+      catch (e) { if (e instanceof ApiError && e.status === 404) return null; throw e; }
+    },
+  });
 }
 
-export function InvoiceDetailsForm({ profile, onSaved, compact }: { profile: InvoiceProfile; onSaved?: (p: InvoiceProfile) => void; compact?: boolean }) {
+const profileKey = (p: InvoiceProfile) => p.id ?? "main";
+const LABEL_MAX = 40;
+
+function formFrom(p: InvoiceProfile): Form {
+  const { logoUrl: _l, bankAccountLast4: _b, isSetUp: _s, id: _i, name: _n, isMain: _m, nextNumber, label, ...rest } = p;
+  return { ...rest, label: label ?? "", nextNumber: String(nextNumber) };
+}
+
+/*
+  Settings → Hub & invoices with profiles: a tab per profile, "Add another
+  profile", and the form for the one picked. Extra profiles share the main
+  one's invoice numbers and payment terms.
+*/
+export function InvoiceProfiles() {
+  const query = useInvoiceProfiles();
+  const [activeId, setActiveId] = useState("main");
+  const [adding, setAdding] = useState<string | null>(null);
+  const [addBusy, setAddBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const dirty = useRef(false);
+  if (query.isLoading) return <p className="muted">Loading…</p>;
+  if (query.isError) return <p className="muted">Couldn't load your invoice details.</p>;
+  if (!query.data) return <p className="muted">Invoices aren't switched on for your account yet.</p>;
+  const { profiles, max } = query.data;
+  const profile = profiles.find((p) => profileKey(p) === activeId) ?? profiles[0];
+  const many = profiles.length > 1;
+
+  const switchTo = (id: string) => {
+    if (id === profileKey(profile)) return;
+    if (dirty.current && !window.confirm("Leave without saving?\n\nYour changes to this profile aren't saved yet.")) return;
+    dirty.current = false;
+    setMessage(null);
+    setActiveId(id);
+  };
+  async function add() {
+    const label = (adding ?? "").trim();
+    if (!label) { setMessage({ kind: "error", text: "Give the new profile a name, e.g. Noah." }); return; }
+    setAddBusy(true); setMessage(null);
+    try {
+      const { profile: created } = await api<{ profile: InvoiceProfile }>("/api/invoice-profiles", { method: "POST", body: { label } });
+      queryClient.setQueryData(["invoice-profiles"], (old: typeof query.data) => (old ? { ...old, profiles: [...old.profiles, created] } : old));
+      setAdding(null);
+      dirty.current = false;
+      setActiveId(profileKey(created));
+      setMessage({ kind: "ok", text: `"${created.name}" added. Fill it in and save.` });
+    } catch (e) {
+      setMessage({ kind: "error", text: e instanceof ApiError && e.code === "TOO_MANY_PROFILES" ? `You can have up to ${max} profiles.` : (e instanceof ApiError && typeof e.data?.message === "string" ? e.data.message : "Couldn't add the profile. Try again.") });
+    } finally {
+      setAddBusy(false);
+    }
+  }
+  async function remove() {
+    if (profile.isMain || profileKey(profile) === "main") return;
+    if (!window.confirm(`Remove "${profile.name}"?\n\nInvoices you already made with it keep its details.`)) return;
+    try {
+      await api(`/api/invoice-profiles/${encodeURIComponent(profileKey(profile))}`, { method: "DELETE" });
+      queryClient.setQueryData(["invoice-profiles"], (old: typeof query.data) => (old ? { ...old, profiles: old.profiles.filter((p) => profileKey(p) !== profileKey(profile)) } : old));
+      dirty.current = false;
+      setActiveId("main");
+      setMessage({ kind: "ok", text: "Profile removed." });
+    } catch {
+      setMessage({ kind: "error", text: "Couldn't remove it. Try again." });
+    }
+  }
+
+  return (
+    <>
+      <div className="idf-tabs" role="tablist" aria-label="Invoice profiles">
+        {profiles.map((p) => (
+          <button key={profileKey(p)} role="tab" aria-selected={p === profile} className={`idf-tab ${p === profile ? "on" : ""}`} onClick={() => switchTo(profileKey(p))}>
+            {p.logoUrl ? <img src={p.logoUrl} alt="" /> : <Monogram name={p.name || "?"} size={20} />}
+            <span>{p.name}</span>
+            {p.isMain && many ? <small>Main</small> : null}
+          </button>
+        ))}
+        {adding === null
+          ? profiles.length < max ? <button className="idf-add" onClick={() => { setAdding(""); setMessage(null); }}><Plus />Add another profile</button> : null
+          : <form className="idf-add-form" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+            <input className="field" autoFocus value={adding} maxLength={LABEL_MAX} placeholder="Name it, e.g. Noah" aria-label="New profile name" onChange={(e) => setAdding(e.target.value)} />
+            <button className="btn honey" type="submit" disabled={addBusy}>{addBusy ? <Loader2 className="spin" /> : null}Add</button>
+            <button className="btn" type="button" onClick={() => setAdding(null)}>Cancel</button>
+          </form>}
+      </div>
+      {many ? <p className="faint idf-tabs-hint">Pick which profile to use under From on each invoice. New invoices start with your main profile.</p> : null}
+      {message ? <p className={`idf-tabs-hint ${message.kind === "error" ? "late-text" : "muted"}`}>{message.text}</p> : null}
+      <div className="set-card idf-card">
+        <InvoiceDetailsForm key={profileKey(profile)} profile={profile} profileId={profileKey(profile)} showLabel={many || profileKey(profile) !== "main"}
+          onDirty={() => { dirty.current = true; }} onSaved={() => { dirty.current = false; }} onRemove={profileKey(profile) !== "main" ? () => void remove() : undefined} />
+      </div>
+    </>
+  );
+}
+
+export function InvoiceDetailsForm({ profile, onSaved, compact, profileId, showLabel, onDirty, onRemove }: {
+  profile: InvoiceProfile; onSaved?: (p: InvoiceProfile) => void; compact?: boolean;
+  /** Saves through /api/invoice-profiles/<id>; without it, the main profile through /api/invoice-profile. */
+  profileId?: string; showLabel?: boolean; onDirty?: () => void; onRemove?: () => void;
+}) {
+  const isMain = !profileId || profileId === "main";
   const [form, setForm] = useState<Form>(() => formFrom(profile));
   const [logoUrl, setLogoUrl] = useState(profile.logoUrl);
   const [bankDirty, setBankDirty] = useState({ routing: false, account: false });
@@ -50,12 +158,16 @@ export function InvoiceDetailsForm({ profile, onSaved, compact }: { profile: Inv
   const [logoBusy, setLogoBusy] = useState(false);
   const [status, setStatus] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const picker = useRef<HTMLInputElement>(null);
-  const set = <K extends keyof Form>(key: K, value: Form[K]) => { setForm((f) => ({ ...f, [key]: value })); setStatus(null); };
+  const set = <K extends keyof Form>(key: K, value: Form[K]) => { setForm((f) => ({ ...f, [key]: value })); setStatus(null); onDirty?.(); };
 
   async function put(body: Record<string, unknown>) {
     try {
-      const { profile: saved } = await api<{ profile: InvoiceProfile }>("/api/invoice-profile", { method: "PUT", body });
-      queryClient.setQueryData(["invoice-profile"], saved);
+      const path = profileId ? `/api/invoice-profiles/${encodeURIComponent(profileId)}` : "/api/invoice-profile";
+      const { profile: saved } = await api<{ profile: InvoiceProfile }>(path, { method: "PUT", body });
+      if (isMain) queryClient.setQueryData(["invoice-profile"], (old: InvoiceProfile | null | undefined) => ({ ...old, ...saved }));
+      queryClient.setQueryData(["invoice-profiles"], (old: { profiles: InvoiceProfile[] } | null | undefined) => (old ? { ...old, profiles: old.profiles.map((p) => ((p.id ?? "main") === (saved.id ?? profileId ?? "main") ? saved : p)) } : old));
+      // A deal's invoice lists the profiles for its From picker.
+      void queryClient.invalidateQueries({ queryKey: ["hub", "invoice"] });
       setLogoUrl(saved.logoUrl);
       return saved;
     } catch (e) {
@@ -79,17 +191,24 @@ export function InvoiceDetailsForm({ profile, onSaved, compact }: { profile: Inv
   async function save() {
     if (saving) return;
     const nextNumber = Number(form.nextNumber);
-    if (!Number.isInteger(nextNumber) || nextNumber < 1 || nextNumber > 99_999_999) { setStatus({ kind: "error", text: "Next number must be a whole number." }); return; }
+    if (isMain && (!Number.isInteger(nextNumber) || nextNumber < 1 || nextNumber > 99_999_999)) { setStatus({ kind: "error", text: "Next number must be a whole number." }); return; }
+    if (!isMain && !form.label.trim()) { setStatus({ kind: "error", text: "Give this profile a name, e.g. Noah." }); return; }
     if (!form.businessName.trim()) { setStatus({ kind: "error", text: "Add your business name. It's the top of every invoice." }); return; }
     if (!form.email.trim()) { setStatus({ kind: "error", text: "Add a billing email. Brands reply there." }); return; }
     setSaving(true); setStatus(null);
-    const { bankRouting, bankAccount, ...rest } = form;
-    const saved = await put({ ...rest, nextNumber, ...(bankDirty.routing ? { bankRouting } : {}), ...(bankDirty.account ? { bankAccount } : {}) });
+    const { bankRouting, bankAccount, defaultTermsDays, numberPrefix, nextNumber: _next, label, ...rest } = form;
+    const saved = await put({
+      ...rest,
+      // Shared by every profile: only the main one sets them. The old route has no label.
+      ...(isMain ? { defaultTermsDays, numberPrefix, nextNumber } : {}),
+      ...(profileId ? { label: label.trim() } : {}),
+      ...(bankDirty.routing ? { bankRouting } : {}), ...(bankDirty.account ? { bankAccount } : {}),
+    });
     setSaving(false);
     if (!saved) return;
     setForm(formFrom(saved));
     setBankDirty({ routing: false, account: false });
-    setStatus({ kind: "ok", text: "Saved. New invoices start with these details." });
+    setStatus({ kind: "ok", text: isMain ? "Saved. New invoices start with these details." : `Saved. Pick "${saved.name}" under From on any invoice.` });
     onSaved?.(saved);
   }
 
@@ -110,6 +229,7 @@ export function InvoiceDetailsForm({ profile, onSaved, compact }: { profile: Inv
       <section>
         <h3>Your business</h3>
         <p className="faint">Shown at the top of every invoice.</p>
+        {showLabel ? <label>Profile name{isMain ? " · optional" : ""}<input className="field" value={form.label} maxLength={LABEL_MAX} placeholder={isMain ? "e.g. Kinzi" : "e.g. Noah"} onChange={(e) => set("label", e.target.value)} /><small className="faint">Only you see this, on the tabs and the From picker.</small></label> : null}
         <div className="idf-logo">
           {logoUrl ? <img src={logoUrl} alt="" /> : <span className="idf-logo-empty"><Upload /></span>}
           <div><b>Logo</b><small className="faint">PNG, JPG or WebP · square works best</small></div>
@@ -141,9 +261,9 @@ export function InvoiceDetailsForm({ profile, onSaved, compact }: { profile: Inv
         {method("cashapp", "Cash App", "$cashtag", 60)}
       </section>
       <section>
-        <h3>Defaults</h3>
-        <p className="faint">Used when a deal doesn't say otherwise.</p>
-        <div className="idf-grid three">
+        <h3>{isMain ? "Defaults" : "Note"}</h3>
+        <p className="faint">{isMain ? "Used when a deal doesn't say otherwise." : "Invoice numbers and payment terms are shared by all your profiles; change them on your main profile."}</p>
+        {isMain ? <div className="idf-grid three">
           <label>Payment terms
             <select className="field" value={form.defaultTermsDays} onChange={(e) => set("defaultTermsDays", Number(e.target.value))}>
               {[...new Set([...TERMS, form.defaultTermsDays])].sort((a, b) => a - b).map((d) => <option key={d} value={d}>{termsLabel(d)}</option>)}
@@ -151,12 +271,13 @@ export function InvoiceDetailsForm({ profile, onSaved, compact }: { profile: Inv
           </label>
           {text("numberPrefix", "Number prefix", 12)}
           <label>Next number<input className="field" value={form.nextNumber} inputMode="numeric" maxLength={8} onChange={(e) => set("nextNumber", e.target.value.replace(/\D/g, ""))} /></label>
-        </div>
+        </div> : null}
         <label>Note at the bottom · optional<textarea className="field area" value={form.note} maxLength={500} onChange={(e) => set("note", e.target.value)} /></label>
       </section>
       <div className="idf-foot">
+        {onRemove ? <button className="btn idf-remove" onClick={onRemove}><Trash2 />Remove this profile</button> : null}
         {status ? <span className={status.kind === "error" ? "late-text" : "muted"}>{status.text}</span> : null}
-        <button className="btn honey" disabled={saving} onClick={() => void save()}>{saving ? <Loader2 className="spin" /> : null}Save details</button>
+        <button className="btn honey" disabled={saving} onClick={() => void save()}>{saving ? <Loader2 className="spin" /> : null}{isMain ? "Save details" : `Save ${form.label.trim() || "profile"}`}</button>
       </div>
     </div>
   );

@@ -1222,6 +1222,15 @@ html.is-popout body { background: var(--card); }
 .inv-badge.sent { background: rgba(10,132,255,.12); color: #0A5CC2; }
 .inv-badge.paid { background: rgba(52,199,89,.15); color: #1F7A3E; }
 .inv-badge.overdue { background: rgba(229,72,77,.12); color: #D93636; }
+@media (prefers-color-scheme: dark) { .inv-badge.sent { color: #6DB3FF; } .inv-badge.paid { color: #5DD68A; } .inv-badge.overdue { color: #FF8F8F; } }
+/* Send from (Kinzi, Nov 2026): the invoice editor's From block. */
+.ie-from { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.ie-from-who { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.ie-from-who img { width: 30px; height: 30px; border-radius: 7px; object-fit: contain; flex: none; }
+.ie-from-who > span:not(.mono) { display: flex; flex-direction: column; font-size: 13.5px; min-width: 0; }
+.ie-from-who small { font-size: 12px; }
+.ie-from-pick { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); font-weight: 500; white-space: nowrap; }
+.ie-from-pick .field { width: 230px; }
 .inv-mini { display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 12px; background: var(--card); box-shadow: 0 0 0 .5px var(--line-strong); }
 .inv-mini > span:last-child { display: flex; flex-direction: column; font-size: 13px; }
 .ficon.inv { width: 36px; height: 36px; border-radius: 8px; background: var(--honey); color: var(--on-honey); font-size: 10.5px; font-weight: 800; display: grid; place-items: center; flex: none; }
@@ -1299,6 +1308,11 @@ html.is-popout body { background: var(--card); }
 .inv-row > span:not(.mono) { flex: 1; display: flex; flex-direction: column; min-width: 0; font-size: 14px; }
 .inv-row small { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .inv-row .amt { font-size: 14px; }
+.inv-row > span.inv-end { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
+.inv-row .inv-end .inv-badge { margin-left: 0; font-size: 10.5px; padding: 1px 7px; }
+.inv-summary { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 10px 18px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--ink-3); }
+.inv-summary b { color: var(--ink); }
+.inv-summary .late-text b { color: inherit; }
 .inv-preview { background: var(--card-2); padding: 18px 30px 40px; display: flex; flex-direction: column; gap: 16px; align-items: center; }
 .inv-bar .link { white-space: nowrap; }
 .inv-bar { flex-wrap: wrap; display: flex; align-items: center; gap: 10px; width: 100%; max-width: 760px; }
@@ -1777,6 +1791,36 @@ html.is-popout body { background: var(--card); }
 .tp-markers > div:last-child { align-items: flex-end; }
 .tp-markers > div.reached { color: var(--ink); font-weight: 600; }
 .tp-markers small { font-weight: 600; }
+/* The member's own tier card opens its breakdown (Missy, Nov 2026). */
+.tier-progress.clickable { cursor: pointer; border-radius: 14px 14px 0 0; transition: background .12s; }
+.tier-progress.clickable:hover { background: var(--card-2); }
+.tier-progress.clickable:focus-visible { outline: none; box-shadow: var(--focus); }
+.tp-hint { align-self: flex-end; display: inline-flex; align-items: center; gap: 2px; margin-top: -6px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.tp-hint svg { width: 13px; height: 13px; }
+.tier-progress.clickable:hover .tp-hint { color: var(--ink); }
+.tb { display: flex; flex-direction: column; gap: 18px; }
+.tb section { display: flex; flex-direction: column; gap: 2px; }
+.tb-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+.tb-head h3 { font-size: 14px; font-weight: 700; }
+.tb-head b { font-size: 15px; }
+.tb-head b.muted { color: var(--ink-3); }
+.tb-sub { font-size: 12.5px; color: var(--ink-3); margin: -2px 0 6px; }
+.tb-row { display: flex; align-items: center; gap: 10px; padding: 7px 6px; border-radius: 8px; text-align: left; width: 100%; }
+.tb-row:hover { background: var(--card-2); }
+.tb-row > span:not(.mono) { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; }
+.tb-row > span:not(.mono) small { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tb-row > b { font-size: 14px; }
+.tb-group { margin-top: 6px; }
+.tb-ghead { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.tb-ghead svg { width: 14px; height: 14px; }
+.tb-group.pending .tb-ghead svg { color: #C99A00; } .tb-group.production .tb-ghead svg { color: #8B5CF6; } .tb-group.pitching .tb-ghead svg { color: var(--ink-3); }
+.tb-ghead small { font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 8px; background: var(--card-3); color: var(--ink-3); line-height: 16px; }
+.tb-ghead b { margin-left: auto; color: var(--ink-3); font-weight: 600; }
+.tb-none { font-size: 13px; color: var(--ink-3); padding: 8px 6px; }
+.tb-foot { font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: 12px; }
+.tb-loading { display: flex; flex-direction: column; gap: 10px; }
+.tb-loading span { height: 38px; border-radius: 8px; background: var(--sel); }
+@media (prefers-color-scheme: dark) { .tb .green { color: #5DD68A; } }
 .hub-metrics { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; border-top: 1px solid var(--line); }
 .metric { padding: 16px 22px 18px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .metric + .metric { border-left: 1px solid var(--line); }
@@ -1944,6 +1988,25 @@ html.is-popout body { background: var(--card); }
 .idf-check svg { width: 12px; height: 12px; stroke-width: 3; }
 .idf-foot { display: flex; align-items: center; justify-content: flex-end; gap: 12px; font-size: 13px; }
 .idf.compact { gap: 18px; }
+/* Invoice profiles (Kinzi, Nov 2026): a tab per profile above the form. */
+.idf-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.idf-tab { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px 0 6px; border-radius: 16px; font-size: 13px; font-weight: 600; color: var(--ink-2); background: var(--card); box-shadow: inset 0 0 0 1px var(--line-strong); max-width: 220px; }
+.idf-tab span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.idf-tab img { width: 20px; height: 20px; border-radius: 5px; object-fit: contain; flex: none; }
+.idf-tab .mono { font-size: 9px; }
+.idf-tab small { font-size: 10.5px; font-weight: 700; padding: 0 6px; border-radius: 6px; background: var(--card-3); color: var(--ink-3); line-height: 16px; }
+.idf-tab:hover { color: var(--ink); }
+.idf-tab.on { background: var(--honey-soft); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--honey); }
+.idf-tab.on small { background: var(--honey); color: var(--on-honey); }
+.idf-add { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 12px; border-radius: 16px; font-size: 13px; font-weight: 600; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line-strong); border: 0; }
+.idf-add:hover { color: var(--ink); background: var(--sel); }
+.idf-add svg { width: 14px; height: 14px; }
+.idf-add-form { display: inline-flex; align-items: center; gap: 6px; }
+.idf-add-form .field { width: 190px; }
+.idf-tabs-hint { font-size: 12.5px; margin: 0 0 10px; }
+.idf-foot .idf-remove { margin-right: auto; color: #D93636; }
+.idf-foot .idf-remove svg { width: 14px; height: 14px; }
+@media (prefers-color-scheme: dark) { .idf-foot .idf-remove { color: #FF8F8F; } }
 
 /* ---------- Share my Hub ---------- */
 .share-hub { display: flex; flex-direction: column; gap: 12px; font-size: 13.5px; }
