@@ -73,7 +73,8 @@ function listLine(invoice: InvoiceListItem) {
   if (invoice.state === "paid" && invoice.paidAt) parts.push(`Paid ${listDay(invoice.paidAt)}`);
   else if (invoice.state === "draft") parts.push(`Draft · made ${listDay(invoice.issuedOn)}`);
   else {
-    if (invoice.sentAt) parts.push(`Sent ${listDay(invoice.sentAt)}`);
+    // The narrow list column: an overdue row says how late, not when it went.
+    if (invoice.sentAt && invoice.state !== "overdue") parts.push(`Sent ${listDay(invoice.sentAt)}`);
     if (invoice.state === "overdue") parts.push(`${invoice.daysOverdue} ${invoice.daysOverdue === 1 ? "day" : "days"} overdue`);
     else if (invoice.dueOn) parts.push(`Due ${listDay(invoice.dueOn)}`);
   }
