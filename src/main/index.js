@@ -42,6 +42,7 @@ const media = require("./media");
 const popouts = require("./popouts");
 const files = require("./files");
 const errors = require("./errors");
+const updates = require("./updates");
 const { createLinks } = require("./links");
 
 /* Must match DESKTOP_NOTIFICATION_EVENT in the web app's lib/realtime/channels.ts. */
@@ -182,6 +183,9 @@ let unread = 0;
 let signedIn = false;
 let heySocialAccess = false;
 let updateReady = null;
+let updateFailed = null; // a version whose install didn't take (checkLastInstall)
+const installRecord = updates.createInstallRecord(path.join(app.getPath("userData"), "update-install.json"));
+const updateLog = updates.fileLogger(() => path.join(app.getPath("logs"), "updates.log"));
 let viewing = null; // the conversation or channel id the person has open
 
 function send(channel, payload) {
@@ -827,7 +831,9 @@ function updateTray() {
     { type: "separator" },
     updateReady
       ? { label: "Restart to Update", sublabel: `Version ${updateReady} is ready`, click: installUpdate }
-      : { label: "Check for updates…", sublabel: `Version ${app.getVersion()}`, click: () => void checkForUpdates(true) },
+      : updateFailed
+        ? { label: `Download CreatorHive ${updateFailed}…`, sublabel: `Version ${app.getVersion()}`, click: downloadUpdateByHand }
+        : { label: "Check for updates…", sublabel: `Version ${app.getVersion()}`, click: () => void checkForUpdates(true) },
     { label: `Quit ${appName}`, accelerator: "CommandOrControl+Q", click: () => app.quit() },
   ];
   tray.setContextMenu(Menu.buildFromTemplate(template));
@@ -849,7 +855,9 @@ function createAppMenu() {
         { role: "about" },
         updateReady
           ? { label: "Restart to Update", click: installUpdate }
-          : { label: "Check for Updates…", click: () => void checkForUpdates(true) },
+          : updateFailed
+            ? { label: `Download CreatorHive ${updateFailed}…`, click: downloadUpdateByHand }
+            : { label: "Check for Updates…", click: () => void checkForUpdates(true) },
         { type: "separator" },
         { label: "Settings…", accelerator: "CommandOrControl+,", enabled: signedIn, click: () => command("settings") },
         { type: "separator" },
@@ -930,12 +938,67 @@ function createAppMenu() {
   lock, a reload) asks for it when it loads, and the menus offer the restart.
 */
 function markUpdateReady(version) {
+  // Only a version newer than this one is an update (see updates.js).
+  if (!updates.isNewer(version, app.getVersion())) {
+    updateLog.warn(`downloaded ${version} is not newer than ${app.getVersion()}; not offered`);
+    return;
+  }
+  // Installing this one already failed once: don't offer a restart that brings the same app back.
+  if (updateFailed && updates.compare(version, updateFailed) <= 0) {
+    updateLog.warn(`${version} downloaded again, but installing it failed before; offering the download instead`);
+    return;
+  }
   updateReady = version;
   updateTray();
   createAppMenu();
   send("update:ready", version);
 }
 ipcMain.handle("update:status", () => updateReady);
+
+/*
+  The last launch's "Restart to Update" (or a quit with one waiting), checked
+  now we're running again: still older than what was installed means Squirrel
+  couldn't replace the app. Reported to Admin → Bugs once per version, and
+  the member is told once and offered the download.
+*/
+function checkLastInstall() {
+  const record = installRecord.read();
+  const outcome = updates.installOutcome(record, app.getVersion());
+  if (outcome === "none") return;
+  if (outcome === "installed") {
+    updateLog.info(`installed ${app.getVersion()} (was ${record.from})`);
+    installRecord.clear();
+    return;
+  }
+  updateFailed = record.version;
+  if (record.reported) return;
+  const { bundle, writable } = updates.bundleInfo(app.getPath("exe"));
+  const detail = `still ${app.getVersion()} after installing ${record.version} (from ${record.from}); app at ${bundle}, ${writable ? "writable" : "not writable by this user"}`;
+  updateLog.error(`install failed: ${detail}`);
+  errors.report({ kind: "error", message: `Update didn't install: ${detail}`, route: "Updates" });
+  installRecord.write({ ...record, reported: true });
+  setTimeout(() => {
+    void dialog.showMessageBox({
+      type: "warning",
+      message: `CreatorHive ${record.version} couldn't be installed.`,
+      detail: writable
+        ? `You're still on ${app.getVersion()}. Download the new version and drag it into Applications, replacing the old one.`
+        : `You're still on ${app.getVersion()}: this Mac's user can't replace the app where it is. Download the new version and drag it into Applications (you may be asked for an administrator's password).`,
+      buttons: ["Download", "Not Now"],
+      defaultId: 0,
+      cancelId: 1,
+    }).then(({ response }) => { if (response === 0) void shell.openExternal(`${ORIGIN}/download/mac`); });
+  }, 2500);
+  createAppMenu();
+  updateTray();
+}
+
+/* Written before installing, so the next launch can tell whether it worked. */
+function rememberInstall() {
+  if (!updateReady) return;
+  installRecord.write({ version: updateReady, from: app.getVersion(), at: new Date().toISOString() });
+  updateLog.info(`installing ${updateReady} over ${app.getVersion()}`);
+}
 
 function configureUpdates() {
   if (!app.isPackaged) {
@@ -948,6 +1011,8 @@ function configureUpdates() {
     autoUpdater.allowPrerelease = true;
     autoUpdater.channel = "preview";
   }
+  autoUpdater.logger = updateLog;
+  checkLastInstall();
   // Run from the disk image or Downloads, Squirrel can't replace the app
   // ("Cannot update while running on a read-only volume"): don't look until
   // it's been moved to Applications (offerMoveToApplications below).
@@ -965,7 +1030,7 @@ function configureUpdates() {
   });
   autoUpdater.on("error", (error) => {
     downloadingUpdate = false;
-    console.error("[update]", error?.message ?? error);
+    updateLog.error(error?.message ?? String(error));
   });
   setTimeout(() => void checkForUpdates(false), 10 * 1000);
   setInterval(() => void checkForUpdates(false), UPDATE_CHECK_INTERVAL_MS);
@@ -1047,9 +1112,14 @@ function retryUpdateCheckOnce(error) {
 function installUpdate() {
   if (!app.isPackaged) return void console.log("[update] restart to update", updateReady);
   quitting = true;
+  rememberInstall();
   autoUpdater.quitAndInstall();
 }
 ipcMain.on("update:install", installUpdate);
+
+function downloadUpdateByHand() {
+  void shell.openExternal(`${ORIGIN}/download/mac`);
+}
 
 /* ---------- Applications folder ---------- */
 
@@ -1159,6 +1229,8 @@ app.on("second-instance", (_event, argv) => {
 app.on("activate", showWindow);
 app.on("before-quit", () => {
   quitting = true;
+  // autoInstallOnAppQuit installs a waiting update now.
+  if (app.isPackaged && updateReady && installRecord.read()?.version !== updateReady) rememberInstall();
   realtime.stop();
 });
 // Closing the window never quits; only Quit does.
