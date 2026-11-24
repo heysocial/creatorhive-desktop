@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { WEEKEND_STARTER, openUpgrade, useFeedAccess, useHubReady } from "../../lib/access";
+import { TEN_DAY, WEEKEND_STARTER, openUpgrade, useFeedAccess, useHubReady } from "../../lib/access";
 import { ArrowUp, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, Lock, MessageCircle, MoreHorizontal, Pin, Play, SquarePen, Wallet, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
@@ -876,10 +876,12 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
     The tabs: the Weekend Starter group first on The Weekend Starter (after
     All for the team); a limited plan's other tabs locked.
   */
-  const tabs = CATEGORIES.filter((c) => c.key !== WEEKEND_STARTER || access.group);
+  const tabs = CATEGORIES.filter((c) => (c.key !== WEEKEND_STARTER || access.group) && (c.key !== TEN_DAY || access.tenDayGroup));
+  // A group's tab, where a limited plan may post (the Weekend Starter group, the 10-Day Challenge group).
+  const groupTab = filter === WEEKEND_STARTER || filter === TEN_DAY;
   const lockedTab = (key: string) => access.limited && (key === "all" || !access.canRead(key));
   // Who gets a composer, and for what: a limited plan only in the group, on its tab, for its 30 days.
-  const allowed = CATEGORIES.map((c) => c.key).filter((key) => access.canWrite(key) && (!access.limited || filter === WEEKEND_STARTER));
+  const allowed = CATEGORIES.map((c) => c.key).filter((key) => access.canWrite(key) && (!access.limited || (groupTab && key === filter)));
   const start: CategoryKey = allowed.includes(filter as CategoryKey) ? (filter as CategoryKey) : allowed.includes("general") ? "general" : allowed[0] ?? "general";
   // A post on its way (kept on this Mac across a restart) opens the composer with it.
   const [writing, setWriting] = useState(() => hasPostDraft(user.id));
@@ -998,7 +1000,7 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
             <PaidCard />
             {allowed.length ? (
               <NewPost key={draft?.text ?? "blank"} user={user} open={writing} draft={draft} onOpen={() => setWriting(true)} onClose={() => { setWriting(false); setDraft(null); }}
-                allowed={allowed} start={start} prompt={access.limited && start === WEEKEND_STARTER ? "Share with the Weekend Starter group…" : undefined} />
+                allowed={allowed} start={start} prompt={access.limited && start === TEN_DAY ? "Share with the 10-Day Challenge group…" : access.limited && start === WEEKEND_STARTER ? "Share with the Weekend Starter group…" : undefined} />
             ) : access.groupEnded && filter === WEEKEND_STARTER ? (
               <div className="card group-ended"><span className="ge-mark"><Lock /></span><p><b>{access.endsAt ? `Your 30 days in the Weekend Starter group ended ${new Date(access.endsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.` : "Your 30 days in the Weekend Starter group have ended."}</b><br />You can still read the group. Join the UGC Academy to post again.</p></div>
             ) : null}
@@ -1006,7 +1008,7 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
             {feed.isLoading ? <div className="msgs-skel"><div /><div /><div /></div> : null}
             {feed.isError ? <div className="err-state">Couldn't load the feed.<button className="btn" onClick={() => void feed.refetch()}>Try again</button></div> : null}
             {posts.map((post) => <PostCard key={post.id} post={post} user={user} onOpen={(p) => setOpenPost(p.id)} />)}
-            {feed.isSuccess && posts.length === 0 && pinnedIds.size === 0 ? <div className="empty-state">{filter === WEEKEND_STARTER ? (access.canWrite(WEEKEND_STARTER) ? "The group is quiet. Post a hello and tell everyone which video you’re filming first." : "Nothing has been posted in the group yet.") : "Nothing here yet."}</div> : null}
+            {feed.isSuccess && posts.length === 0 && pinnedIds.size === 0 ? <div className="empty-state">{filter === TEN_DAY ? (access.canWrite(TEN_DAY) ? "The group is quiet. Say hi, and tell everyone what kind of creator you want to be by day 10." : "No Challenger has posted yet.") : filter === WEEKEND_STARTER ? (access.canWrite(WEEKEND_STARTER) ? "The group is quiet. Post a hello and tell everyone which video you’re filming first." : "Nothing has been posted in the group yet.") : "Nothing here yet."}</div> : null}
             {feed.isFetchingNextPage ? <div className="faint" style={{ textAlign: "center", padding: 12 }}>Loading…</div> : null}
           </div>
         </div>

@@ -13,7 +13,8 @@ import { nav, type Location } from "./nav";
 
 export interface MeAccess {
   state: "academy" | "starter" | "starter_ended" | "guest";
-  plan?: "academy" | "starter" | "first3" | "guest";
+  /** "ten_day": the 10-Day Portfolio Challenge (a Challenger; servers from Nov 24 2026). */
+  plan?: "academy" | "starter" | "first3" | "ten_day" | "guest" | "brand" | "marketplace";
   /** The areas the plan locks: "hub" on The Weekend Starter (servers from Nov 9 2026). */
   locked: string[];
   upgradeUrl: string | null;
@@ -25,6 +26,8 @@ export interface MeAccess {
   feedReadOnly?: boolean;
   /** In the Weekend Starter group (its buyers and the team): its tab shows. Servers from Nov 10 2026. */
   weekendGroup?: boolean;
+  /** In the 10-Day Challenge group (Challengers and the team): its tab shows. Servers from Nov 24 2026. */
+  tenDayGroup?: boolean;
   /** The categories it may post, comment and react in (null: every one it reads). */
   feedWritable?: string[] | null;
   /** The tab the feed opens on: "weekend_starter" on The Weekend Starter. */
@@ -77,6 +80,8 @@ export function useHubHidden(): boolean {
 }
 
 export const WEEKEND_STARTER = "weekend_starter";
+/** The 10-Day Portfolio Challenge group (creatorhive-app docs/ten-day-challenge.md). */
+export const TEN_DAY = "ten_day";
 
 /**
  * The feed's locks, from the website's rules (creatorhive-app lib/access.ts):
@@ -90,7 +95,10 @@ export function useFeedAccess() {
   const list = access?.feedCategories;
   const limited = Array.isArray(list);
   const group = access?.weekendGroup === true;
-  const canRead = (category: string) => (limited ? list.includes(category) : category !== WEEKEND_STARTER || group);
+  const tenDayGroup = access?.tenDayGroup === true;
+  // Each group's tab only for its members (and the team, whose list is null).
+  const canRead = (category: string) => (limited ? list.includes(category)
+    : category === WEEKEND_STARTER ? group : category === TEN_DAY ? tenDayGroup : true);
   const writable = access?.feedWritable;
   const canWrite = (category: string) => {
     if (!canRead(category)) return false;
@@ -100,6 +108,7 @@ export function useFeedAccess() {
   return {
     limited,
     group,
+    tenDayGroup,
     canRead,
     canWrite,
     home: access?.feedHome ?? (limited ? list[0] ?? "win" : "all"),

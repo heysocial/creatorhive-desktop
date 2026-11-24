@@ -3,6 +3,8 @@ import { api, ApiError, queryClient, rateLimitMessage } from "./api";
 import { putToMux, type Author, type Reactions, type UploadedVideo, type VideoAttachment } from "./community";
 
 export const CATEGORIES = [
+  // The 10-Day Challenge group: only Challengers and the team ever get it (lib/access.ts useFeedAccess).
+  { key: "ten_day", label: "10-Day Challenge", emoji: "🔟", staffOnly: false },
   // The Weekend Starter group: only its buyers and the team ever get it (lib/access.ts useFeedAccess).
   { key: "weekend_starter", label: "Weekend Starter", emoji: "🎬", staffOnly: false },
   { key: "general", label: "General", emoji: "💬", staffOnly: false },

@@ -34,7 +34,7 @@ const ACADEMY_INCLUDES_REST = [
 export function academyIncludes(access: Pick<MeAccess, "plan"> & { academyIncludes?: unknown } | undefined): string[] {
   const sent = access?.academyIncludes;
   if (Array.isArray(sent) && sent.length > 0 && sent.every((item) => typeof item === "string" && item.trim() !== "")) return sent as string[];
-  const course = access?.plan === "first3" ? "The Weekend Starter" : "New Bee";
+  const course = access?.plan === "ten_day" ? "the 10-Day Portfolio Challenge" : access?.plan === "first3" ? "The Weekend Starter" : "New Bee";
   return [`Every course, not just ${course}`, ...ACADEMY_INCLUDES_REST];
 }
 
@@ -52,7 +52,7 @@ export function UpgradeDialog({ onClose }: { onClose: () => void }) {
   const access = useMeAccess().data?.access;
   const url = upgradeUrlOf(access);
   const ended = access?.state === "starter_ended";
-  const planName = access?.plan === "first3" ? "Weekend Starter" : "UGC Starter";
+  const planName = access?.plan === "ten_day" ? "10-Day Challenge access" : access?.plan === "first3" ? "Weekend Starter" : "UGC Starter";
   const hubOpen = !(Array.isArray(access?.locked) && access.locked.includes("hub"));
   const title = ended ? `Your ${planName} has ended` : "Part of the UGC Academy";
   return (

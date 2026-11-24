@@ -342,6 +342,8 @@ img { -webkit-user-drag: none; }
 .badge-pill.k-pro, .badge-pill.k-top { background: rgba(126, 58, 242, .12); color: #7E3AF2; }
 /* The Weekend Starter: the website's rose (member title colour "rose", #D65A7A). */
 .badge-pill.k-weekend { background: rgba(214, 90, 122, .14); color: #D65A7A; }
+/* A Challenger (10-Day Portfolio Challenge): the website's indigo (member title colour "indigo", #6366F1). */
+.badge-pill.k-challenger { background: rgba(99, 102, 241, .14); color: #6366F1; }
 .late-text { color: #D93636 !important; }
 .eyebrow { font-size: 12px; font-weight: 600; color: var(--ink-3); }
 .big { font-size: 28px; font-weight: 800; letter-spacing: -.02em; display: block; }

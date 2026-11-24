@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { contactLabel, useAreaLocked, useHubHidden, useStarterContacts, type StarterContact } from "../lib/access";
+import { contactLabel, useAreaLocked, useHubHidden, useMeAccess, useStarterContacts, type StarterContact } from "../lib/access";
 import {
   Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
   Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen,
@@ -293,6 +293,9 @@ function Learn() {
   const libraryLocked = useAreaLocked("library");
   // The AI Video Editor is the Academy's (access area "videoEditor").
   const videoEditorLocked = useAreaLocked("videoEditor");
+  // A Challenger (10-Day Portfolio Challenge): their course only; Improve and the Script Writer show the lock.
+  const scriptWriterLocked = useAreaLocked("scriptWriter");
+  const challenger = useMeAccess().data?.access?.plan === "ten_day";
   // Each video is reviewed on its own (docs/per-video-send.md): open once any one is ready.
   const reviewOpen = editing?.videos?.length ? editing.videos.some((v) => v.stage && stageIndex(v.stage) >= stageIndex("ready_to_review"))
     : Boolean(editing?.stage && stageIndex(editing.stage) >= stageIndex("ready_to_review"));
@@ -302,10 +305,10 @@ function Learn() {
       <ActivityRows />
       <div className="sb-scroll">
         <SidebarItem icon={<GraduationCap />} label="Courses" view={{ kind: "learn", page: "courses" }} meta={courses.length ? String(courses.length) : undefined} />
-        <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} meta={grade === undefined ? undefined : typeof grade === "number" ? `${grade}%` : `Grade ${grade}`} />
+        <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} meta={challenger || grade === undefined ? undefined : typeof grade === "number" ? `${grade}%` : `Grade ${grade}`} locked={challenger} />
         {reviewOpen ? <SidebarItem icon={<Eye />} label="Review your videos" view={{ kind: "video-review" }} meta={editing?.stage ? EDIT_STAGE_LABELS[editing.stage] : undefined} /> : null}
         <SidebarItem icon={<BookOpen />} label="Resources" view={{ kind: "learn", page: "resources" }} locked={libraryLocked} />
-        <SidebarItem icon={<Spark />} label="AI Script Writer" view={{ kind: "script-writer" }} meta="Flagship" />
+        <SidebarItem icon={<Spark />} label="AI Script Writer" view={{ kind: "script-writer" }} meta="Flagship" locked={scriptWriterLocked} />
         <SidebarItem icon={<Clapperboard />} label="AI Video Editor" view={{ kind: "video-editor" }} meta="New" locked={videoEditorLocked} />
         {inProgress.length ? (
           <SidebarSection id="learn-progress" title="In progress">

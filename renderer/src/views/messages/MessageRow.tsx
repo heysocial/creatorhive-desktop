@@ -37,7 +37,9 @@ export function Badge({ badge, role }: { badge?: { kind: string; label: string; 
   if (!label) return null;
   // The Weekend Starter's badge is rose, as on the website and the phones (k-weekend in app.css).
   const weekend = badge?.label === "Weekend Starter";
-  return <span className={`badge-pill k-${badge?.kind ?? role}${weekend ? " k-weekend" : ""}`}>{label}</span>;
+  // A Challenger (10-Day Portfolio Challenge): indigo (member title colour "indigo", #6366F1).
+  const challenger = badge?.label === "Challenger";
+  return <span className={`badge-pill k-${badge?.kind ?? role}${weekend ? " k-weekend" : ""}${challenger ? " k-challenger" : ""}`}>{label}</span>;
 }
 
 function ReactionChips({ reactions, onToggle }: { reactions?: Reactions; onToggle: (emoji: string) => void }) {
