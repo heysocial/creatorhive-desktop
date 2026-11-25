@@ -289,17 +289,31 @@ export interface VideoJob {
   /** The website's sentence when it refused the upload for going over a limit. */
   failedReason?: string;
   subscribe(listener: () => void): () => void;
+  /** Stops the upload (a video taken off the composer before sending): no more bytes go to Mux. */
+  cancel(): void;
+  /** The same file uploaded again from the start, for "Try again" after a dropped connection. */
+  restart(): VideoJob;
 }
 
-export function startVideoJob(file: File, upload: (file: File, onProgress: (pct: number) => void) => Promise<UploadedVideo>): VideoJob {
+type VideoUpload = (file: File, onProgress: (pct: number) => void, signal?: AbortSignal) => Promise<UploadedVideo>;
+
+export function startVideoJob(file: File, upload: VideoUpload): VideoJob {
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((l) => l());
+  const controller = new AbortController();
   const job: VideoJob = {
     name: file.name, preview: null, duration: 0, progress: 0, uploaded: null, failed: false,
     done: Promise.resolve() as unknown as Promise<UploadedVideo>,
     subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    cancel() { if (!job.uploaded) controller.abort(); },
+    restart() {
+      const next = startVideoJob(file, upload);
+      next.preview = job.preview;
+      next.duration = job.duration;
+      return next;
+    },
   };
-  job.done = upload(file, (pct) => { job.progress = pct; emit(); })
+  job.done = upload(file, (pct) => { job.progress = pct; emit(); }, controller.signal)
     .then((uploaded) => { job.uploaded = uploaded; job.progress = 100; emit(); return uploaded; })
     .catch((error) => { job.failed = true; job.failedReason = rateLimitMessage(error) ?? undefined; emit(); throw error; });
   job.done.catch(() => {});
@@ -348,7 +362,25 @@ async function finalize(where: Thread, body: Record<string, unknown>) {
  * Send a message with videos right away: it appears at once with each video's
  * picture and upload progress, and becomes the real message when the uploads finish.
  */
-export async function sendVideoJobs(where: Thread, input: { jobs: VideoJob[]; body: string; mentions?: { id: string; start: number; end: number }[]; parentMessageId?: string | null }, me: Author) {
+type VideoSendInput = { jobs: VideoJob[]; body: string; mentions?: { id: string; start: number; end: number }[]; parentMessageId?: string | null };
+const failedVideoSends = new Map<string, { input: VideoSendInput; me: Author }>();
+
+/**
+ * "Try again" on a message whose video didn't go: uploads the videos that
+ * failed again (the ones that finished are reused) and sends the message with
+ * them. False when the message had no videos, so the caller resends it as text.
+ */
+export function retryVideoSend(where: Thread, localId: string): boolean {
+  const saved = failedVideoSends.get(localId);
+  if (!saved) return false;
+  failedVideoSends.delete(localId);
+  removeMessage(where, localId);
+  const jobs = saved.input.jobs.map((job) => (job.failed ? job.restart() : job));
+  void sendVideoJobs(where, { ...saved.input, jobs }, saved.me);
+  return true;
+}
+
+export async function sendVideoJobs(where: Thread, input: VideoSendInput, me: Author) {
   const clientMutationId = crypto.randomUUID();
   const localId = `local-${clientMutationId}`;
   const placeholder = (): VideoAttachment[] => input.jobs.map((job, i) => ({
@@ -371,6 +403,8 @@ export async function sendVideoJobs(where: Thread, input: { jobs: VideoJob[]; bo
   } catch (error) {
     const failedReason = rateLimitMessage(error) ?? input.jobs.find((job) => job.failedReason)?.failedReason;
     patchMessage(where, localId, (m) => ({ ...m, sending: false, failed: true, failedReason }));
+    // Kept so "Try again" can send the videos too, not just the words (retryVideoSend).
+    failedVideoSends.set(localId, { input, me });
     return false;
   } finally {
     offs.forEach((off) => off());

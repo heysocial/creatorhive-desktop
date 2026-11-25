@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { api, ApiError, keys, queryClient, rateLimitMessage, useChannels, useConversations, type Workspace } from "../../lib/api";
 import {
-  addMessage, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, patchMessage, useChannelMembers, useHsMembers, useMembers, useMessages, useReplies,
+  addMessage, retryVideoSend, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, patchMessage, useChannelMembers, useHsMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
 } from "../../lib/community";
 import { dayLabel } from "../../lib/format";
@@ -203,7 +203,7 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
         </div>
       </div>
       <Composer compact draftKey={`thread:${parentId}`}
-        uploadVideo={workspace === "heysocial" || where.kind === "dm" ? undefined : (file, onProgress) => uploadVideo(where, file, onProgress)}
+        uploadVideo={workspace === "heysocial" || where.kind === "dm" ? undefined : (file, onProgress, signal) => uploadVideo(where, file, onProgress, signal)}
         voice={where.kind === "dm" || workspace === "heysocial" ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, parentMessageId: parentId, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={workspace === "heysocial" ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder="Reply in thread…" searchPeople={where.kind === "channel" || workspace === "heysocial" ? people : undefined}
         onTyping={typingSignal(realtimeChannel)}
         onSend={async (input) => {
@@ -282,6 +282,8 @@ function useRowActions(where: Thread, user: SessionUser, { inThread = false, onO
       }
     } : undefined,
     onRetry: async (message) => {
+      // A message with videos uploads them again; without this it went out as words only.
+      if (retryVideoSend(where, message.id)) return;
       // Resend as new; the failed copy goes away.
       const files = message.attachments ?? [];
       removeMessage(where, message.id);
@@ -495,7 +497,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
           <div className="replying"><span>Replying to <b>{replyTo.author.name}</b>: {replyTo.body.slice(0, 120)}</span><button className="iconbtn" onClick={() => setReplyTo(null)}><X /></button></div>
         ) : null}
         <Composer ref={composer} draftKey={`${where.kind}:${where.id}`}
-          uploadVideo={heySocial ? undefined : (file, onProgress) => uploadVideo(where, file, onProgress)}
+          uploadVideo={heySocial ? undefined : (file, onProgress, signal) => uploadVideo(where, file, onProgress, signal)}
           voice={where.kind === "dm" || heySocial ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder={dock?.placeholder ?? (where.kind === "channel" ? `Message #${title}` : `Message ${title}`)}
           searchPeople={where.kind === "channel" || workspace === "heysocial" ? people : undefined} onTyping={sendTyping}
           onSend={async (input: ComposerSend) => {

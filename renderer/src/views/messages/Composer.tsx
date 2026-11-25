@@ -120,7 +120,7 @@ export const Composer = forwardRef<ComposerHandle, {
   /** Hey Social Inc.: where files go (a channel id, or dm-<conversation id>). */
   uploadFolder?: string;
   /** Videos (CreatorHive channels and DMs): uploads one to Mux, reporting progress. */
-  uploadVideo?: (file: File, onProgress: (pct: number) => void) => Promise<UploadedVideo>;
+  uploadVideo?: (file: File, onProgress: (pct: number) => void, signal?: AbortSignal) => Promise<UploadedVideo>;
   /** Voice memos: the route, the thread (if any), and what to do with the sent message. */
   voice?: { path: string; parentMessageId?: string | null; onSent: (message: unknown) => void };
 }>(function Composer({ draftKey, placeholder, onSend, searchPeople, onTyping, compact = false, allowFiles = true, autoFocus = true, uploadFolder, voice, uploadVideo }, ref) {
@@ -368,7 +368,7 @@ export const Composer = forwardRef<ComposerHandle, {
                 {s.video && s.state === "uploading" ? <i className="vprog"><i style={{ width: `${s.video.progress}%` }} /></i> : null}
               </span>
               {s.state === "uploading" && !s.video ? <Loader2 className="spin" /> : null}
-              <button aria-label="Remove" onClick={() => setStaged((c) => c.filter((x) => x.key !== s.key))}><X /></button>
+              <button aria-label="Remove" onClick={() => { s.video?.job.cancel(); setStaged((c) => c.filter((x) => x.key !== s.key)); }}><X /></button>
             </div>
           ))}
         </div>
