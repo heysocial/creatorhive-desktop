@@ -58,7 +58,7 @@ export function UpgradeDialog({ onClose }: { onClose: () => void }) {
   return (
     <Modal width={440} onClose={onClose} foot={
       <div className="upgrade-foot">
-        <button className="btn honey lg" onClick={() => { onClose(); talkToTeam(access, url); }}>Talk to our team</button>
+        <button className="btn honey lg" onClick={() => { onClose(); talkToTeam(access, url); }}>{access?.talkLabel || "Talk to our team"}</button>
         <button className="btn ghost" onClick={onClose}>Not now</button>
       </div>
     }>

@@ -155,7 +155,7 @@ function AllowancePill({ allowance }: { allowance: VeAllowance }) {
   return (
     <span className="aive-allow" title={`${allowance.changesLeft} of ${allowance.changesLimit} changes left today`}>
       <span className="dots">{Array.from({ length: allowance.videosLimit }, (_, i) => <i key={i} className={i < used ? "" : "on"} />)}</span>
-      {allowance.videosLeft} of {allowance.videosLimit} videos left today
+      {allowance.videosLabel ?? `${allowance.videosLeft} of ${allowance.videosLimit} videos left today`}
     </span>
   );
 }
@@ -415,7 +415,7 @@ function BriefCard({ allowance, music, onStarted }: { allowance: VeAllowance | n
   const outOfVideos = allowance !== null && allowance.videosLeft <= 0;
   const waitingFor = !mains.length ? "Add your main video on the right first."
     : stillUploading ? "Uploading… you can press Make my video when it's done."
-    : outOfVideos ? "You've made every video for today. Come back tomorrow." : null;
+    : outOfVideos ? (allowance?.period === "day_eastern" ? allowance.videosLabel ?? "You've used today's video. Come back tomorrow for your next one." : "You've made every video for today. Come back tomorrow.") : null;
 
   const answered: { q: VeQuestion; text: string }[] = [];
   for (const q of questions.slice(0, index)) {

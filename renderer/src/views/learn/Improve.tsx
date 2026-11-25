@@ -74,23 +74,27 @@ export function ImprovePage({ user }: { user: SessionUser }) {
   const calls = useQuery({
     queryKey: ["improve", "calls"],
     // Group coaching calls are the Academy's; the route is locked on UGC Starter.
-    enabled: Boolean(data) && !data?.starter,
+    enabled: Boolean(data) && !data?.starter && !data?.tenDay,
     retry: false,
     queryFn: async () => { try { return (await api<{ calls: { groupCount: number; privateCount: number; privateByCoach: { name: string; count: number }[] } }>("/api/improve/calls")).calls; } catch { return null; } },
   }).data;
   const current = data?.activationPoints.find((m) => m.current)?.id ?? null;
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [allResources, setAllResources] = useState(false);
+  // The 10-Day plan (a Challenger): Improve is just its two AI tools, as on the website.
+  const tenDay = data?.tenDay ?? null;
+  const full = Boolean(data) && !data?.starter && !tenDay;
+  const scriptWriter = resources?.find((r) => r.slug === "ai-script-writer");
 
   return (
     <div className="ve-with-dock">
     <div className="page">
-      <div className="mhead"><h1>Improve</h1><span className="sub">Your grade, your milestones, and what to do next.</span></div>
+      <div className="mhead"><h1>Improve</h1><span className="sub">{tenDay ? "Your AI Video Editor and AI Script Writer: one video and one script a day." : "Your grade, your milestones, and what to do next."}</span></div>
       <div className="scroll page-body improve-body">
         {isLoading ? <div className="empty-state">Loading…</div> : null}
         {isError ? <div className="empty-state">Couldn't load Improve.</div> : null}
         {data?.starter ? <StarterImprove track={data.starter} resources={resources} /> : null}
-        {data && !data.starter ? (
+        {full && data ? (
           <div className="card grade">
             <Ring pct={data.grade.overallPercentage} />
             <div className="grade-text">
@@ -106,7 +110,18 @@ export function ImprovePage({ user }: { user: SessionUser }) {
           </div>
         ) : null}
         {data ? <VideoEditorTile /> : null}
-        {resources && data && !data.starter ? (
+        {tenDay && scriptWriter ? (
+          <section>
+            <div className="res-grid">
+              <button className="card res-tile" onClick={() => nav.open({ kind: "script-writer" }, "learn", "ch")}>
+                <span className="res-top"><span className="t-ico honey"><Sparkles /></span>{scriptWriter.flagship ? <span className="tag-s honey">Flagship</span> : null}<ArrowUpRight className="arrow" /></span>
+                <b>{scriptWriter.title}</b><span className="muted">{scriptWriter.description}</span>
+                <small className="faint">{tenDay.scriptWriter?.label ?? scriptWriter.type}</small>
+              </button>
+            </div>
+          </section>
+        ) : null}
+        {resources && full ? (
           <section>
             <div className="sec-head"><h2>Resources</h2><span className="muted">Tools, scripts, and manuals to move faster.</span></div>
             <div className="res-grid">
@@ -120,7 +135,7 @@ export function ImprovePage({ user }: { user: SessionUser }) {
             {resources.length > 3 ? <button className="show-more" onClick={() => setAllResources(!allResources)}>{allResources ? "Show fewer" : `Show all ${resources.length} resources`}</button> : null}
           </section>
         ) : null}
-        {data && !data.starter ? (
+        {full && data ? (
           <section>
             <div className="sec-head"><h2>Milestones</h2><span className="muted">Your journey from first video to $5K months · {data.completedStages}/{data.activationPoints.length} complete</span></div>
             <div className="ms-list">

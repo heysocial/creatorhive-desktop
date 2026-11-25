@@ -23,7 +23,7 @@ export function HubLocked() {
             <p className="soon-description">Here's everything the UGC Academy includes:</p>
             <AcademyIncludes access={access} />
             <div className="academy-locked-actions">
-              <button className="btn honey" onClick={() => talkToTeam(access, url)}>Talk to our team</button>
+              <button className="btn honey" onClick={() => talkToTeam(access, url)}>{access?.talkLabel || "Talk to our team"}</button>
               <button className="btn" onClick={() => nav.open({ kind: "learn", page: "improve" }, "learn", "ch")}>Open Learn</button>
             </div>
           </div>

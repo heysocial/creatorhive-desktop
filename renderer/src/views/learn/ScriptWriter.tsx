@@ -32,8 +32,10 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // UGC Starter: 10 new scripts a month; over it, the server's sentence and Upgrade.
-  const [limit, setLimit] = useState<{ message: string; upgradeUrl: string } | null>(null);
-  const allowance = useImprove().data?.starter?.scriptWriter ?? null;
+  // A Challenger (10-Day plan): 1 a day; over it, the server's sentence only (no Upgrade).
+  const [limit, setLimit] = useState<{ message: string; upgrade: boolean } | null>(null);
+  const improve = useImprove().data;
+  const allowance = improve?.starter?.scriptWriter ?? improve?.tenDay?.scriptWriter ?? null;
   const scroller = useRef<HTMLDivElement>(null);
   const activeChat = useRef<string | undefined>(chatId);
   const startedHere = useRef<string | null>(null);
@@ -76,9 +78,13 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
       if (event.type === "done") { gotDone = true; setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, status: event.status ?? "complete" } : x))); }
       if (event.type === "error") { gotDone = true; setError(event.message ?? "The Script Writer couldn't answer."); setMessages((m) => m.map((x) => (x.id === reply.id ? { ...x, status: "failed" } : x))); }
     });
-    const limitData = result.data as { code?: string; error?: string; upgradeUrl?: string } | undefined;
-    if (!result.ok && limitData?.code === "MONTHLY_LIMIT") {
-      setLimit({ message: limitData.error ?? "You've used this month's scripts.", upgradeUrl: limitData.upgradeUrl ?? "https://cal.com/team/creatorhive/skool" });
+    const limitData = result.data as { code?: string; error?: string } | undefined;
+    if (!result.ok && (limitData?.code === "MONTHLY_LIMIT" || limitData?.code === "DAILY_LIMIT")) {
+      const daily = limitData.code === "DAILY_LIMIT";
+      setLimit({
+        message: limitData.error ?? (daily ? "You've used today's script. Come back tomorrow for your next one." : "You've used this month's scripts."),
+        upgrade: !daily,
+      });
       // Take the unsent message back out of the chat; it's still in the box to send later.
       setMessages((m) => m.filter((x) => x.id !== reply.id && x.id !== pending.id));
       setText(body);
@@ -102,7 +108,7 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
 
   return (
     <div className="page sw">
-      <div className="mhead"><h1><Sparkles />AI Script Writer</h1><span className="sub">{allowance ? `${allowance.remaining} of ${allowance.limit} scripts left this month · resets ${resetsLabel(allowance.resetsAt)}` : "Scripts, hooks and shot lists for your next brand video"}</span>
+      <div className="mhead"><h1><Sparkles />AI Script Writer</h1><span className="sub">{allowance ? (allowance.period === "day" && allowance.label ? allowance.label : `${allowance.remaining} of ${allowance.limit} scripts left this month · resets ${resetsLabel(allowance.resetsAt)}`) : "Scripts, hooks and shot lists for your next brand video"}</span>
         <div className="acts"><button className="btn" onClick={() => nav.open({ kind: "script-writer" }, "learn", "ch")}><Plus />New chat</button></div></div>
       <div className="sw-body">
         <aside className="sw-chats scroll">
@@ -150,7 +156,7 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
           {limit ? (
             <div className="sw-error sw-limit">
               <span>{limit.message}</span>
-              <button className="btn honey" onClick={openUpgrade}>Upgrade</button>
+              {limit.upgrade ? <button className="btn honey" onClick={openUpgrade}>Upgrade</button> : null}
             </div>
           ) : null}
           <div className="composer sw-composer">

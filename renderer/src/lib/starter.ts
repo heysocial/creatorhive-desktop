@@ -42,6 +42,14 @@ export interface StarterStep {
   locked?: string | null;
 }
 
+/**
+ * The Script Writer's allowance (GET /api/improve/script-writer/allowance).
+ * UGC Starter: 10 a month (`period: "month"`). A Challenger (10-Day plan): 1 a
+ * day, Eastern (`period: "day"`), with the line to show in `label`
+ * ("1 script left today" / the used-up sentence). Older servers send neither.
+ */
+export interface ScriptAllowance { used: number; limit: number; remaining: number; resetsAt: string; period?: "day" | "month"; label?: string }
+
 export interface StarterTrack {
   /** The heading: "Your first 3 videos" on The Weekend Starter (two steps; no Hub). Older servers leave it out. */
   title?: string;
@@ -49,7 +57,7 @@ export interface StarterTrack {
   overallGrade: StarterGrade;
   currentStep: number;
   allDone: boolean;
-  scriptWriter: { used: number; limit: number; remaining: number; resetsAt: string };
+  scriptWriter: ScriptAllowance;
   upgradeUrl: string;
   /** Which plan the track is for: UGC Starter, or The Weekend Starter ("first3" inside). Older servers leave it out. */
   plan?: "starter" | "first3";

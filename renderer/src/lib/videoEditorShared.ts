@@ -118,6 +118,9 @@ export interface VeAllowance {
   changesLimit: number;
   messagesLeft: number;
   messagesLimit: number;
+  /** The 10-Day plan only: its day runs midnight to midnight Eastern, and its line ("1 video left today", or the used-up sentence). */
+  period?: "day_eastern";
+  videosLabel?: string;
 }
 
 export type VeStatus = "queued" | "working" | "preview_ready" | "done" | "error" | "cancelled";

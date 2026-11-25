@@ -151,6 +151,8 @@ export interface Milestone { id: string; number: string; title: string; beeLabel
 export interface Improve {
   /** UGC Starter only (creatorhive-app docs/starter-track.md); null or missing for everyone else. */
   starter?: import("./starter").StarterTrack | null;
+  /** The 10-Day plan (a Challenger): Improve is its two AI tools; null or missing for everyone else. Servers from Nov 25 2026. */
+  tenDay?: { scriptWriter: import("./starter").ScriptAllowance | null } | null;
   grade: { overallPercentage: number; coursePercentage: number; apPercentage: number; completedLessons: number; totalLessons: number; completedItems: number; totalItems: number };
   activationPoints: Milestone[];
   completedStages: number;

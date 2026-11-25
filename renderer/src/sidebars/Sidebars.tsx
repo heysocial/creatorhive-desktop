@@ -293,7 +293,8 @@ function Learn() {
   const libraryLocked = useAreaLocked("library");
   // The AI Video Editor is the Academy's (access area "videoEditor").
   const videoEditorLocked = useAreaLocked("videoEditor");
-  // A Challenger (10-Day Portfolio Challenge): their course only; Improve and the Script Writer show the lock.
+  // A Challenger (10-Day Portfolio Challenge): their course, and for their first 10 days the two AI tools
+  // (Improve shows just those); after that Improve and both tools show the lock (the server's `locked`).
   const scriptWriterLocked = useAreaLocked("scriptWriter");
   const challenger = useMeAccess().data?.access?.plan === "ten_day";
   // Each video is reviewed on its own (docs/per-video-send.md): open once any one is ready.
@@ -305,7 +306,7 @@ function Learn() {
       <ActivityRows />
       <div className="sb-scroll">
         <SidebarItem icon={<GraduationCap />} label="Courses" view={{ kind: "learn", page: "courses" }} meta={courses.length ? String(courses.length) : undefined} />
-        <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} meta={challenger || grade === undefined ? undefined : typeof grade === "number" ? `${grade}%` : `Grade ${grade}`} locked={challenger} />
+        <SidebarItem icon={<Lightbulb />} label="Improve" view={{ kind: "learn", page: "improve" }} meta={challenger || grade === undefined ? undefined : typeof grade === "number" ? `${grade}%` : `Grade ${grade}`} locked={challenger && scriptWriterLocked && videoEditorLocked} />
         {reviewOpen ? <SidebarItem icon={<Eye />} label="Review your videos" view={{ kind: "video-review" }} meta={editing?.stage ? EDIT_STAGE_LABELS[editing.stage] : undefined} /> : null}
         <SidebarItem icon={<BookOpen />} label="Resources" view={{ kind: "learn", page: "resources" }} locked={libraryLocked} />
         <SidebarItem icon={<Spark />} label="AI Script Writer" view={{ kind: "script-writer" }} meta="Flagship" locked={scriptWriterLocked} />

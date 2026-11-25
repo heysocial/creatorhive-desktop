@@ -36,6 +36,10 @@ export interface MeAccess {
   communityEndsAt?: string | null;
   /** Who a limited plan may start a DM with (see useStarterContacts). */
   starterContacts?: StarterContact[];
+  /** A Challenger's AI tools: open for their first 10 days, 1 script and 1 video a day (null for others). Servers from Nov 25 2026. */
+  tenDayAi?: { open: boolean; endsAt: string | null; dailyScripts: number; dailyVideos: number } | null;
+  /** The locked sheet's button: "Talk to Academy" for a Challenger; null means "Talk to our team". */
+  talkLabel?: string | null;
 }
 
 /**
@@ -165,7 +169,7 @@ export function contactLabel(contact: StarterContact): string {
 */
 const AREA_OF_VIEW: Partial<Record<string, string>> = {
   channel: "channels", events: "events", leaderboard: "leaderboard", members: "members",
-  resource: "library", "improve-resource": "library", "video-editor": "videoEditor",
+  resource: "library", "improve-resource": "library", "video-editor": "videoEditor", "script-writer": "scriptWriter",
 };
 
 export function lockedAreaOf(location: Location): string | null {
