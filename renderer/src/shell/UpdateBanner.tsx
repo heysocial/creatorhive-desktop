@@ -10,7 +10,7 @@ export function UpdateBanner({ version, onLater }: { version: string; onLater: (
   return (
     <div className="update-banner" role="status">
       <RefreshCw className="icon" />
-      <span className="text"><b>Update ready</b><small>CreatorHive {version}</small></span>
+      <span className="text"><b>Update ready</b><small>Version {version}</small></span>
       <button className="btn honey" onClick={() => ch.app.installUpdate()}>Restart</button>
       <button className="iconbtn" aria-label="Later" title="Later" onClick={onLater}><X /></button>
     </div>

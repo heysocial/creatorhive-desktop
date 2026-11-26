@@ -32,6 +32,19 @@ const {
   powerMonitor,
   shell,
 } = require("electron");
+
+/*
+  An installed app never runs with Chromium's remote debugging on. With
+  --remote-debugging-port (or -pipe), anything on this Mac could drive the
+  signed-in app: read its pages and cookies, and use its camera, microphone
+  and keychain item; the same hole the Electron fuses close for --inspect and
+  ELECTRON_RUN_AS_NODE (electron-builder.yml). Checked first, before anything
+  loads or any window opens. (scripts/smoke-test.sh reads the window from a
+  screenshot instead.)
+*/
+if (app.isPackaged && ["remote-debugging-port", "remote-debugging-pipe", "remote-debugging-address"].some((name) => app.commandLine.hasSwitch(name))) {
+  process.exit(1);
+}
 const { autoUpdater } = require("electron-updater");
 // Squirrel.Mac, which electron-updater hands each download to: its events say when an update is really installable.
 const nativeUpdater = require("electron").autoUpdater;

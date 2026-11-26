@@ -216,7 +216,7 @@ img { -webkit-user-drag: none; }
 
 /* Update ready: at the foot of the sidebar, clear of the composer. */
 .update-banner {
-  position: absolute; left: 82px; bottom: 12px; z-index: 30; width: min(300px, max(240px, calc(var(--sidebar-w, 268px) - 18px)));
+  position: absolute; left: 82px; bottom: 12px; z-index: 30; width: min(300px, max(256px, calc(var(--sidebar-w, 268px) - 18px)));
   display: flex; align-items: center; gap: 10px; padding: 9px 8px 9px 12px; border-radius: 12px;
   background: var(--overlay); backdrop-filter: blur(30px); box-shadow: 0 10px 30px rgba(0,0,0,.22), 0 0 0 .5px rgba(0,0,0,.2);
 }

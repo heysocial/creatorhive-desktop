@@ -3,10 +3,14 @@
 # published, that it works for a member:
 #   1. it launches: the main process loads (2.0.69 didn't: "Cannot find module
 #      'fs-extra'"), the window renders, and the updater checks the feed;
-#   2. its update banner works: the same code built as version 0.0.1 finds the
+#   2. it refuses Chromium's remote debugging (exits, and the port never opens);
+#   3. its update banner works: the same code built as version 0.0.1 finds the
 #      latest published release, Squirrel stages it, and "Update ready" shows
 #      in the signed-in window. (The new version isn't published yet, so the
 #      banner offers the current one.)
+# The window is read like a person would: a screenshot of it, and macOS's text
+# recognition (scripts/smoke-window.swift). It needs Screen Recording
+# permission for the terminal; a failure leaves the screenshot in dist/.
 # Any failure exits non-zero, and build.sh then doesn't publish.
 #
 # It runs as a signed-in member, from a profile kept outside the repo
@@ -19,7 +23,6 @@ set -euo pipefail
 cd "${0:A:h}/.."
 
 SMOKE_PROFILE="${SMOKE_PROFILE:-$HOME/.creatorhive-desktop-signing/smoke-profile}"
-PORT=9339
 PREVIEW=0 SIGN_IN=0
 for arg in "$@"; do
   case "$arg" in
@@ -61,7 +64,7 @@ start() {
   rm -rf "$TARGET"
   touch "$MARK"
   ditto "$1" "$TARGET"
-  "$TARGET/Contents/MacOS/${NAME:r}" --user-data-dir="$SMOKE_PROFILE" --remote-debugging-port=$PORT > "$WORK/$2.log" 2>&1 &
+  "$TARGET/Contents/MacOS/${NAME:r}" --user-data-dir="$SMOKE_PROFILE" "${@:3}" > "$WORK/$2.log" 2>&1 &
   PID=$!
 }
 stop() {
@@ -71,9 +74,29 @@ stop() {
   pkill -9 -f -- "--user-data-dir=$SMOKE_PROFILE" 2>/dev/null || true
   sleep 1
 }
-window() { node scripts/smoke-cdp.mjs $PORT "$1" "$2"; }
-WORKSPACE="document.querySelector('div.app') ? 'workspace' : ''"
-RENDERED="document.querySelector('div.app') ? 'workspace' : document.querySelector('.signin-card, .signin-form') ? 'sign-in' : ''"
+swiftc -O scripts/smoke-window.swift -o "$WORK/smoke-window" 2> "$WORK/swiftc.log" || fail "couldn't build smoke-window: $(tail -3 "$WORK/swiftc.log")"
+# The text in the app's main window now (one line each), or nothing.
+read_window() {
+  local id
+  id=$("$WORK/smoke-window" window "$PID" 2>/dev/null) || return 0
+  [[ -n "$id" ]] || return 0
+  screencapture -x -o -l"$id" "$WORK/window.png" 2>/dev/null || return 0
+  "$WORK/smoke-window" text "$WORK/window.png" 2>/dev/null || true
+}
+# Waits up to $1 seconds for a window line matching the regex $2 and prints it;
+# on timeout prints what the window did show, keeps the screenshot in dist/, fails.
+wait_for_window() {
+  local text="" line
+  for i in {1..$1}; do
+    text=$(read_window)
+    line=$(print -r -- "$text" | grep -E -m1 -- "$2" || true)
+    [[ -n "$line" ]] && { print -r -- "$line"; return 0; }
+    sleep 1
+  done
+  [[ -f "$WORK/window.png" ]] && cp "$WORK/window.png" dist/smoke-failure.png 2>/dev/null || true
+  print -r -- "${${text//$'\n'/ | }:0:240}"
+  return 1
+}
 
 if (( SIGN_IN )); then
   say "opening $VERSION with the smoke profile: sign in, then quit the app (⌘Q)"
@@ -85,8 +108,10 @@ fi
 # ---------- 1. the built app launches ----------
 say "launching $NAME $VERSION"
 start "$BUILT" launch
-shown=$(window 60 "$RENDERED") || fail "the window never rendered ($shown). Main-process output: $(head -c 600 "$WORK/launch.log")"
-say "  window rendered ($shown)"
+shown=$(wait_for_window 60 '.') || fail "the window never showed anything. Main-process output: $(head -c 600 "$WORK/launch.log")"
+signed_in=1
+read_window | grep -qE "Welcome to CreatorHive|Forgot password" && signed_in=0
+say "  window rendered ($( (( signed_in )) && echo workspace || echo sign-in))"
 for i in {1..60}; do
   grep -qE "\[update\].*(is not available|Found version)" "$WORK/launch.log" && break
   sleep 1
@@ -94,12 +119,24 @@ done
 grep -qE "\[update\].*(is not available|Found version)" "$WORK/launch.log" \
   || fail "the updater never checked the feed. Output: $(grep '\[update\]' "$WORK/launch.log" | tail -3)"
 say "  updater checked the feed: $(grep -oE '(Update for version [^ ]+ is not available|Found version [^ ]+)' "$WORK/launch.log" | tail -1)"
-[[ "$shown" == workspace ]] || fail "the smoke profile isn't signed in, so the banner can't be checked: run scripts/smoke-test.sh --sign-in once"
+(( signed_in )) || fail "the smoke profile isn't signed in, so the banner can't be checked: run scripts/smoke-test.sh --sign-in once"
 stop
 
-if (( PREVIEW )); then say "launch check passed (preview: no banner check)"; exit 0; fi
+# ---------- 2. no remote debugging ----------
+say "launching with --remote-debugging-port: it must refuse"
+start "$BUILT" debug --remote-debugging-port=9339
+for i in {1..30}; do
+  curl -s -m 0.3 http://127.0.0.1:9339/json/version > /dev/null && fail "the remote debugging port opened: the app must refuse it (src/main/index.js)"
+  kill -0 "$PID" 2>/dev/null || break
+  sleep 0.2
+done
+kill -0 "$PID" 2>/dev/null && fail "the app kept running with --remote-debugging-port"
+PID=""
+say "  refused (exited, port never opened)"
 
-# ---------- 2. the update banner ----------
+if (( PREVIEW )); then say "launch checks passed (preview: no banner check)"; exit 0; fi
+
+# ---------- 3. the update banner ----------
 LATEST=$(curl -fsSL "https://github.com/heysocial/creatorhive-desktop/releases/latest/download/latest-mac.yml" | sed -n 's/^version: //p')
 [[ -n "$LATEST" ]] || fail "couldn't read the published latest-mac.yml"
 say "building this code as 0.0.1 to check it's offered $LATEST"
@@ -114,9 +151,8 @@ done
 grep -q "$LATEST is staged and ready to install" "$WORK/banner.log" \
   || fail "0.0.1 never had $LATEST ready. Updater output: $(grep '\[update\]' "$WORK/banner.log" | grep -v debug | tail -4)"
 say "  $LATEST downloaded and staged by Squirrel"
-banner=$(window 30 "(document.querySelector('.update-banner')?.innerText || '').replace(/\\s+/g, ' ').trim()") \
-  || fail "no update banner in the window ($banner)"
-[[ "$banner" == *"$LATEST"* ]] || fail "the banner doesn't name $LATEST: \"$banner\""
-say "  banner shows: \"$banner\""
+banner=$(wait_for_window 30 "Update ready") || fail "no \"Update ready\" banner in the window. It shows: $banner (screenshot: dist/smoke-failure.png)"
+named=$(wait_for_window 10 "Version ${LATEST//./\\.}") || fail "the banner doesn't name $LATEST. The window shows: $named (screenshot: dist/smoke-failure.png)"
+say "  banner shows: \"$banner\" / \"$named\""
 stop
 say "smoke test passed: $VERSION launches, and its update banner works"
