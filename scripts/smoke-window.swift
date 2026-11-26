@@ -3,6 +3,7 @@
 // the app is opened up for it (released apps refuse remote debugging).
 //   swift scripts/smoke-window.swift window <pid>   the main window's id, or nothing
 //   swift scripts/smoke-window.swift text <png>     the text in a screenshot, one line each
+//   swift scripts/smoke-window.swift locked -       "locked" while the screen is locked (nothing can be captured)
 import AppKit
 import CoreGraphics
 import Vision
@@ -32,6 +33,9 @@ case "text":
   for observation in request.results ?? [] {
     if let line = observation.topCandidates(1).first?.string { print(line) }
   }
+case "locked":
+  let session = CGSessionCopyCurrentDictionary() as? [String: Any] ?? [:]
+  if (session["CGSSessionScreenIsLocked"] as? Bool) == true { print("locked") }
 default:
   exit(2)
 }

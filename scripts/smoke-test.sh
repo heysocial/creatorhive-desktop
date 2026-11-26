@@ -75,6 +75,8 @@ stop() {
   sleep 1
 }
 swiftc -O scripts/smoke-window.swift -o "$WORK/smoke-window" 2> "$WORK/swiftc.log" || fail "couldn't build smoke-window: $(tail -3 "$WORK/swiftc.log")"
+# macOS captures no window while the screen is locked: say so, rather than "the window never showed anything".
+[[ "$("$WORK/smoke-window" locked -)" == locked ]] && fail "this Mac's screen is locked, so the app's window can't be read: unlock it and run again"
 # The text in the app's main window now (one line each), or nothing.
 read_window() {
   local id
