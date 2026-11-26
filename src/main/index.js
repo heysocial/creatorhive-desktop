@@ -33,6 +33,8 @@ const {
   shell,
 } = require("electron");
 const { autoUpdater } = require("electron-updater");
+// Squirrel.Mac, which electron-updater hands each download to: its events say when an update is really installable.
+const nativeUpdater = require("electron").autoUpdater;
 const { ORIGIN, IS_PREVIEW, RENDERER_URL, debug, devEnv } = require("./config");
 const { transient } = require("./network");
 const site = require("./site");
@@ -933,9 +935,38 @@ function createAppMenu() {
 /* ---------- Updates ---------- */
 
 /*
-  An update has finished downloading. Remembered here, not only announced:
-  a window that wasn't showing the workspace at that moment (sign-in, the
-  lock, a reload) asks for it when it loads, and the menus offer the restart.
+  Admin → Bugs 0c2e2820 (Nov 26, a team member on 2.0.66): "Update didn't
+  install: still 2.0.66 after installing 2.0.67", from a writable app in
+  /Applications. Its own logs stay on that Mac, so the exact cause there
+  isn't known; two things that produce exactly that report were wrong:
+
+    - "Update ready" came too early. electron-updater says an update is
+      downloaded as soon as its own download finishes, but Squirrel (which
+      does the install) then fetches that zip, unpacks it and checks its
+      signature: seconds on a fast Mac, longer on a slow one. Quitting in that
+      gap installs nothing, yet the app had already noted "installing 2.0.67",
+      so the next launch reported a failed install. (Reproduced with 2.0.66:
+      quit right after the banner, still 2.0.66.) Now an update counts as
+      ready only once Squirrel says it has staged it.
+    - Once one update was ready, the app stopped checking. Left open from
+      2.0.67's release until after 2.0.69's, it still offered 2.0.67. Now it
+      keeps checking, and a newer release replaces the one that's ready.
+
+  A failed install is tried once more before the app gives up on that version
+  and offers the download; each failure is reported with the end of
+  Squirrel's own log (ShipIt), so the reason is in Admin → Bugs.
+*/
+const MAX_INSTALL_ATTEMPTS = 2;
+const shipItLog = () => path.join(app.getPath("home"), "Library", "Caches", "com.creatorhive.desktop.ShipIt", "ShipIt_stderr.log");
+
+let updatePreparing = null; // downloaded by electron-updater, not yet staged by Squirrel
+let installRemembered = false;
+
+/*
+  Squirrel has staged `version`: from now, Restart (or quitting) installs it.
+  Remembered here, not only announced: a window that wasn't showing the
+  workspace at that moment (sign-in, the lock, a reload) asks for it when it
+  loads, and the menus offer the restart.
 */
 function markUpdateReady(version) {
   // Only a version newer than this one is an update (see updates.js).
@@ -943,11 +974,12 @@ function markUpdateReady(version) {
     updateLog.warn(`downloaded ${version} is not newer than ${app.getVersion()}; not offered`);
     return;
   }
-  // Installing this one already failed once: don't offer a restart that brings the same app back.
+  // Installing this one already failed for good: don't offer a restart that brings the same app back.
   if (updateFailed && updates.compare(version, updateFailed) <= 0) {
     updateLog.warn(`${version} downloaded again, but installing it failed before; offering the download instead`);
     return;
   }
+  updateLog.info(`${version} is staged and ready to install`);
   updateReady = version;
   updateTray();
   createAppMenu();
@@ -958,8 +990,10 @@ ipcMain.handle("update:status", () => updateReady);
 /*
   The last launch's "Restart to Update" (or a quit with one waiting), checked
   now we're running again: still older than what was installed means Squirrel
-  couldn't replace the app. Reported to Admin → Bugs once per version, and
-  the member is told once and offered the download.
+  staged it but couldn't put it in place. Each failure is reported with
+  ShipIt's log. The first time, the update is simply prepared again and
+  offered again; after MAX_INSTALL_ATTEMPTS the member is told once and
+  offered the download.
 */
 function checkLastInstall() {
   const record = installRecord.read();
@@ -970,13 +1004,24 @@ function checkLastInstall() {
     installRecord.clear();
     return;
   }
-  updateFailed = record.version;
+  const attempts = record.attempts ?? 1;
+  const givingUp = attempts >= MAX_INSTALL_ATTEMPTS;
+  if (givingUp) updateFailed = record.version;
   if (record.reported) return;
   const { bundle, writable } = updates.bundleInfo(app.getPath("exe"));
   const detail = `still ${app.getVersion()} after installing ${record.version} (from ${record.from}); app at ${bundle}, ${writable ? "writable" : "not writable by this user"}`;
-  updateLog.error(`install failed: ${detail}`);
-  errors.report({ kind: "error", message: `Update didn't install: ${detail}`, route: "Updates" });
+  updateLog.error(`install failed (try ${attempts} of ${MAX_INSTALL_ATTEMPTS}): ${detail}`);
+  errors.report({
+    kind: "error",
+    message: `Update didn't install (try ${attempts} of ${MAX_INSTALL_ATTEMPTS}): ${detail}`,
+    stack: updates.logTail(shipItLog()) ?? "ShipIt_stderr.log: none",
+    route: "Updates",
+  });
   installRecord.write({ ...record, reported: true });
+  if (!givingUp) {
+    updateLog.info(`preparing ${record.version} (or anything newer) again`);
+    return;
+  }
   setTimeout(() => {
     void dialog.showMessageBox({
       type: "warning",
@@ -993,11 +1038,14 @@ function checkLastInstall() {
   updateTray();
 }
 
-/* Written before installing, so the next launch can tell whether it worked. */
+/* Written before installing, so the next launch can tell whether it worked. Once per launch. */
 function rememberInstall() {
-  if (!updateReady) return;
-  installRecord.write({ version: updateReady, from: app.getVersion(), at: new Date().toISOString() });
-  updateLog.info(`installing ${updateReady} over ${app.getVersion()}`);
+  if (!updateReady || installRemembered) return;
+  installRemembered = true;
+  const previous = installRecord.read();
+  const attempts = previous?.version === updateReady ? (previous.attempts ?? 1) + 1 : 1;
+  installRecord.write({ version: updateReady, from: app.getVersion(), at: new Date().toISOString(), attempts });
+  updateLog.info(`installing ${updateReady} over ${app.getVersion()} (try ${attempts})`);
 }
 
 function configureUpdates() {
@@ -1020,13 +1068,34 @@ function configureUpdates() {
     debug("not in Applications; update checks off");
     return;
   }
-  autoUpdater.autoDownload = true;
+  // checkForUpdates decides what to download (updates.versionToFetch). Must
+  // stay on: it's what hands the download to Squirrel, and installs on Quit.
+  autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.on("update-available", () => { downloadingUpdate = true; });
   autoUpdater.on("update-downloaded", (info) => {
-    debug("update downloaded", info.version);
+    updatePreparing = info.version;
+    updateLog.info(`${info.version} downloaded; Squirrel is preparing it`);
+  });
+  // Squirrel itself (electron's autoUpdater): only now is the update installable.
+  nativeUpdater.on("update-downloaded", () => {
+    const version = updatePreparing;
+    updatePreparing = null;
     downloadingUpdate = false;
-    markUpdateReady(info.version);
+    if (version) markUpdateReady(version);
+  });
+  nativeUpdater.on("error", (error) => {
+    const message = error?.message ?? String(error);
+    const version = updatePreparing;
+    updatePreparing = null;
+    downloadingUpdate = false;
+    if (!version) return;
+    // The next regular check prepares it again.
+    errors.report({
+      kind: "error",
+      message: `Update couldn't be prepared: ${version} over ${app.getVersion()}: ${message}`,
+      stack: updates.logTail(shipItLog()) ?? "ShipIt_stderr.log: none",
+      route: "Updates",
+    });
   });
   autoUpdater.on("error", (error) => {
     downloadingUpdate = false;
@@ -1040,13 +1109,17 @@ function configureUpdates() {
 let lastUpdateCheck = 0;
 let downloadingUpdate = false;
 
-/* Waking up or coming back to the window: look again unless we looked recently, a download is under way, or one is ready. */
+/* Waking up or coming back to the window: look again unless we looked recently or a download is under way. */
 function checkForUpdatesSoon() {
-  if (!app.isPackaged || updateReady || downloadingUpdate) return;
+  if (!app.isPackaged || downloadingUpdate) return;
   if (Date.now() - lastUpdateCheck < UPDATE_RECHECK_AFTER_MS) return;
   void checkForUpdates(false);
 }
 
+/*
+  Looks even when an update is ready: a release that came out since replaces
+  it (the staged one stays installable until the newer one is staged).
+*/
 async function checkForUpdates(fromMenu, isRetry = false) {
   if (!app.isPackaged) {
     if (fromMenu) void dialog.showMessageBox({ message: "Updates are only checked in the installed app." });
@@ -1056,17 +1129,28 @@ async function checkForUpdates(fromMenu, isRetry = false) {
     if (fromMenu) void offerMoveToApplications({ asked: true });
     return;
   }
-  if (!fromMenu && (updateReady || downloadingUpdate)) return;
+  if (!fromMenu && downloadingUpdate) return;
   lastUpdateCheck = Date.now();
   try {
     const result = await autoUpdater.checkForUpdates();
-    watchDownload(result?.downloadPromise, isRetry);
+    const latest = result?.updateInfo?.version ?? null;
+    const fetch = downloadingUpdate
+      ? null
+      : updates.versionToFetch(latest, { current: app.getVersion(), ready: updateReady, gaveUp: updateFailed });
+    if (fetch) {
+      updateLog.info(`latest is ${latest}${updateReady ? ` (${updateReady} is ready)` : ""}; downloading it`);
+      downloadingUpdate = true;
+      watchDownload(autoUpdater.downloadUpdate(), isRetry);
+    }
     if (!fromMenu) return;
-    const available = result?.isUpdateAvailable;
     void dialog.showMessageBox({
-      message: available
-        ? `${app.name} ${result.updateInfo.version} is downloading. You'll be asked to restart when it's ready.`
-        : `You're on the latest version (${app.getVersion()}).`,
+      message: fetch || downloadingUpdate
+        ? `${app.name} ${fetch ?? latest} is downloading. You'll be asked to restart when it's ready.`
+        : updateReady
+          ? `${app.name} ${updateReady} is ready. Choose Restart to Update to install it.`
+          : updateFailed && latest && !updates.isNewer(latest, updateFailed)
+            ? `${app.name} ${updateFailed} couldn't be installed here. Download it and drag it into Applications.`
+            : `You're on the latest version (${app.getVersion()}).`,
     });
   } catch (error) {
     if (fromMenu) {
@@ -1082,12 +1166,11 @@ async function checkForUpdates(fromMenu, isRetry = false) {
 }
 
 /*
-  With autoDownload, electron-updater starts the download itself and hands
-  back its promise; nothing else catches it, so a download cut off mid-way
-  (net::ERR_HTTP2_PROTOCOL_ERROR from GitHub's CDN, Admin → Bugs 01e98c3e)
-  was an unhandled rejection. The "error" event above already logs it; here
-  it's caught, and a dropped connection is tried again once, a minute later.
-  Anything else waits for the next regular check.
+  The download's promise: nothing else catches it, so a download cut off
+  mid-way (net::ERR_HTTP2_PROTOCOL_ERROR from GitHub's CDN, Admin → Bugs
+  01e98c3e) was an unhandled rejection. The "error" event above already logs
+  it; here it's caught, and a dropped connection is tried again once, a
+  minute later. Anything else waits for the next regular check.
 */
 function watchDownload(downloadPromise, isRetry) {
   if (!downloadPromise || typeof downloadPromise.catch !== "function") return;
@@ -1111,6 +1194,7 @@ function retryUpdateCheckOnce(error) {
 
 function installUpdate() {
   if (!app.isPackaged) return void console.log("[update] restart to update", updateReady);
+  if (!updateReady) return;
   quitting = true;
   rememberInstall();
   autoUpdater.quitAndInstall();
@@ -1230,7 +1314,7 @@ app.on("activate", showWindow);
 app.on("before-quit", () => {
   quitting = true;
   // autoInstallOnAppQuit installs a waiting update now.
-  if (app.isPackaged && updateReady && installRecord.read()?.version !== updateReady) rememberInstall();
+  if (app.isPackaged && updateReady) rememberInstall();
   realtime.stop();
 });
 // Closing the window never quits; only Quit does.

@@ -66,8 +66,9 @@ function isNewer(candidate, current) {
 
 /*
   What the last launch tried to install, kept in userData/update-install.json:
-  { version, from, at }. Written just before quitAndInstall (or before a quit
-  with an update waiting, which installs it too).
+  { version, from, at, attempts, reported? }. Written just before
+  quitAndInstall (or before a quit with an update waiting, which installs it
+  too), and only once Squirrel has staged the update.
 */
 function createInstallRecord(file) {
   const read = () => {
@@ -142,6 +143,40 @@ function safeJson(value) {
   }
 }
 
+/**
+ * What checkForUpdates should download, or null. The feed's latest, when it's
+ * newer than what's running, than what's already staged (so a release that
+ * came out since replaces it, and the same one isn't prepared twice), and
+ * than a version whose install was given up on (that one is downloaded by
+ * hand).
+ */
+function versionToFetch(latest, { current, ready = null, gaveUp = null }) {
+  if (!isNewer(latest, current)) return null;
+  if (ready && !isNewer(latest, ready)) return null;
+  if (gaveUp && !isNewer(latest, gaveUp)) return null;
+  return latest;
+}
+
+/** The last `maxBytes` of a log file (whole lines), or null when there's none. */
+function logTail(file, maxBytes = 4000) {
+  try {
+    const size = fs.statSync(file).size;
+    if (!size) return null;
+    const start = Math.max(0, size - maxBytes);
+    const fd = fs.openSync(file, "r");
+    try {
+      const buffer = Buffer.alloc(size - start);
+      fs.readSync(fd, buffer, 0, buffer.length, start);
+      const text = buffer.toString("utf8");
+      return start > 0 ? text.slice(text.indexOf("\n") + 1) : text;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return null;
+  }
+}
+
 /** The .app bundle this is running from, and whether this user can replace it (Squirrel needs to). */
 function bundleInfo(exePath) {
   const bundle = exePath.includes(".app/") ? exePath.slice(0, exePath.indexOf(".app/") + 4) : exePath;
@@ -156,4 +191,4 @@ function bundleInfo(exePath) {
   return { bundle, writable };
 }
 
-module.exports = { parse, compare, isNewer, createInstallRecord, installOutcome, fileLogger, bundleInfo };
+module.exports = { parse, compare, isNewer, versionToFetch, logTail, createInstallRecord, installOutcome, fileLogger, bundleInfo };
