@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld("ch", {
     uploadForm: (request) => ipcRenderer.invoke("files:uploadForm", request),
     clipboardImage: () => ipcRenderer.invoke("clipboard:image"),
     putVideo: (url, type, bytes) => ipcRenderer.invoke("files:putVideo", { url, type, bytes }),
+    putScript: (url, type, bytes) => ipcRenderer.invoke("files:putScript", { url, type, bytes }),
     /** UGC Starter's 3 videos: pick or drop a file, then stream it from disk to a presigned URL. */
     pickVideo: () => ipcRenderer.invoke("files:pickVideo"),
     videoInfo: (file) => {

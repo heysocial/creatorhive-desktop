@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { Check, ChevronLeft, ChevronRight, Lock, MessageCircle, Plus, RotateCw, Send, WifiOff, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, FileText, Lock, MessageCircle, Plus, RotateCw, Send, WifiOff, X } from "lucide-react";
 import { ch, type SessionUser } from "../../lib/bridge";
 import { useImprove } from "../../lib/learn";
 import { editorChat, firstName, listOf } from "../../lib/videoEdits";
@@ -15,9 +15,11 @@ import {
   clipsLabel,
   clipsOf,
   formatDuration,
+  needsScript,
   readClip,
   removeClip,
   retryClip,
+  scriptOf,
   sendVideo,
   slotStates,
   submitForEditing,
@@ -28,6 +30,7 @@ import {
   type SubmissionVideo,
   type VideoSubmissionState,
 } from "../../lib/starter";
+import { ScriptChecklist, ScriptField, ScriptViewer } from "./VideoScript";
 import "../../styles/starter.css";
 
 /*
@@ -190,13 +193,27 @@ function VideoCard({ slot, state, editable, sent }: { slot: number; state: Video
     onDrop: (event: DragEvent) => { event.preventDefault(); setOver(false); take(Array.from(event.dataTransfer.files)); },
   } : {};
   const failed = ups.find((u) => u.status === "failed" && u.error);
+  // The Weekend Starter (creatorhive-app docs/video-scripts.md): "Your script" above "Your video".
+  const withScript = state.scriptRequired === true;
+  const script = scriptOf(state, slot);
+  const [viewing, setViewing] = useState(false);
 
   return (
     <div className={`card mc-card ${over ? "over" : ""}`} {...dropProps}>
       <div className="mc-head">
         <b>Video {slot}</b>
         {sent ? <span className="mc-sent">{editable ? <Send /> : <Check />}Sent · {clipsLabel(editable ? count : clips.length)}</span> : count ? <span className="muted">{clipsLabel(count)}</span> : null}
+        {withScript ? <ScriptChecklist script={Boolean(script)} video={clips.length > 0 && ups.length === 0} /> : null}
       </div>
+      {withScript && !sent ? <ScriptField slot={slot} script={script} required /> : null}
+      {withScript && sent && script ? (
+        <div className="vs-sent-row">
+          <button type="button" className="btn" onClick={() => setViewing(true)}><FileText />View script</button>
+          <span className="faint">Locked after sending</span>
+        </div>
+      ) : null}
+      {viewing && script ? <ScriptViewer script={script} onClose={() => setViewing(false)} /> : null}
+      {withScript && !sent ? <span className="vs-label">Your video</span> : null}
       {count === 0 && editable ? (
         <div className="mc-empty">
           <button className="mc-drop" onClick={choose}>
@@ -245,7 +262,9 @@ export function StarterVideos({ user, video }: { user: SessionUser; video?: numb
   const hasClips = (slot: number) => clipsIn(slot) + uploadsIn(slot) > 0;
   const busy = uploads.length > 0;
   const stuck = uploads.some((u) => u.status === "failed");
-  const unsentReady = unsent.length > 0 && unsent.every((slot) => clipsIn(slot) > 0) && !busy;
+  // The Weekend Starter: no video goes without its script (creatorhive-app docs/video-scripts.md).
+  const noScript = unsent.filter((slot) => needsScript(state, slot));
+  const unsentReady = unsent.length > 0 && unsent.every((slot) => clipsIn(slot) > 0) && !busy && noScript.length === 0;
   const sendAllLabel = unsent.length === 3 ? `Send all 3 to ${editor}` : `Send ${listOf(unsent)} to ${editor}`;
   // The Weekend Starter: step 2 waits for the course.
   const courseFirst = useImprove().data?.starter?.steps.find((s) => s.id === "three_videos")?.locked ?? null;
@@ -257,7 +276,8 @@ export function StarterVideos({ user, video }: { user: SessionUser; video?: numb
   const nextUnsent = after.find((slot) => !hasClips(slot)) ?? after[0] ?? null;
   const oneUploading = one ? uploadsIn(one) > 0 : false;
   const showSendOne = Boolean(one && current && current.stage === null && clipsIn(one!) > 0);
-  const canSendOne = showSendOne && !oneUploading;
+  const oneNoScript = one ? needsScript(state, one) : false;
+  const canSendOne = showSendOne && !oneUploading && !oneNoScript;
 
   async function submit() {
     setSubmitting(true);
@@ -273,6 +293,7 @@ export function StarterVideos({ user, video }: { user: SessionUser; video?: numb
 
   const footLine = stuck ? "A clip didn't upload. Tap it to try again, or remove it."
     : busy ? "Your clips are uploading. You can leave this screen."
+    : noScript.length ? `Add the script for ${listOf(noScript)} to send ${noScript.length === 1 ? "it" : "them"}.`
     : unsentReady ? (unsent.length === 3 ? "All 3 videos have clips. Check they are the right ones." : `${listOf(unsent)} ${unsent.length === 1 ? "has" : "have"} clips. Check they are the right ones.`)
     : unsent.length === 3 ? "Add clips to all 3 videos to send them together, or send each one from its own page"
     : `Add clips to ${listOf(unsent.filter((slot) => clipsIn(slot) === 0))} to send the rest`;
@@ -349,7 +370,7 @@ export function StarterVideos({ user, video }: { user: SessionUser; video?: numb
             </label>
             <div className="mc-foot">
               <button className="btn honey lg" disabled={!canSendOne || submitting} onClick={() => void sendOne(one!)}><Send />{submitting ? "Sending…" : `Send Video ${one} to ${editor}`}</button>
-              <span className="muted">{oneUploading ? "Wait for the clips to finish uploading, then send it." : `${editor} starts on it once you send it. You can still change its clips until he starts editing.`}</span>
+              <span className="muted">{oneUploading ? "Wait for the clips to finish uploading, then send it." : oneNoScript ? "Add the script to send." : `${editor} starts on it once you send it. You can still change its clips until he starts editing.`}</span>
             </div>
           </div>
         ) : null}

@@ -99,6 +99,90 @@ export interface VideoSubmissionState {
   canEditClips?: boolean;
   /** The personal video editor (lib/videoEdits.ts); older servers leave it out. */
   editing?: import("./videoEdits").StudentEditState;
+  /** The Weekend Starter: each video's script, only the videos with one (creatorhive-app docs/video-scripts.md). */
+  scripts?: VideoScript[];
+  /** The Weekend Starter: a video can't be sent without its script. Older servers leave it out. */
+  scriptRequired?: boolean;
+}
+
+/* ------------------------------------------------------------------ scripts (creatorhive-app docs/video-scripts.md)
+
+  The Weekend Starter's "Your script": the exact words said in the video,
+  pasted, a PDF/DOC/DOCX, or a Google Docs/Drive link. The same rules as the
+  website (lib/improve/starter-types.ts there); the server checks them all again.
+*/
+
+export type ScriptKind = "text" | "file" | "link";
+export type ScriptFileType = "pdf" | "doc" | "docx";
+
+export interface VideoScript {
+  slot: number;
+  kind: ScriptKind;
+  text: string | null;
+  wordCount: number | null;
+  fileName: string | null;
+  fileType: ScriptFileType | null;
+  fileSize: number | null;
+  /** A short-lived link to open the file (an hour). */
+  fileUrl: string | null;
+  linkUrl: string | null;
+  linkKind: "docs" | "drive" | null;
+  updatedAt: string;
+  /** The video was sent: the script can't change any more. */
+  locked: boolean;
+}
+
+export const SCRIPT_TEXT_MAX_CHARS = 20000;
+export const SCRIPT_FILE_MAX_BYTES = 20 * 1024 * 1024;
+export const SCRIPT_LINK_ERROR = "Only Google Drive or Google Docs links. Paste your script or upload the file instead.";
+export const SCRIPT_FILE_ERROR = "Upload a PDF, DOC or DOCX file.";
+export const SCRIPT_FILE_TYPES: Record<ScriptFileType, string> = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+};
+
+export function countWords(text: string): number {
+  const words = text.trim().match(/\S+/g);
+  return words ? words.length : 0;
+}
+
+export function scriptFileType(fileName: string): ScriptFileType | null {
+  const ext = /\.(pdf|docx?)$/i.exec(fileName.trim())?.[1]?.toLowerCase();
+  return ext === "pdf" || ext === "doc" || ext === "docx" ? ext : null;
+}
+
+/** A Google Docs or Drive link, cleaned (https), or null for anything else. "docs.google.com/…" without https is fine. */
+export function googleScriptLink(value: string): { url: string; kind: "docs" | "drive" } | null {
+  const raw = value.trim();
+  if (!raw || /\s/.test(raw)) return null;
+  let url: URL;
+  try {
+    url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if (url.username || url.password || url.port) return null;
+  const host = url.hostname.toLowerCase();
+  const kind = host === "docs.google.com" ? "docs" : host === "drive.google.com" ? "drive" : null;
+  if (!kind) return null;
+  url.protocol = "https:";
+  return { url: url.toString().slice(0, 2000), kind };
+}
+
+/** "docs.google.com/document/d/1xQ…/edit". */
+export function shortScriptLink(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/\/d\/([^/]{4})[^/]{6,}/, "/d/$1…");
+}
+
+export function scriptOf(state: VideoSubmissionState | null | undefined, slot: number): VideoScript | null {
+  return state?.scripts?.find((script) => script.slot === slot) ?? null;
+}
+
+/** Whether this video still needs its script before it can be sent (older servers: never). */
+export function needsScript(state: VideoSubmissionState | null | undefined, slot: number): boolean {
+  return state?.scriptRequired === true && !scriptOf(state, slot);
 }
 
 /** POST /api/improve/videos/uploads → PUT the bytes (whole, or in parts), then POST …/complete. */
@@ -664,6 +748,48 @@ export function readClip(file: File, withStill = true): Promise<{ meta: VideoMet
     video.onerror = () => finish(null);
     video.src = url;
   });
+}
+
+/** The saved script goes into the shared state, so every screen shows it at once. */
+function rememberScript(script: VideoScript) {
+  const current = queryClient.getQueryData<{ state: VideoSubmissionState | null; unavailable: string | null }>(SUBMISSION_KEY);
+  if (current?.state) {
+    const scripts = (current.state.scripts ?? []).filter((item) => item.slot !== script.slot).concat(script);
+    queryClient.setQueryData(SUBMISSION_KEY, { ...current, state: { ...current.state, scripts } });
+  }
+  return script;
+}
+
+/** Pasted text, or a Google Docs/Drive link. Throws the server's sentence ("Only Google Drive…", "locked"…). */
+export async function saveScript(slot: number, body: { kind: "text"; text: string } | { kind: "link"; url: string }): Promise<VideoScript> {
+  try {
+    const { script } = await api<{ script: VideoScript }>(`/api/improve/videos/${slot}/script`, { method: "PUT", body });
+    return rememberScript(script);
+  } catch (error) {
+    throw new Error(messageOf(error, "Couldn't save the script. Try again."));
+  }
+}
+
+/** A PDF/DOC/DOCX: ask for an upload link, PUT the file (through the main process), then save it. */
+export async function uploadScriptFile(slot: number, file: File): Promise<VideoScript> {
+  const type = scriptFileType(file.name);
+  if (!type) throw new Error(SCRIPT_FILE_ERROR);
+  if (file.size > SCRIPT_FILE_MAX_BYTES) throw new Error("That file is over 20 MB. Save it smaller, or paste the script instead.");
+  if (file.size === 0) throw new Error("That file is empty. Choose another one, or paste the script instead.");
+  let ticket: { key: string; uploadUrl: string; contentType: string };
+  try {
+    ({ ticket } = await api<{ ticket: typeof ticket }>(`/api/improve/videos/${slot}/script/upload`, { method: "POST", body: { fileName: file.name, sizeBytes: file.size } }));
+  } catch (error) {
+    throw new Error(messageOf(error, "The file didn't upload. Try again."));
+  }
+  const put = await ch.files.putScript(ticket.uploadUrl, ticket.contentType || SCRIPT_FILE_TYPES[type], await file.arrayBuffer());
+  if (!put.ok) throw new Error("The file didn't upload. Try again.");
+  try {
+    const { script } = await api<{ script: VideoScript }>(`/api/improve/videos/${slot}/script`, { method: "PUT", body: { kind: "file", key: ticket.key, fileName: file.name } });
+    return rememberScript(script);
+  } catch (error) {
+    throw new Error(messageOf(error, "The file didn't upload. Try again."));
+  }
 }
 
 /**

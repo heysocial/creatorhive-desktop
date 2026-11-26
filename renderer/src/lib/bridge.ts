@@ -129,6 +129,8 @@ export interface Bridge {
     addToCalendar(ics: string, name: string): Promise<{ ok: boolean }>;
     clipboardImage(): Promise<Uint8Array | null>;
     putVideo(url: string, type: string, bytes: ArrayBuffer): Promise<{ ok: boolean; status?: number; error?: string }>;
+    /** A Weekend Starter script (PDF/DOC/DOCX, ≤ 20 MB) to its presigned R2 URL. */
+    putScript(url: string, type: string, bytes: ArrayBuffer): Promise<{ ok: boolean; status?: number; error?: string }>;
     uploadForm(request: { path: string; field: string; name: string; type: string; bytes: ArrayBuffer; fields?: Record<string, string> }): Promise<{ ok: boolean; status?: number; error?: string; data?: unknown }>;
     pickVideo(): Promise<LocalVideoFile | null>;
     videoInfo(file: File): Promise<LocalVideoFile | null>;

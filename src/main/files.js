@@ -321,6 +321,31 @@ function configure(ipcMain) {
   });
 
   /*
+    The Weekend Starter's script file (creatorhive-app docs/video-scripts.md): a
+    PDF, DOC or DOCX of at most 20 MB, PUT to the presigned R2 URL the server
+    handed out. The window can't reach storage itself (its CSP), so it comes
+    through here. The server checks the file's first bytes again afterwards.
+  */
+  const SCRIPT_TYPES = new Set([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ]);
+  ipcMain.handle("files:putScript", async (_event, { url, type, bytes } = {}) => {
+    try {
+      const { protocol, hostname } = new URL(String(url));
+      if (protocol !== "https:" || !hostname.endsWith(".r2.cloudflarestorage.com")) return { ok: false, error: "bad_url" };
+      if (!SCRIPT_TYPES.has(String(type))) return { ok: false, error: "bad_type" };
+      if (!bytes || bytes.byteLength === 0 || bytes.byteLength > 20 * 1024 * 1024) return { ok: false, error: "bad_size" };
+      const response = await fetch(String(url), { method: "PUT", headers: { "Content-Type": String(type) }, body: Buffer.from(bytes) });
+      return { ok: response.ok, status: response.status };
+    } catch (error) {
+      debug("script put failed", error?.message);
+      return { ok: false, error: "failed" };
+    }
+  });
+
+  /*
     UGC Starter's "Submit your 3 videos": the original file, streamed from disk
     to the presigned R2 URL the server handed out (never read into memory,
     never re-encoded). Progress goes back as `files:putProgress`.
