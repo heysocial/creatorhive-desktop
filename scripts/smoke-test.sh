@@ -55,9 +55,23 @@ MARK="$HOME/Applications/.${NAME:r}.smoke-test"
 [[ -e "$TARGET" && ! -e "$MARK" ]] && fail "$TARGET exists and isn't a smoke-test copy: move it first"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/creatorhive-smoke.XXXXXX")
 PID=""
+# A copy that staged an update leaves ShipIt (Squirrel's installer) waiting for
+# it to exit, and SIGKILL counts: it then swaps the update into $TARGET, even
+# under the next app started there ("Could not get code signature for running
+# application"). Cancel an install aimed at $TARGET; never one for a real install.
+SHIPIT="$HOME/Library/Caches/$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$BUILT/Contents/Info.plist").ShipIt"
+cancel_install() {
+  local state="$SHIPIT/ShipItState.plist" target
+  [[ -f "$state" ]] || return 0
+  target=$(plutil -extract targetBundleURL raw -o - "$state" 2>/dev/null || true)
+  [[ "${target%/}" == "file://${TARGET// /%20}" ]] || return 0
+  launchctl remove "${SHIPIT:t}" 2>/dev/null || true
+  rm -rf "$state" "$SHIPIT"/update.*(N)
+}
 cleanup() {
   [[ -n "$PID" ]] && kill -9 "$PID" 2>/dev/null || true
   pkill -9 -f -- "--user-data-dir=$SMOKE_PROFILE" 2>/dev/null || true
+  cancel_install
   [[ -e "$MARK" ]] && rm -rf "$TARGET" "$MARK"
   rm -rf "$WORK"
 }
@@ -81,6 +95,7 @@ stop() {
   PID=""
   pkill -9 -f -- "--user-data-dir=$SMOKE_PROFILE" 2>/dev/null || true
   sleep 1
+  cancel_install
 }
 swiftc -O scripts/smoke-window.swift -o "$WORK/smoke-window" 2> "$WORK/swiftc.log" || fail "couldn't build smoke-window: $(tail -3 "$WORK/swiftc.log")"
 # macOS captures no window while the screen is locked: say so, rather than "the window never showed anything".
