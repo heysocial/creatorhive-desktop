@@ -74,6 +74,9 @@ if [[ -n "$APP" ]]; then
     <(npx --no-install asar list "$APP/Contents/Resources/app.asar" | sed 's|^/||' | sort -u) \
     | grep -vxE 'node_modules/(react|react-dom|scheduler)' || true)
   [[ -z "$missing" ]] || stop "app.asar is missing packages (is node_modules a symlink?): $(print -r -- "$missing" | head -5 | tr '\n' ' ')"
+  # Never publish an app that hasn't been opened: it must launch, check the
+  # feed, and show the update banner (scripts/smoke-test.sh). No way around it.
+  scripts/smoke-test.sh $( (( PREVIEW )) && echo --preview) || stop "the smoke test failed: not publishing"
 else
   stop "no app in dist/mac-universal"
 fi
