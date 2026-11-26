@@ -64,6 +64,16 @@ if [[ -n "$APP" ]]; then
   [[ "$BUILT" == "$VERSION" ]] || stop "dist/ holds $BUILT, package.json says $VERSION: build again"
   # Without it the installed app can't find its updates.
   [[ -f "$APP/Contents/Resources/app-update.yml" ]] || stop "$APP has no app-update.yml"
+  # 2.0.69 (Nov 25) was built in a worktree whose node_modules was a symlink to
+  # another checkout: electron-builder packed none of the dependencies, and the
+  # app stopped at launch on "Cannot find module 'fs-extra'" (so it couldn't
+  # update itself either). Every top-level production package must be in
+  # app.asar; react, react-dom and scheduler are bundled into renderer/dist.
+  missing=$(comm -23 \
+    <(npm ls --omit=dev --all --parseable 2>/dev/null | sed "s|^$PWD/||" | grep '^node_modules/' | grep -v '^node_modules/.*/node_modules/' | sort -u) \
+    <(npx --no-install asar list "$APP/Contents/Resources/app.asar" | sed 's|^/||' | sort -u) \
+    | grep -vxE 'node_modules/(react|react-dom|scheduler)' || true)
+  [[ -z "$missing" ]] || stop "app.asar is missing packages (is node_modules a symlink?): $(print -r -- "$missing" | head -5 | tr '\n' ' ')"
 else
   stop "no app in dist/mac-universal"
 fi

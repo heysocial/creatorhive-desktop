@@ -22,6 +22,9 @@ if [[ "${1:-}" == "preview" ]]; then
   shift
 fi
 
+# A symlinked node_modules (shared with another worktree) packs no dependencies: 2.0.69.
+[[ -L node_modules || ! -d node_modules ]] && { echo "✗ node_modules is a symlink or missing: run npm ci here first" >&2; exit 1; }
+
 npm run typecheck
 npm run build:renderer
 
