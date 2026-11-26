@@ -101,6 +101,8 @@ export interface Bridge {
     installUpdate(): void;
     /** The version that has downloaded and waits for a restart, if any. */
     updateStatus(): Promise<string | null>;
+    /** The banner is on screen (written to updates.log; the smoke test and support read it). */
+    updateBannerShown(version: string): void;
     checkUpdates(): void;
     onCommand: Listen<string>;
     onNavigate: Listen<string>;

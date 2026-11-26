@@ -33,7 +33,12 @@ for arg in "$@"; do
 done
 
 say() { print -r -- "• $*"; }
-fail() { print -r -- "✗ smoke test: $*" >&2; exit 1; }
+fail() {
+  # The app's own output goes with the screenshot, for working out why.
+  [[ -n "${WORK:-}" ]] && for log in "$WORK"/*.log(N); do cp "$log" "dist/smoke-${log:t}" 2>/dev/null || true; done
+  print -r -- "✗ smoke test: $*" >&2
+  exit 1
+}
 
 # SMOKE_APP: test another build (e.g. an old release) instead of dist/.
 BUILT=${SMOKE_APP:-$(print -r dist/mac-universal/*.app(N[1]))}
@@ -64,7 +69,10 @@ start() {
   rm -rf "$TARGET"
   touch "$MARK"
   ditto "$1" "$TARGET"
-  "$TARGET/Contents/MacOS/${NAME:r}" --user-data-dir="$SMOKE_PROFILE" "${@:3}" > "$WORK/$2.log" 2>&1 &
+  # --disable-backgrounding-occluded-windows: Chromium stops painting a window
+  # that's fully covered (by whatever the person at this Mac is working in),
+  # and a screenshot of it then shows its last frame, from before the banner.
+  "$TARGET/Contents/MacOS/${NAME:r}" --user-data-dir="$SMOKE_PROFILE" --disable-backgrounding-occluded-windows "${@:3}" > "$WORK/$2.log" 2>&1 &
   PID=$!
 }
 stop() {
@@ -153,6 +161,8 @@ done
 grep -q "$LATEST is staged and ready to install" "$WORK/banner.log" \
   || fail "0.0.1 never had $LATEST ready. Updater output: $(grep '\[update\]' "$WORK/banner.log" | grep -v debug | tail -4)"
 say "  $LATEST downloaded and staged by Squirrel"
+for i in {1..20}; do grep -q "banner shown for $LATEST" "$WORK/banner.log" && break; sleep 1; done
+grep -q "banner shown for $LATEST" "$WORK/banner.log" || fail "the window never put up the banner for $LATEST (no \"banner shown\" in its log)"
 banner=$(wait_for_window 30 "Update ready") || fail "no \"Update ready\" banner in the window. It shows: $banner (screenshot: dist/smoke-failure.png)"
 named=$(wait_for_window 10 "Version ${LATEST//./\\.}") || fail "the banner doesn't name $LATEST. The window shows: $named (screenshot: dist/smoke-failure.png)"
 say "  banner shows: \"$banner\" / \"$named\""

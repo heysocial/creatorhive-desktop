@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { RefreshCw, X } from "lucide-react";
 import { ch } from "../lib/bridge";
 
@@ -7,6 +8,7 @@ import { ch } from "../lib/bridge";
   launch; the CreatorHive menu and the menu bar icon keep Restart to Update.
 */
 export function UpdateBanner({ version, onLater }: { version: string; onLater: () => void }) {
+  useEffect(() => ch.app.updateBannerShown(version), [version]);
   return (
     <div className="update-banner" role="status">
       <RefreshCw className="icon" />

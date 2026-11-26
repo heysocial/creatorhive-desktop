@@ -996,9 +996,14 @@ function markUpdateReady(version) {
   updateReady = version;
   updateTray();
   createAppMenu();
+  updateLog.info(`telling the window: ${mainWindow && !mainWindow.isDestroyed() ? (mainWindow.webContents.isLoading() ? "loading" : "loaded") : "no window"}`);
   send("update:ready", version);
 }
-ipcMain.handle("update:status", () => updateReady);
+ipcMain.handle("update:status", () => {
+  updateLog.info(`window asked for the update status: ${updateReady ?? "none ready"}`);
+  return updateReady;
+});
+ipcMain.on("update:banner-shown", (_event, version) => updateLog.info(`banner shown for ${String(version).slice(0, 40)}`));
 
 /*
   The last launch's "Restart to Update" (or a quit with one waiting), checked
