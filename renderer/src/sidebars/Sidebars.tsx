@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { contactLabel, useAreaLocked, useHubHidden, useMeAccess, useStarterContacts, type StarterContact } from "../lib/access";
+import { contactLabel, useAreaHidden, useAreaLocked, useHubHidden, useMeAccess, useStarterContacts, type StarterContact } from "../lib/access";
 import {
   Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
   Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen, Briefcase, ExternalLink,
@@ -91,6 +91,8 @@ const pinnedIds = (contacts: StarterContact[], conversations: Conversation[]) =>
 function ChannelList({ workspace, isOwner = false }: { workspace: Workspace; isOwner?: boolean }) {
   // A plan without channels (UGC Starter, The Weekend Starter): one locked row, nothing asked for.
   const locked = useAreaLocked("channels") && workspace === "creatorhive";
+  // Current Commerce's creators: no Academy channels, so no section at all.
+  const hidden = useAreaHidden("channels") && workspace === "creatorhive";
   const { data, isLoading, isError } = useChannels(workspace, !locked);
   const channels = useMemo(
     () => soonLast((data ?? []).filter((c) => c.joined || !c.isPrivate).sort((a, b) => channelName(a.name).localeCompare(channelName(b.name))), (c) => c, data),
@@ -99,6 +101,7 @@ function ChannelList({ workspace, isOwner = false }: { workspace: Workspace; isO
   // Rename channel (Nov 19 2026): the owner, CreatorHive's community channels, never a brand's; the server checks again.
   const canRename = isOwner && workspace === "creatorhive";
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  if (hidden) return null;
   return (
     <SidebarSection id={`${workspace}-channels`} title="Channels">
       {locked ? <SidebarItem icon={<Hash />} label="All channels" view={{ kind: "feed" }} locked /> : null}

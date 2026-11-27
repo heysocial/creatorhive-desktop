@@ -46,6 +46,10 @@ export interface MeAccess {
   ownFeed?: { key: string; label: string } | null;
   /** The team: other feeds shown as tabs after All (Current Commerce). */
   staffFeeds?: { key: string; label: string }[] | null;
+  /** A Current Commerce creator (servers from Nov 27 2026). */
+  currentCommerce?: boolean;
+  /** Areas left out entirely rather than shown locked: "channels" for Current Commerce. */
+  hidden?: string[];
 }
 
 /**
@@ -136,6 +140,12 @@ export function useFeedAccess() {
     groupEnded: limited && group && !canWrite(WEEKEND_STARTER),
     endsAt: access?.communityEndsAt ?? null,
   };
+}
+
+/** The plan leaves this area out entirely, not even locked: Current Commerce's creators and "channels". */
+export function useAreaHidden(area: string): boolean {
+  const hidden = useMeAccess().data?.access?.hidden;
+  return Array.isArray(hidden) && hidden.includes(area);
 }
 
 /** The plan is known and locks this area ("channels", "events", "members", "leaderboard"…). */
