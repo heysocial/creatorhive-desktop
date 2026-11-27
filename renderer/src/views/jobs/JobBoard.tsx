@@ -455,7 +455,7 @@ function Tile({ item, busy, onRemove, onRetry }: { item: Item; busy: boolean; on
   const pct = item.info.size ? Math.min(100, Math.round((item.sent / item.info.size) * 100)) : 0;
   const up = item.status === "queued" || item.status === "uploading";
   return (
-    <div className={`mc-tile ${up || item.status === "failed" ? "up" : ""} ${item.status === "failed" ? "failed" : ""}`} title={item.error ?? item.info.name}>
+    <div className={`mc-tile ${item.status === "ready" ? "" : "up"} ${item.status === "failed" ? "failed" : ""}`} title={item.error ?? item.info.name}>
       {item.still ? <img src={item.still} alt="" /> : null}
       {item.status === "uploading" ? <span className="mc-mid"><b>{pct}%</b></span> : null}
       {item.status === "queued" ? <span className="mc-mid"><span>Waiting…</span></span> : null}

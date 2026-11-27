@@ -100,7 +100,7 @@ export function mineLine(mine: AffiliateCampaign["mine"] | undefined): string | 
   if (!mine || !mine.total) return null;
   const parts = [`${mine.total} sent`];
   if (mine.inReview) parts.push(`${mine.inReview} in review`);
-  if (mine.live) parts.push(`${mine.live} in the marketplace`);
+  if (mine.live) parts.push(`${mine.live} live`);
   if (mine.bought) parts.push(`${mine.bought} bought`);
   if (mine.rejected) parts.push(`${mine.rejected} not accepted`);
   return parts.join(" · ");
