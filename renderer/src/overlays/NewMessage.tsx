@@ -3,7 +3,8 @@ import { Loader2, Search, X } from "lucide-react";
 import { api, keys, queryClient, rateLimitMessage, type Conversation, type Workspace } from "../lib/api";
 import { ch } from "../lib/bridge";
 import { useMembers, type Member } from "../lib/community";
-import { contactLabel, useStarterContacts } from "../lib/access";
+import { contactLabel, useMeAccess, useStarterContacts } from "../lib/access";
+import { useQuery } from "@tanstack/react-query";
 import { nav } from "../lib/nav";
 import { Avatar } from "../lib/ui";
 import { Badge } from "../views/messages/MessageRow";
@@ -16,12 +17,22 @@ export function NewMessage({ onClose, workspace }: { onClose: () => void; worksp
     instead ("Valentin · Video editor"), one at a time.
   */
   const contacts = useStarterContacts();
-  const limited = contacts.length > 0 && workspace === "creatorhive";
-  const directory = useMembers(!limited).data;
-  const members = useMemo(() => (limited
-    ? contacts.map((contact) => ({ id: contact.id, name: contactLabel(contact), avatarUrl: contact.avatarUrl } as Member))
-    : directory), [limited, contacts, directory]);
   const [q, setQ] = useState("");
+  /*
+    A Current Commerce creator (servers from Nov 27 2026): only other Current Commerce creators and the
+    team members they may message, as the server's picker answers them.
+  */
+  const currentCommerce = useMeAccess().data?.access?.currentCommerce === true && workspace === "creatorhive";
+  const picker = useQuery({
+    queryKey: ["members", "picker", q.trim().toLowerCase()],
+    enabled: currentCommerce,
+    queryFn: () => api<{ members: Member[] }>(`/api/members?view=picker&limit=40&q=${encodeURIComponent(q.trim())}`).then((r) => r.members),
+  }).data;
+  const limited = contacts.length > 0 && workspace === "creatorhive";
+  const directory = useMembers(!limited && !currentCommerce).data;
+  const members = useMemo(() => (currentCommerce ? picker : limited
+    ? contacts.map((contact) => ({ id: contact.id, name: contactLabel(contact), avatarUrl: contact.avatarUrl } as Member))
+    : directory), [currentCommerce, picker, limited, contacts, directory]);
   const [picked, setPicked] = useState<Member[]>([]);
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
