@@ -3,6 +3,7 @@ import { nav } from "../../lib/nav";
 import { useMeAccess } from "../../lib/access";
 import { AcademyIncludes, upgradeUrlOf } from "../../shell/Upgrade";
 import { talkToTeam } from "../../shell/Booking";
+import { messagePerson } from "../people/Profile";
 
 /**
  * What a Hub view shows on a plan without the Hub (The Weekend Starter): a
@@ -23,7 +24,12 @@ export function HubLocked() {
             <p className="soon-description">Here's everything the UGC Academy includes:</p>
             <AcademyIncludes access={access} />
             <div className="academy-locked-actions">
-              <button className="btn honey" onClick={() => talkToTeam(access, url)}>{access?.talkLabel || "Talk to our team"}</button>
+              {/* A Challenger: "Talk to Our Team" opens a DM with Vince (servers from Nov 27 2026). */}
+              {access?.hubTalk ? (
+                <button className="btn honey" onClick={() => void messagePerson(access.hubTalk!.userId)}>{access.hubTalk.label}</button>
+              ) : (
+                <button className="btn honey" onClick={() => talkToTeam(access, url)}>{access?.talkLabel || "Talk to our team"}</button>
+              )}
               <button className="btn" onClick={() => nav.open({ kind: "learn", page: "improve" }, "learn", "ch")}>Open Learn</button>
             </div>
           </div>

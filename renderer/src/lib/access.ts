@@ -40,6 +40,12 @@ export interface MeAccess {
   tenDayAi?: { open: boolean; endsAt: string | null; dailyScripts: number; dailyVideos: number } | null;
   /** The locked sheet's button: "Talk to Academy" for a Challenger; null means "Talk to our team". */
   talkLabel?: string | null;
+  /** A Challenger's locked Hub: its button opens a DM with this person (Vince). Servers from Nov 27 2026. */
+  hubTalk?: { label: string; userId: string; name: string } | null;
+  /** A Current Commerce creator's own feed, in place of the Academy's: its one tab. Servers from Nov 27 2026. */
+  ownFeed?: { key: string; label: string } | null;
+  /** The team: other feeds shown as tabs after All (Current Commerce). */
+  staffFeeds?: { key: string; label: string }[] | null;
 }
 
 /**
@@ -49,6 +55,8 @@ export interface MeAccess {
  */
 export interface MeAccessResponse {
   access: MeAccess;
+  /** An agency's creator: their Job board is open (servers from Nov 27 2026: Current Commerce). */
+  jobBoard?: boolean;
   mustChangePassword?: boolean;
   welcomePending?: boolean;
 }
@@ -86,6 +94,8 @@ export function useHubHidden(): boolean {
 export const WEEKEND_STARTER = "weekend_starter";
 /** The 10-Day Portfolio Challenge group (creatorhive-app docs/ten-day-challenge.md). */
 export const TEN_DAY = "ten_day";
+/** Current Commerce's feed (creatorhive-app docs/current-commerce.md). */
+export const CURRENT_COMMERCE = "current_commerce";
 
 /**
  * The feed's locks, from the website's rules (creatorhive-app lib/access.ts):
@@ -101,8 +111,11 @@ export function useFeedAccess() {
   const group = access?.weekendGroup === true;
   const tenDayGroup = access?.tenDayGroup === true;
   // Each group's tab only for its members (and the team, whose list is null).
+  // Current Commerce's feed: its creators (their list) and the team (`staffFeeds`).
+  const staffFeeds = Array.isArray(access?.staffFeeds) ? access.staffFeeds : [];
   const canRead = (category: string) => (limited ? list.includes(category)
-    : category === WEEKEND_STARTER ? group : category === TEN_DAY ? tenDayGroup : true);
+    : category === WEEKEND_STARTER ? group : category === TEN_DAY ? tenDayGroup
+    : category === CURRENT_COMMERCE ? staffFeeds.some((feed) => feed.key === category) : true);
   const writable = access?.feedWritable;
   const canWrite = (category: string) => {
     if (!canRead(category)) return false;
@@ -113,6 +126,9 @@ export function useFeedAccess() {
     limited,
     group,
     tenDayGroup,
+    /** A feed of their own (Current Commerce): its one tab, and no other. */
+    ownFeed: access?.ownFeed ?? null,
+    staffFeeds,
     canRead,
     canWrite,
     home: access?.feedHome ?? (limited ? list[0] ?? "win" : "all"),

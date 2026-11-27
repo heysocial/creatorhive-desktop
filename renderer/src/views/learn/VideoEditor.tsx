@@ -156,6 +156,7 @@ function AllowancePill({ allowance }: { allowance: VeAllowance }) {
     <span className="aive-allow" title={`${allowance.changesLeft} of ${allowance.changesLimit} changes left today`}>
       <span className="dots">{Array.from({ length: allowance.videosLimit }, (_, i) => <i key={i} className={i < used ? "" : "on"} />)}</span>
       {allowance.videosLabel ?? `${allowance.videosLeft} of ${allowance.videosLimit} videos left today`}
+      {allowance.upgradeUrl ? <> · <a href={allowance.upgradeUrl} onClick={(event) => { event.preventDefault(); ch.app.openExternal(allowance.upgradeUrl!); }}>Upgrade: {allowance.priceLabel || "$20/month"} for unlimited</a></> : null}
     </span>
   );
 }

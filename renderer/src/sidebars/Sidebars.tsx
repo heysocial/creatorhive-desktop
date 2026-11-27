@@ -2,10 +2,10 @@ import { useMemo, useState } from "react";
 import { contactLabel, useAreaLocked, useHubHidden, useMeAccess, useStarterContacts, type StarterContact } from "../lib/access";
 import {
   Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
-  Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen,
+  Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen, Briefcase, ExternalLink,
 } from "lucide-react";
 import { api, keys, queryClient, useChannels, useConversations, type Conversation, type Workspace } from "../lib/api";
-import type { SessionUser } from "../lib/bridge";
+import { ch, type SessionUser } from "../lib/bridge";
 import { commands } from "../lib/commands";
 import { nav, useNav } from "../lib/nav";
 import { Avatar, channelName } from "../lib/ui";
@@ -148,6 +148,8 @@ function CreatorHiveHome({ isOwner }: { isOwner: boolean }) {
   const eventsLocked = useAreaLocked("events");
   const leaderboardLocked = useAreaLocked("leaderboard");
   const membersLocked = useAreaLocked("members");
+  // An agency's creator (Current Commerce): the Job board, on the website for now (servers from Nov 27 2026).
+  const jobBoard = useMeAccess().data?.jobBoard === true;
   return (
     <>
       <SidebarHead title="CreatorHive" action={() => commands.run("new-message")} />
@@ -158,6 +160,13 @@ function CreatorHiveHome({ isOwner }: { isOwner: boolean }) {
         <SidebarItem icon={<Calendar />} label="Events" view={{ kind: "events" }} meta={nextEvent} locked={eventsLocked} />
         <SidebarItem icon={<Trophy />} label="Leaderboard" view={{ kind: "leaderboard" }} locked={leaderboardLocked} />
         <SidebarItem icon={<Users />} label="Members" view={{ kind: "members" }} locked={membersLocked} />
+        {jobBoard ? (
+          <button className="sb-item" title="Opens the Job board on the website" onClick={() => ch.app.openSite("/jobs")}>
+            <Briefcase />
+            <span className="label">Job board</span>
+            <ExternalLink className="sb-lock" aria-hidden />
+          </button>
+        ) : null}
         <ChannelList workspace="creatorhive" isOwner={isOwner} />
         <DmList workspace="creatorhive" />
       </div>

@@ -118,9 +118,12 @@ export interface VeAllowance {
   changesLimit: number;
   messagesLeft: number;
   messagesLimit: number;
-  /** The 10-Day plan only: its day runs midnight to midnight Eastern, and its line ("1 video left today", or the used-up sentence). */
-  period?: "day_eastern";
+  /** "month": a Challenger's free 10 a month (servers from Nov 27 2026); "day_eastern" was the old 10-Day plan. `videosLabel` is the line to show. */
+  period?: "day_eastern" | "month";
   videosLabel?: string;
+  /** On the free month: the $20/month unlimited checkout, and its price. */
+  upgradeUrl?: string;
+  priceLabel?: string;
 }
 
 export type VeStatus = "queued" | "working" | "preview_ready" | "done" | "error" | "cancelled";
