@@ -41,13 +41,12 @@ function GetStarted({ meId, popout, onClose }: { meId: string; popout: boolean; 
   const last = step === STEPS.length - 1;
   const foot = (
     <>
-      <span className="faint welcome-steps">Step {step + 1} of {STEPS.length}</span>
       {step > 0 ? <button className="btn" onClick={() => setStep(step - 1)}>Back</button> : null}
       <button className="btn honey" onClick={() => (last ? onClose() : setStep(step + 1))}>{last ? "Done" : "Next"}</button>
     </>
   );
   return (
-    <Modal title={STEPS[step]} onClose={onClose} width={560} foot={foot}>
+    <Modal title={`Step ${step + 1} · ${STEPS[step]}`} onClose={onClose} width={560} foot={foot}>
       {info.isError ? <div className="err-state">Couldn't load this. <button className="link" onClick={() => void info.refetch()}>Try again</button></div>
         : step === 0 ? <WelcomeVideo info={info.data} />
         : <Team info={info.data} meId={meId} onMessage={(id) => {
@@ -85,7 +84,7 @@ function Team({ info, meId, onMessage }: { info: WelcomeInfo | undefined; meId: 
       {info.team.map((person) => (
         <div key={person.userId} className="t-card static">
           <Avatar name={person.name} src={person.avatarUrl} seed={person.userId} size={40} radius="10px" />
-          <span><b>{person.name}</b><small>{person.role}</small></span>
+          <span className="welcome-who"><b>{person.name}</b><small>{person.role}</small></span>
           {person.userId !== meId ? <button className="btn" onClick={() => onMessage(person.userId)}><MessageCircle />Message</button> : null}
         </div>
       ))}

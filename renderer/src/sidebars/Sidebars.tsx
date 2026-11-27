@@ -92,8 +92,9 @@ function ChannelList({ workspace, isOwner = false }: { workspace: Workspace; isO
   // A plan without channels (UGC Starter, The Weekend Starter): one locked row, nothing asked for.
   const locked = useAreaLocked("channels") && workspace === "creatorhive";
   const { data, isLoading, isError } = useChannels(workspace, !locked);
+  // Welcome first (Nov 27 2026), then A–Z; coming-soon channels last.
   const channels = useMemo(
-    () => soonLast((data ?? []).filter((c) => c.joined || !c.isPrivate).sort((a, b) => channelName(a.name).localeCompare(channelName(b.name))), (c) => c, data),
+    () => soonLast((data ?? []).filter((c) => c.joined || !c.isPrivate).sort((a, b) => Number(Boolean(b.isWelcome)) - Number(Boolean(a.isWelcome)) || channelName(a.name).localeCompare(channelName(b.name))), (c) => c, data),
     [data],
   );
   // Rename channel (Nov 19 2026): the owner, CreatorHive's community channels, never a brand's; the server checks again.

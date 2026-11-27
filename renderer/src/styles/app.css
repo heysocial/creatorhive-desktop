@@ -311,8 +311,9 @@ img { -webkit-user-drag: none; }
 .chip-file button:hover { background: var(--sel); }
 .mention-list { position: absolute; left: 10px; bottom: calc(100% + 6px); width: 300px; background: var(--overlay); backdrop-filter: blur(30px); border-radius: 10px; padding: 4px; z-index: 20; box-shadow: 0 10px 30px rgba(0,0,0,.2), 0 0 0 .5px rgba(0,0,0,.2); }
 .mention-list button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 8px; border-radius: 7px; font-size: 13px; text-align: left; }
-.mention-list button span { color: var(--ink-3); font-size: 12px; margin-left: auto; }
-.mention-list button.sel { background: var(--blue); color: #fff; } .mention-list button.sel span { color: rgba(255,255,255,.8); }
+/* The sub-label on the right; not the avatar (also a span: initials for anyone without a photo). */
+.mention-list button > span:not(.av) { color: var(--ink-3); font-size: 12px; margin-left: auto; }
+.mention-list button.sel { background: var(--blue); color: #fff; } .mention-list button.sel > span:not(.av) { color: rgba(255,255,255,.8); }
 .mention-list .mention-hash { width: 16px; height: 16px; margin: 0 3px; flex: none; color: var(--ink-3); } .mention-list button.sel .mention-hash { color: #fff; }
 /* A channel only admins post in (Scam Alert): the composer's place, read-only (the same look as the read-only comment box). */
 .composer-readonly { flex: none; display: flex; align-items: center; gap: 8px; margin: 0 18px 16px; padding: 12px 14px; border-radius: 12px; background: var(--card-2); box-shadow: inset 0 0 0 .5px var(--line-strong); color: var(--ink-3); font-size: 13px; }
@@ -874,6 +875,7 @@ html.is-popout body { background: var(--card); }
 .ev-row .faint { margin-left: auto; font-size: 12.5px; }
 /* Events → Past: the month chips scroll sideways when there are many; the month's name above its groups. */
 .ev-months { overflow-x: auto; padding: 10px 0 2px; }
+.ev-row .t.wide { width: 185px; white-space: nowrap; }
 .ev-month-title { margin: 12px 0 0; font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
 .swatch { width: 10px; height: 10px; border-radius: 3px; }
 .swatch.honey { background: var(--honey); } .swatch.blue { background: #0A84FF; } .swatch.green { background: #34C759; } .swatch.purple { background: #7E3AF2; } .swatch.pink { background: #DB2777; } .swatch.orange { background: #F57828; }
@@ -2449,5 +2451,4 @@ html.is-popout body { background: var(--card); }
 .welcome-start-text b { font-size: 13.5px; }
 .welcome-start-text small { font-size: 12px; color: var(--ink-3); }
 .welcome-team { display: flex; flex-direction: column; gap: 8px; }
-.welcome-team .t-card > span { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.welcome-steps { margin-right: auto; font-size: 12.5px; }
+.welcome-team .welcome-who { flex: 1; display: flex; flex-direction: column; min-width: 0; }

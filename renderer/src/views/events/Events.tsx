@@ -266,7 +266,7 @@ function PastView({ past, selected, onSelect }: { past: CommunityEvent[]; select
           {group.sessions.map((e) => (
             <button key={e.id} className={`ev-row ${selected === e.id ? "sel" : ""}`} onClick={() => onSelect(e.id)}>
               <span className={`swatch ${colorFor(e)}`} />
-              <span className="t">{new Date(e.startsAt).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {clock(e.startsAt)}</span>
+              <span className="t wide">{new Date(e.startsAt).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {clock(e.startsAt)}</span>
               <b>{e.title}</b>
               <span className="faint">{e.recordingUrl ? "Recording" : e.organizer ?? ""}</span>
             </button>

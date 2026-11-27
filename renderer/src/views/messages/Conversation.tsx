@@ -395,7 +395,9 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
   const [dragging, setDragging] = useState(false);
   const composer = useRef<ComposerHandle>(null);
   const people = useMentionSearch(where, workspace);
-  const chDm = where.kind === "dm" && !heySocial;
+  // Brand DMs (Brand Side) offer neither @ nor #: only CreatorHive's own DMs do.
+  const brandDm = Boolean(conversation && ((conversation as { brand?: unknown }).brand || (conversation.workspace as string) === "brand"));
+  const chDm = where.kind === "dm" && !heySocial && !brandDm;
   const dmSearch = useDmSearch(conversation, chDm);
   const canPost = channel?.canPost !== false;
   const typing = useLiveThread(where, realtimeChannel, user.id);
@@ -527,7 +529,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
         {!canPost ? <ReadOnlyFooter /> : <Composer ref={composer} draftKey={`${where.kind}:${where.id}`} storageKey={chDm ? `dm-draft:${where.id}` : undefined}
           uploadVideo={heySocial ? undefined : (file, onProgress, signal) => uploadVideo(where, file, onProgress, signal)}
           voice={where.kind === "dm" || heySocial ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder={dock?.placeholder ?? (where.kind === "channel" ? `Message #${title}` : `Message ${title}`)}
-          searchPeople={where.kind === "channel" || heySocial ? people : dmSearch.people} searchChannels={chDm ? dmSearch.rooms : undefined} onTyping={sendTyping}
+          searchPeople={where.kind === "channel" || heySocial ? people : chDm ? dmSearch.people : undefined} searchChannels={chDm ? dmSearch.rooms : undefined} onTyping={sendTyping}
           onSend={async (input: ComposerSend) => {
             if (input.videos.length) {
               // Goes out now; the message shows the upload and becomes real when it's done.
