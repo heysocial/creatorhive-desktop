@@ -1,5 +1,5 @@
 import { ch } from "./bridge";
-import { queryClient, keys, type Channel, type Conversation } from "./api";
+import { fetchChannels, queryClient, keys, type Channel, type Conversation } from "./api";
 import { nav, type Location, type View } from "./nav";
 
 /*
@@ -145,7 +145,13 @@ const SETTINGS_TABS: Record<string, Parameters<typeof openSettings>[0]> = { "/se
 export async function openPath(target: string) {
   // A reply from support (/?support=open): the chat opens over whatever is showing.
   if (/^\/?\?(?:.*&)?support=open(?:&|$)/.test(target)) { window.dispatchEvent(new Event("ch:support-open")); return; }
-  const location = locationForPath(target);
+  let location = locationForPath(target);
+  // A `#Channel` link (a DM's channel mention) to a channel this window hasn't listed yet: list them, then look again.
+  if (!location && /^\/channels\?/.test(target)) {
+    await Promise.all((["creatorhive", "heysocial"] as const).map((workspace) =>
+      queryClient.fetchQuery({ queryKey: keys.channels(workspace), queryFn: () => fetchChannels(workspace) }).catch(() => undefined)));
+    location = locationForPath(target);
+  }
   if (location) {
     openLocation(location);
     return;

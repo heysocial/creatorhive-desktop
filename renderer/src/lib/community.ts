@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, type InfiniteData } from "@tanstack/react-query";
-import { api, ApiError, queryClient, rateLimitMessage } from "./api";
+import { api, ApiError, isAdminsOnly, keys, queryClient, rateLimitMessage, sendRefusal } from "./api";
 
 /* Phase 2 data: messages, the feed, events, the leaderboard and members. Shapes as the website's routes send them. */
 
@@ -220,9 +220,18 @@ function inOrder<T>(where: Thread, request: () => Promise<T>): Promise<T> {
   return run;
 }
 
+export type Ranges = { id: string; start: number; end: number }[];
+
+/** A refused send in a channel only admins post in: the list learns `canPost: false`, so the composer gives way to the footer. */
+function onRefused(where: Thread, error: unknown) {
+  if (where.kind === "channel" && isAdminsOnly(error)) void queryClient.invalidateQueries({ queryKey: keys.channels("creatorhive") });
+}
+
 export async function sendMessage(where: Thread, input: {
   body: string;
-  mentions?: { id: string; start: number; end: number }[];
+  mentions?: Ranges;
+  /** CreatorHive DMs: `#Channel` links (channel ids), docs/academy-onboarding-nov27.md §4. */
+  channelMentions?: Ranges;
   files?: Attachment[];
   parentMessageId?: string | null;
   replyToMessageId?: string | null;
@@ -253,15 +262,17 @@ export async function sendMessage(where: Thread, input: {
         attachments: files,
         parentMessageId: input.parentMessageId ?? null,
         clientMutationId,
-        // Channels, and Hey Social DMs (CreatorHive DMs ignore them).
+        // Channels and every DM (CreatorHive DMs take them since Nov 27 2026).
         ...(where.kind === "channel" || input.mentions?.length ? { mentions: input.mentions ?? [] } : {}),
+        ...(input.channelMentions?.length ? { channelMentions: input.channelMentions } : {}),
         ...(where.kind === "dm" && input.replyToMessageId ? { replyToMessageId: input.replyToMessageId } : {}),
       },
     }));
     addMessage(where, { ...message, clientMutationId });
     return true;
   } catch (error) {
-    patchMessage(where, optimistic.id, (m) => ({ ...m, sending: false, failed: true, failedReason: rateLimitMessage(error) ?? undefined }));
+    patchMessage(where, optimistic.id, (m) => ({ ...m, sending: false, failed: true, failedReason: sendRefusal(error) ?? undefined }));
+    onRefused(where, error);
     return false;
   }
 }
@@ -401,8 +412,9 @@ export async function sendVideoJobs(where: Thread, input: VideoSendInput, me: Au
     await sendVideos(where, { ...input, videos });
     return true;
   } catch (error) {
-    const failedReason = rateLimitMessage(error) ?? input.jobs.find((job) => job.failedReason)?.failedReason;
+    const failedReason = sendRefusal(error) ?? input.jobs.find((job) => job.failedReason)?.failedReason;
     patchMessage(where, localId, (m) => ({ ...m, sending: false, failed: true, failedReason }));
+    onRefused(where, error);
     // Kept so "Try again" can send the videos too, not just the words (retryVideoSend).
     failedVideoSends.set(localId, { input, me });
     return false;

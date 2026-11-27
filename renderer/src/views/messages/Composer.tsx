@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { Play, Mic, AtSign, Bold, Code, File as FileIcon, Italic, Link2, List, ListOrdered, Loader2, Plus, SendHorizontal, Smile, Strikethrough, X } from "lucide-react";
+import { Play, Mic, AtSign, Hash, Bold, Code, File as FileIcon, Italic, Link2, List, ListOrdered, Loader2, Plus, SendHorizontal, Smile, Strikethrough, X } from "lucide-react";
 import { ch, type UploadResult } from "../../lib/bridge";
 import { convertEmoticon } from "../../lib/emoji";
 import { bytes } from "../../lib/format";
@@ -16,6 +16,12 @@ export interface MentionCandidate {
   sub?: string | null;
 }
 
+/** A channel for the `#` list (CreatorHive DMs). `name` is shown and inserted as `#name`. */
+export interface ChannelCandidate {
+  id: string;
+  name: string;
+}
+
 export interface SentFile {
   url: string;
   name: string;
@@ -27,6 +33,8 @@ export interface SentFile {
 export interface ComposerSend {
   body: string;
   mentions: { id: string; start: number; end: number }[];
+  /** `#Channel` ranges, when the box offers channels (`searchChannels`). */
+  channelMentions: { id: string; start: number; end: number }[];
   files: SentFile[];
   /** Videos on their way to Mux; the message can go before they finish (not Hey Social Inc., where videos are files). */
   videos: VideoJob[];
@@ -75,6 +83,30 @@ export function videoThumbnail(file: File): Promise<{ url: string | null; durati
 }
 
 const DRAFTS = new Map<string, string>();
+
+/*
+  CreatorHive DMs keep their unsent text on this Mac (docs/academy-onboarding-nov27.md §4):
+  localStorage `dm-draft:<conversationId>`, restored when the conversation opens, cleared on send.
+  Picked mentions aren't kept: after a restart they're plain text.
+*/
+function readDraft(draftKey: string, storageKey?: string) {
+  const held = DRAFTS.get(draftKey);
+  if (held !== undefined || !storageKey) return held ?? "";
+  try { return localStorage.getItem(storageKey) ?? ""; } catch { return ""; }
+}
+function writeDraft(draftKey: string, value: string, storageKey?: string) {
+  if (value) DRAFTS.set(draftKey, value);
+  else DRAFTS.delete(draftKey);
+  if (!storageKey) return;
+  try {
+    if (value.trim()) localStorage.setItem(storageKey, value);
+    else localStorage.removeItem(storageKey);
+  } catch { /* full or unavailable: the in-memory draft still holds */ }
+}
+
+/** "@name" or "#channel" just before the caret. A "#" must touch its word, so "# Heading" stays markdown. */
+const AT_TRIGGER = /(^|\s)@([^\s@]{0,30}(?: [^\s@]{0,30})?)$/;
+const HASH_TRIGGER = /(^|\s)#((?:[^\s#]{1,30}(?: [^\s#]{0,30})?)?)$/;
 const MAX_FILES = 10;
 
 /** The website's sentence for a refused upload (over the daily limit), or undefined. */
@@ -113,6 +145,10 @@ export const Composer = forwardRef<ComposerHandle, {
   placeholder: string;
   onSend: (message: ComposerSend) => Promise<boolean>;
   searchPeople?: (query: string) => MentionCandidate[];
+  /** CreatorHive DMs: channels after "#", sent as `channelMentions`. */
+  searchChannels?: (query: string) => ChannelCandidate[];
+  /** Keep the draft in localStorage under this key too (CreatorHive DMs: `dm-draft:<id>`). */
+  storageKey?: string;
   onTyping?: () => void;
   compact?: boolean;
   allowFiles?: boolean;
@@ -123,15 +159,16 @@ export const Composer = forwardRef<ComposerHandle, {
   uploadVideo?: (file: File, onProgress: (pct: number) => void, signal?: AbortSignal) => Promise<UploadedVideo>;
   /** Voice memos: the route, the thread (if any), and what to do with the sent message. */
   voice?: { path: string; parentMessageId?: string | null; onSent: (message: unknown) => void };
-}>(function Composer({ draftKey, placeholder, onSend, searchPeople, onTyping, compact = false, allowFiles = true, autoFocus = true, uploadFolder, voice, uploadVideo }, ref) {
+}>(function Composer({ draftKey, placeholder, onSend, searchPeople, searchChannels, storageKey, onTyping, compact = false, allowFiles = true, autoFocus = true, uploadFolder, voice, uploadVideo }, ref) {
   const [recording, setRecording] = useState(false);
-  const [value, setValue] = useState(() => DRAFTS.get(draftKey) ?? "");
+  const [value, setValue] = useState(() => readDraft(draftKey, storageKey));
   const [picked, setPicked] = useState<MentionCandidate[]>([]);
+  const [pickedChannels, setPickedChannels] = useState<ChannelCandidate[]>([]);
   const [staged, setStaged] = useState<Staged[]>([]);
   /** Sends still on their way; only for the spinner — typing and Return never wait for them. */
   const [sending, setSending] = useState(0);
   const [emoji, setEmoji] = useState(false);
-  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [mention, setMention] = useState<{ start: number; query: string; kind: "@" | "#" } | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
   // Where the caret goes after the next render (set with the value, so fast typing can't land in between).
@@ -139,16 +176,19 @@ export const Composer = forwardRef<ComposerHandle, {
   const filePicker = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setValue(DRAFTS.get(draftKey) ?? "");
+    setValue(readDraft(draftKey, storageKey));
     setPicked([]);
+    setPickedChannels([]);
     setStaged([]);
     if (autoFocus) input.current?.focus();
-  }, [draftKey, autoFocus]);
+  }, [draftKey, storageKey, autoFocus]);
 
+  // Skips the first run after a switch: `value` is still the last conversation's until the effect above lands.
+  const draftFor = useRef(draftKey);
   useEffect(() => {
-    if (value) DRAFTS.set(draftKey, value);
-    else DRAFTS.delete(draftKey);
-  }, [draftKey, value]);
+    if (draftFor.current !== draftKey) { draftFor.current = draftKey; return; }
+    writeDraft(draftKey, value, storageKey);
+  }, [draftKey, storageKey, value]);
 
   useLayoutEffect(() => {
     if (caretAfter.current === null || !input.current) return;
@@ -241,39 +281,43 @@ export const Composer = forwardRef<ComposerHandle, {
     });
   }
 
-  const candidates = useMemo(() => {
-    if (!mention || !searchPeople) return [];
-    return searchPeople(mention.query).slice(0, 8);
-  }, [mention, searchPeople]);
+  const candidates = useMemo((): (MentionCandidate | ChannelCandidate)[] => {
+    if (!mention) return [];
+    const search = mention.kind === "@" ? searchPeople : searchChannels;
+    return search ? search(mention.query).slice(0, 8) : [];
+  }, [mention, searchPeople, searchChannels]);
 
   function trackMention(next: string, caret: number) {
     const before = next.slice(0, caret);
-    const match = /(^|\s)@([^\s@]{0,30}(?: [^\s@]{0,30})?)$/.exec(before);
-    if (match && searchPeople) {
-      setMention({ start: caret - match[2].length - 1, query: match[2] });
+    const at = searchPeople ? AT_TRIGGER.exec(before) : null;
+    const hash = !at && searchChannels ? HASH_TRIGGER.exec(before) : null;
+    const match = at ?? hash;
+    if (match) {
+      setMention({ start: caret - match[2].length - 1, query: match[2], kind: at ? "@" : "#" });
       setMentionIndex(0);
     } else {
       setMention(null);
     }
   }
 
-  function pickMention(person: MentionCandidate) {
+  function pickMention(item: MentionCandidate | ChannelCandidate) {
     if (!mention) return;
     const el = input.current;
     const caret = el?.selectionStart ?? value.length;
-    const text = `@${person.name} `;
+    const text = `${mention.kind}${item.name} `;
     const next = value.slice(0, mention.start) + text + value.slice(caret);
     caretAfter.current = mention.start + text.length;
     setValue(next);
-    setPicked((current) => (current.some((p) => p.id === person.id) ? current : [...current, person]));
+    if (mention.kind === "@") setPicked((current) => (current.some((p) => p.id === item.id) ? current : [...current, item as MentionCandidate]));
+    else setPickedChannels((current) => (current.some((c) => c.id === item.id) ? current : [...current, item]));
     setMention(null);
   }
 
-  /** The ranges of the picked people still in the text, as the server wants them. */
-  function mentionRanges(body: string) {
+  /** The ranges of the picked people (or channels) still in the text, as the server wants them. */
+  function mentionRanges(body: string, items: { id: string; name: string }[] = picked, mark = "@") {
     const ranges: ComposerSend["mentions"] = [];
-    for (const person of picked) {
-      const token = `@${person.name}`;
+    for (const person of items) {
+      const token = `${mark}${person.name}`;
       let from = 0;
       for (;;) {
         const start = body.indexOf(token, from);
@@ -302,13 +346,14 @@ export const Composer = forwardRef<ComposerHandle, {
   */
   function send() {
     if (!canSend) return;
-    const message: ComposerSend = { body: value, mentions: mentionRanges(value), files: ready, videos };
+    const message: ComposerSend = { body: value, mentions: mentionRanges(value), channelMentions: mentionRanges(value, pickedChannels, "#"), files: ready, videos };
     const previews = staged.map((s) => s.preview).filter((preview): preview is string => Boolean(preview));
     setValue("");
     setPicked([]);
+    setPickedChannels([]);
     setStaged([]);
     setMention(null);
-    DRAFTS.delete(draftKey);
+    writeDraft(draftKey, "", storageKey);
     input.current?.focus();
     setSending((n) => n + 1);
     void Promise.resolve()
@@ -376,7 +421,7 @@ export const Composer = forwardRef<ComposerHandle, {
       {recording && voice ? (
         <VoiceRecorder path={voice.path} body={value} parentMessageId={voice.parentMessageId}
           onCancel={() => setRecording(false)}
-          onSent={(message) => { setRecording(false); setValue(""); DRAFTS.delete(draftKey); voice.onSent(message); }} />
+          onSent={(message) => { setRecording(false); setValue(""); writeDraft(draftKey, "", storageKey); voice.onSent(message); }} />
       ) : null}
       <textarea
         ref={input}
@@ -406,10 +451,10 @@ export const Composer = forwardRef<ComposerHandle, {
       />
       {mention && candidates.length > 0 ? (
         <div className="mention-list" role="listbox">
-          {candidates.map((person, i) => (
-            <button key={person.id} className={i === mentionIndex ? "sel" : ""} onMouseDown={(e) => { e.preventDefault(); pickMention(person); }}>
-              <Avatar name={person.name} src={person.avatarUrl} seed={person.id} size={22} radius="6px" />
-              <b>{person.name}</b>{person.sub ? <span>{person.sub}</span> : null}
+          {candidates.map((item, i) => (
+            <button key={item.id} className={i === mentionIndex ? "sel" : ""} onMouseDown={(e) => { e.preventDefault(); pickMention(item); }}>
+              {"avatarUrl" in item ? <Avatar name={item.name} src={item.avatarUrl} seed={item.id} size={22} radius="6px" /> : <Hash className="mention-hash" />}
+              <b>{item.name}</b>{"sub" in item && item.sub ? <span>{item.sub}</span> : null}
             </button>
           ))}
         </div>

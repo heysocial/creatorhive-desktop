@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Bell, BellOff, ExternalLink, Hash, Info, Lock, Pin, SquareArrowOutUpRight, Star, Upload, Users, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
-import { api, ApiError, keys, queryClient, rateLimitMessage, useChannels, useConversations, type Workspace } from "../../lib/api";
+import { ADMINS_ONLY_TEXT, api, ApiError, keys, queryClient, rateLimitMessage, useChannels, useConversations, type Conversation as Convo, type Workspace } from "../../lib/api";
 import {
   addMessage, retryVideoSend, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, patchMessage, useChannelMembers, useHsMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
@@ -12,7 +12,8 @@ import { typingLine, typingSignal, useLiveThread } from "../../lib/live";
 import { nav } from "../../lib/nav";
 import { sitePathFor } from "../../lib/sitePaths";
 import { Avatar, channelName } from "../../lib/ui";
-import { Composer, type ComposerHandle, type ComposerSend, type MentionCandidate } from "./Composer";
+import { Composer, type ChannelCandidate, type ComposerHandle, type ComposerSend, type MentionCandidate } from "./Composer";
+import { GetStartedCard } from "./Welcome";
 import { MessageRow, type RowActions } from "./MessageRow";
 import { EMPTY_EDIT } from "./MessageEditor";
 import { RichText } from "../../lib/html";
@@ -158,6 +159,8 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
   const actions = useRowActions(where, user, { inThread: true, heySocial: workspace === "heysocial" });
   const count = query.data?.replies.length ?? 0;
   useLiveThread(where, popout ? realtimeChannel : null, user.id);
+  // Replies count as posts in a channel only admins post in.
+  const canPost = useChannels(workspace, where.kind === "channel").data?.find((c) => c.id === where.id)?.canPost !== false;
 
   useLayoutEffect(() => {
     const el = scroller.current;
@@ -202,7 +205,7 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
           ) : null}
         </div>
       </div>
-      <Composer compact draftKey={`thread:${parentId}`}
+      {!canPost ? <ReadOnlyFooter compact /> : <Composer compact draftKey={`thread:${parentId}`}
         uploadVideo={workspace === "heysocial" || where.kind === "dm" ? undefined : (file, onProgress, signal) => uploadVideo(where, file, onProgress, signal)}
         voice={where.kind === "dm" || workspace === "heysocial" ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, parentMessageId: parentId, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={workspace === "heysocial" ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder="Reply in thread…" searchPeople={where.kind === "channel" || workspace === "heysocial" ? people : undefined}
         onTyping={typingSignal(realtimeChannel)}
@@ -212,9 +215,30 @@ export function ThreadPanel({ where, parentId, user, onClose, title, popout = fa
             return input.files.length ? sendMessage(where, { ...input, body: "", parentMessageId: parentId }, toAuthor(user)) : true;
           }
           return sendMessage(where, { ...input, parentMessageId: parentId }, toAuthor(user));
-        }} />
+        }} />}
     </aside>
   );
+}
+
+/** Where the composer goes in a channel only admins post in. */
+function ReadOnlyFooter({ compact = false }: { compact?: boolean }) {
+  return <div className={`composer-readonly ${compact ? "compact" : ""}`}><Lock />{ADMINS_ONLY_TEXT}</div>;
+}
+
+const nameMatches = (name: string, q: string) => !q || name.toLowerCase().split(/\s+/).some((part) => part.startsWith(q)) || name.toLowerCase().startsWith(q);
+
+/** CreatorHive DMs: "@" offers the conversation's other people (only they can read it), "#" every channel but locked coming-soon ones. */
+function useDmSearch(conversation: Convo | undefined, enabled: boolean) {
+  const channels = useChannels("creatorhive", enabled).data;
+  const people = useCallback((query: string): MentionCandidate[] => {
+    const q = query.toLowerCase();
+    return (conversation?.participants ?? []).filter((p) => nameMatches(p.name, q)).map((p) => ({ id: p.id, name: p.name, avatarUrl: p.avatarUrl }));
+  }, [conversation?.participants]);
+  const rooms = useCallback((query: string): ChannelCandidate[] => {
+    const q = query.trim().toLowerCase();
+    return (channels ?? []).filter((c) => !c.comingSoonLocked).map((c) => ({ id: c.id, name: channelName(c.name) })).filter((c) => nameMatches(c.name, q));
+  }, [channels]);
+  return { people, rooms };
 }
 
 function useMentionSearch(where: Thread, workspace: Workspace) {
@@ -227,7 +251,7 @@ function useMentionSearch(where: Thread, workspace: Workspace) {
     const pool = heySocial ? workspaceMembers ?? [] : channelMembers?.length ? channelMembers : everyone ?? [];
     const q = query.toLowerCase();
     return pool
-      .filter((m) => !q || m.name.toLowerCase().split(/\s+/).some((part) => part.startsWith(q)) || m.name.toLowerCase().startsWith(q))
+      .filter((m) => nameMatches(m.name, q))
       .map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatarUrl, sub: m.badge?.label ?? null }));
   }, [heySocial, workspaceMembers, channelMembers, everyone]);
 }
@@ -371,6 +395,9 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
   const [dragging, setDragging] = useState(false);
   const composer = useRef<ComposerHandle>(null);
   const people = useMentionSearch(where, workspace);
+  const chDm = where.kind === "dm" && !heySocial;
+  const dmSearch = useDmSearch(conversation, chDm);
+  const canPost = channel?.canPost !== false;
   const typing = useLiveThread(where, realtimeChannel, user.id);
   const sendTyping = useMemo(() => typingSignal(realtimeChannel), [realtimeChannel]);
   const actions = useRowActions(where, user, {
@@ -490,16 +517,17 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
         {/* Staff: a student with videos to edit gets her card's strip under the header. */}
         {!dock && !heySocial && where.kind === "dm" && other && !conversation?.isGroup ? <StudentStrip memberId={other.id} /> : null}
         {channel?.comingSoon && !channel.comingSoonLocked ? <ComingSoonOwnerBar channelId={channel.id} /> : null}
+        {channel?.isWelcome && !heySocial ? <GetStartedCard meId={user.id} popout={popout} /> : null}
         <MessageList where={where} actions={actions} header={intro} empty={null}
           jumpTo={threadId ? null : jump} onJumped={() => setJump(null)} />
         <div className="typing">{typingLine(typing)}</div>
         {replyTo ? (
           <div className="replying"><span>Replying to <b>{replyTo.author.name}</b>: {replyTo.body.slice(0, 120)}</span><button className="iconbtn" onClick={() => setReplyTo(null)}><X /></button></div>
         ) : null}
-        <Composer ref={composer} draftKey={`${where.kind}:${where.id}`}
+        {!canPost ? <ReadOnlyFooter /> : <Composer ref={composer} draftKey={`${where.kind}:${where.id}`} storageKey={chDm ? `dm-draft:${where.id}` : undefined}
           uploadVideo={heySocial ? undefined : (file, onProgress, signal) => uploadVideo(where, file, onProgress, signal)}
           voice={where.kind === "dm" || heySocial ? { path: `/api/${where.kind === "channel" ? "channels" : "dms"}/${where.id}/voice`, onSent: (m) => m && addMessage(where, m as Message) } : undefined} uploadFolder={heySocial ? (where.kind === "channel" ? where.id : `dm-${where.id}`) : undefined} placeholder={dock?.placeholder ?? (where.kind === "channel" ? `Message #${title}` : `Message ${title}`)}
-          searchPeople={where.kind === "channel" || workspace === "heysocial" ? people : undefined} onTyping={sendTyping}
+          searchPeople={where.kind === "channel" || heySocial ? people : dmSearch.people} searchChannels={chDm ? dmSearch.rooms : undefined} onTyping={sendTyping}
           onSend={async (input: ComposerSend) => {
             if (input.videos.length) {
               // Goes out now; the message shows the upload and becomes real when it's done.
@@ -512,7 +540,7 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
             const replyToMessageId = replyTo?.id ?? null;
             setReplyTo(null);
             return sendMessage(where, { ...input, replyToMessageId }, toAuthor(user));
-          }} />
+          }} />}
         {dragging ? (
           <div className="drop-zone" onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => event.currentTarget === event.target && setDragging(false)}
             onDrop={(event) => {

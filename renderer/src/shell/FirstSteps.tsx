@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Camera, Check } from "lucide-react";
-import { api, ApiError, PASSWORD_REQUIRED_EVENT, queryClient } from "../lib/api";
+import { api, ApiError, keys, PASSWORD_REQUIRED_EVENT, queryClient } from "../lib/api";
+import { nav } from "../lib/nav";
 import { ch, type SessionUser } from "../lib/bridge";
 import { ME_ACCESS_KEY, useMeAccess } from "../lib/access";
 import { Avatar } from "../lib/ui";
@@ -173,9 +174,14 @@ function Welcome({ user, onUser, onDone }: { user: SessionUser; onUser: (patch: 
         avatarUrl = (upload.data as { avatarUrl?: string } | undefined)?.avatarUrl ?? avatarUrl;
       }
       await api("/api/profile", { method: "PATCH", body: { gender, bio } });
-      // The profile step is done: Home next.
-      await api("/api/me/welcome", { method: "POST" }).catch(() => undefined);
+      // The profile step is done: the Welcome channel next when the server names it (Nov 27 2026), else Home.
+      const welcome = await api<{ welcomeChannel?: { id: string; slug: string } | null }>("/api/me/welcome", { method: "POST" }).catch(() => undefined);
       if (avatarUrl !== user.image) onUser({ image: avatarUrl });
+      const channel = welcome?.welcomeChannel;
+      if (channel?.id) {
+        void queryClient.invalidateQueries({ queryKey: keys.channels("creatorhive") });
+        nav.open({ kind: "channel", id: channel.id }, "home", "ch");
+      }
       onDone();
     } catch (caught) {
       const field = caught instanceof ApiError && caught.data?.fieldErrors ? Object.values(caught.data.fieldErrors as Record<string, string>)[0] : null;

@@ -24,6 +24,12 @@ export interface Channel {
   comingSoonMessage?: string | null;
   /** A brand's channel (Brand Side): its name belongs to the brand, so it's never renamed here. */
   brand?: unknown;
+  /** CreatorHive (Nov 27 2026): "admins" = only owner and team may post (Scam Alert). */
+  postPolicy?: "everyone" | "admins";
+  /** False: no composer, the read-only footer instead. Absent (older server) = can post. */
+  canPost?: boolean;
+  /** The Welcome channel (slug "welcome"): its Get started card shows above the messages. */
+  isWelcome?: boolean;
 }
 
 export interface Participant {
@@ -89,6 +95,17 @@ export function rateLimitMessage(failure: unknown): string | null {
   return typeof data.error === "string" && data.error.trim() ? data.error : null;
 }
 
+/** An admin-only channel refused a post (403 ADMINS_ONLY). */
+export const ADMINS_ONLY_TEXT = "Only admins can post here.";
+export function isAdminsOnly(failure: unknown) {
+  return failure instanceof ApiError && failure.status === 403 && failure.data?.code === "ADMINS_ONLY";
+}
+
+/** Why a send failed, when the website said: over a limit, or a channel only admins post in. */
+export function sendRefusal(failure: unknown): string | null {
+  return rateLimitMessage(failure) ?? (isAdminsOnly(failure) ? ADMINS_ONLY_TEXT : null);
+}
+
 /** Fired when the server answers 403 PASSWORD_CHANGE_REQUIRED: the Create your password screen takes over. */
 export const PASSWORD_REQUIRED_EVENT = "ch:password-required";
 
@@ -123,13 +140,12 @@ export const keys = {
   search: (q: string) => ["search", q] as const,
 };
 
+// Only CreatorHive's list asks for coming-soon channels: this app draws their locked screen.
+export const fetchChannels = async (workspace: Workspace) =>
+  (await api<{ channels: Channel[] }>(`/api/channels?workspace=${workspace}${workspace === "creatorhive" ? "&comingSoon=1" : ""}`)).channels;
+
 export function useChannels(workspace: Workspace, enabled = true) {
-  return useQuery({
-    queryKey: keys.channels(workspace),
-    enabled,
-    // Only CreatorHive's list asks for coming-soon channels: this app draws their locked screen.
-    queryFn: async () => (await api<{ channels: Channel[] }>(`/api/channels?workspace=${workspace}${workspace === "creatorhive" ? "&comingSoon=1" : ""}`)).channels,
-  });
+  return useQuery({ queryKey: keys.channels(workspace), enabled, queryFn: () => fetchChannels(workspace) });
 }
 
 export function useConversations(workspace: Workspace, enabled = true) {

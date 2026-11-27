@@ -7,7 +7,7 @@ import { RichText } from "../../lib/html";
 import { nav } from "../../lib/nav";
 import { EventStaffActions, NewEventButton } from "./EventAdmin";
 
-type Mode = "day" | "week" | "month" | "list";
+type Mode = "day" | "week" | "month" | "list" | "past";
 const HOUR_PX = 64;
 const DAY_MS = 86_400_000;
 
@@ -221,6 +221,62 @@ function ListView({ events, selected, onSelect }: { events: CommunityEvent[]; se
   );
 }
 
+/*
+  Past (docs/academy-onboarding-nov27.md §5): one chip per month with past
+  events, newest first; the month's name as a headline; its events grouped by
+  title (trimmed, any case), groups by their latest session, sessions newest first.
+*/
+const monthKey = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
+const monthName = (key: string, style: "long" | "short") => {
+  const [year, month] = key.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString("en-US", style === "long" ? { month: "long", year: "numeric" } : { month: "short", year: "numeric" });
+};
+
+export function pastGroups(past: CommunityEvent[], month: string) {
+  const groups = new Map<string, { title: string; sessions: CommunityEvent[] }>();
+  const newestFirst = past.filter((e) => monthKey(e.startsAt) === month).sort((a, b) => b.startsAt.localeCompare(a.startsAt));
+  for (const event of newestFirst) {
+    const title = event.title.trim();
+    const key = title.toLowerCase();
+    const group = groups.get(key) ?? { title, sessions: [] };
+    group.sessions.push(event);
+    groups.set(key, group);
+  }
+  // Insertion order is already by each group's latest session.
+  return [...groups.values()];
+}
+
+function PastView({ past, selected, onSelect }: { past: CommunityEvent[]; selected?: string; onSelect: (id: string) => void }) {
+  const months = useMemo(() => [...new Set(past.map((e) => monthKey(e.startsAt)))].sort().reverse(), [past]);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const month = chosen && months.includes(chosen) ? chosen : months[0];
+  const groups = useMemo(() => (month ? pastGroups(past, month) : []), [past, month]);
+  if (!month) return <div className="ev-list scroll"><div className="empty-state">No past events.</div></div>;
+  return (
+    <div className="ev-list scroll">
+      <div className="ev-months">
+        <div className="seg">
+          {months.map((m) => <button key={m} className={m === month ? "on" : ""} onClick={() => setChosen(m)}>{monthName(m, "short")}</button>)}
+        </div>
+      </div>
+      <h2 className="ev-month-title">{monthName(month, "long")}</h2>
+      {groups.map((group) => (
+        <div key={group.title.toLowerCase()}>
+          <div className="day"><span>{group.title} · {group.sessions.length === 1 ? "1 session" : `${group.sessions.length} sessions`}</span></div>
+          {group.sessions.map((e) => (
+            <button key={e.id} className={`ev-row ${selected === e.id ? "sel" : ""}`} onClick={() => onSelect(e.id)}>
+              <span className={`swatch ${colorFor(e)}`} />
+              <span className="t">{new Date(e.startsAt).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {clock(e.startsAt)}</span>
+              <b>{e.title}</b>
+              <span className="faint">{e.recordingUrl ? "Recording" : e.organizer ?? ""}</span>
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Events({ eventId }: { eventId?: string }) {
   const { all, isLoading, isError, calendarUnavailable } = useEvents();
   const [mode, setMode] = useState<Mode>(() => (localStorage.getItem("ch.events.mode") as Mode) || "week");
@@ -264,14 +320,18 @@ export function Events({ eventId }: { eventId?: string }) {
     <div className="page events">
       <div className="mhead">
         <h1>Events</h1>
-        <span className="sub">{anchor.toLocaleDateString([], { month: "long", year: "numeric" })}</span>
+        {mode !== "past" ? <span className="sub">{anchor.toLocaleDateString([], { month: "long", year: "numeric" })}</span> : null}
         <div className="acts">
           <div className="seg">
-            {(["day", "week", "month", "list"] as Mode[]).map((m) => <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>{m[0].toUpperCase() + m.slice(1)}</button>)}
+            {(["day", "week", "month", "list", "past"] as Mode[]).map((m) => <button key={m} className={mode === m ? "on" : ""} onClick={() => setMode(m)}>{m[0].toUpperCase() + m.slice(1)}</button>)}
           </div>
-          <button className="btn" onClick={() => setAnchor(new Date())}>Today</button>
-          <button className="iconbtn" aria-label="Previous" onClick={() => step(-1)}><ChevronLeft /></button>
-          <button className="iconbtn" aria-label="Next" onClick={() => step(1)}><ChevronRight /></button>
+          {mode !== "past" ? (
+            <>
+              <button className="btn" onClick={() => setAnchor(new Date())}>Today</button>
+              <button className="iconbtn" aria-label="Previous" onClick={() => step(-1)}><ChevronLeft /></button>
+              <button className="iconbtn" aria-label="Next" onClick={() => step(1)}><ChevronRight /></button>
+            </>
+          ) : null}
           <NewEventButton onCreated={(created) => { setSelected(created.id); setAnchor(new Date(created.startsAt)); }} />
         </div>
       </div>
@@ -281,6 +341,7 @@ export function Events({ eventId }: { eventId?: string }) {
           {isLoading ? <div className="empty-state">Loading events…</div> : isError ? <div className="empty-state">Couldn't load events.</div> : (
             mode === "month" ? <MonthGrid anchor={anchor} events={all} selected={selected} onSelect={setSelected} />
               : mode === "list" ? <ListView events={all} selected={selected} onSelect={setSelected} />
+              : mode === "past" ? <PastView past={past} selected={selected} onSelect={setSelected} />
               : <TimeGrid days={days} events={all} selected={selected} onSelect={setSelected} />
           )}
         </div>

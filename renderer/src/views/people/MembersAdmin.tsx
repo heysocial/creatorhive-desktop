@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import { Check, Copy, Link2, Loader2, MailCheck, RefreshCw, RotateCcw, Trash2, UserX } from "lucide-react";
+import { Check, Copy, Link2, Loader2, MailCheck, RefreshCw, RotateCcw, Search, Trash2, UserX } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch } from "../../lib/bridge";
 import { api, ApiError, queryClient } from "../../lib/api";
@@ -41,6 +41,8 @@ interface PendingInvite {
   id: string;
   email: string;
   role: "student" | "team";
+  /** The invitee's name, when the invite has one. */
+  name?: string | null;
   /** The plan the account starts on; absent on invites made before plans. */
   /** "first3" = The Weekend Starter, from a Whop purchase. */
   accessLevel?: "academy" | "starter" | "first3";
@@ -86,7 +88,11 @@ export function PendingInvites() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [q, setQ] = useState("");
   const list = invites.data ?? [];
+  // Manage invites' search (Nov 27 2026): name or email, any case, on this Mac.
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? list.filter((invite) => invite.email.toLowerCase().includes(needle) || Boolean(invite.name?.toLowerCase().includes(needle))) : list;
   const setList = (update: (current: PendingInvite[]) => PendingInvite[]) => queryClient.setQueryData<PendingInvite[]>(INVITES_KEY, (current) => update(current ?? []));
 
   async function copy(invite: Pick<PendingInvite, "id" | "link">) {
@@ -150,8 +156,10 @@ export function PendingInvites() {
         <div className="mad-line"><MailCheck className="mad-ok" /><span>No pending invites</span></div>
       ) : (
         <div>
+          <label className="search-inline mad-invite-search"><Search /><input placeholder="Search by name or email" value={q} onChange={(e) => setQ(e.target.value)} /></label>
           {listError ? <div className="mad-error" role="alert">{listError}</div> : null}
-          {list.map((invite) => (
+          {shown.length === 0 ? <div className="mad-line"><span>No invites match “{q.trim()}”</span></div> : null}
+          {shown.map((invite) => (
             <div className="mad-invite" key={invite.id}>
               <div className="mad-who">
                 <b className="selectable">{invite.email}</b>

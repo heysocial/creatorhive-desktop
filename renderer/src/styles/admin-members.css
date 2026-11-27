@@ -18,6 +18,8 @@
 .mad-line { display: flex; min-height: 42px; align-items: center; gap: 8px; padding: 8px 14px; color: var(--ink-3); font-size: 13px; }
 .mad-line svg { width: 16px; height: 16px; flex: none; }
 .mad-line .mad-ok { color: var(--honey-ink); }
+.mad-invite-search { margin: 10px 14px 4px; }
+.mad-invite-search input { width: 100%; }
 .mad-invite { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 14px; }
 .mad-invite + .mad-invite { border-top: 1px solid var(--line); }
 .mad-who { min-width: 0; display: grid; gap: 3px; }
