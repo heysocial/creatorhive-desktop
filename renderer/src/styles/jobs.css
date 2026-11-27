@@ -1,0 +1,67 @@
+/* The Job board (views/jobs/JobBoard.tsx): layout only; the cards, chips, pills, tiles and buttons are the app's own. */
+.jb-page { display: flex; flex-direction: column; gap: 16px; }
+.jb-top { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.jb-empty { max-width: 520px; align-self: center; margin-top: 24px; }
+.jb-empty .btn { margin-top: 8px; }
+.jb-empty .muted { font-size: 13.5px; line-height: 1.5; }
+
+.jb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.jb-card { display: flex; align-items: flex-start; gap: 14px; padding: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; min-width: 0; }
+.jb-card:hover { box-shadow: 0 0 0 .5px var(--ink-4), 0 2px 8px rgba(0,0,0,.06); }
+.jb-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.jb-card-body > span, .jb-card-body > b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-brand { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.jb-brand b { font-size: 16px; font-weight: 750; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-brand .mono { border-radius: 6px; }
+.jb-name { font-size: 13.5px; color: var(--ink-2); }
+.jb-price { font-size: 13.5px; font-weight: 700; color: var(--ink); }
+.jb-wanted { font-size: 12.5px; }
+.jb-mine { font-size: 12.5px; }
+.jb-mine.center { text-align: center; }
+.jb-earnings { font-size: 13.5px; color: var(--ink-2); }
+
+.jb-art { flex: none; display: grid; place-items: center; overflow: hidden; background: var(--card-2); box-shadow: inset 0 0 0 .5px var(--line-strong); }
+.jb-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.jb-art.logo img { object-fit: contain; padding: 12%; box-sizing: border-box; }
+.jb-art.thumb { width: 96px; height: 96px; border-radius: 10px; }
+.jb-art.hero { width: 100%; aspect-ratio: 16 / 8; border-radius: 14px; }
+.jb-art.hero .mono { width: 72px !important; height: 72px !important; font-size: 32px !important; border-radius: 16px; }
+
+.jb-detail { max-width: 1040px; }
+.jb-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.jb-title { font-size: 26px; font-weight: 800; letter-spacing: -.015em; color: var(--ink); }
+.jb-sub { font-size: 14px; margin-top: 2px; }
+.jb-section { display: flex; flex-direction: column; gap: 8px; }
+.jb-section > .btn { align-self: flex-start; }
+.jb-label { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.jb-script { padding: 14px 16px; font-size: 14px; line-height: 1.55; white-space: pre-wrap; user-select: text; color: var(--ink); }
+.jb-text { font-size: 13.5px; line-height: 1.5; color: var(--ink-2); white-space: pre-wrap; }
+.jb-side { position: sticky; top: 0; }
+.jb-side .btn.lg { justify-content: center; }
+.jb-pay { font-size: 18px; font-weight: 800; color: var(--ink); }
+.jb-side .chips .chip { cursor: default; }
+
+.jb-videos { display: flex; flex-direction: column; }
+.jb-video { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); min-width: 0; }
+.jb-video:first-child { border-top: 0; }
+.jb-video-thumb { width: 34px; height: 44px; flex: none; border-radius: 6px; overflow: hidden; background: linear-gradient(160deg, #6E6253, #2E2A25); }
+.jb-video-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.jb-video-name { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 13px; }
+.jb-video-name b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-video-name small { font-size: 12px; }
+.jb-video .stage-pill { max-width: 46%; overflow: hidden; text-overflow: ellipsis; }
+
+.jb-up { display: flex; flex-direction: column; gap: 10px; border-radius: 12px; }
+.jb-up.over { box-shadow: 0 0 0 2px var(--honey); }
+.jb-up-count { font-size: 14px; }
+.jb-up-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.jb-up-note { font-size: 13px; line-height: 1.5; }
+.jb-up-failed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.jb-up-failed li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.jb-up-failed li b { flex: none; max-width: 40%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jb-up-failed li span { flex: 1; min-width: 0; color: var(--red); }
+.jb-up-foot { display: flex; align-items: center; gap: 8px; width: 100%; }
+.jb-up-progress { flex: 1; min-width: 0; font-size: 13px; }
+
+/* The profile step's and Settings' age range and ethnicity (shell/FirstSteps.tsx, views/settings/Settings.tsx). */
+.set-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 360px; }

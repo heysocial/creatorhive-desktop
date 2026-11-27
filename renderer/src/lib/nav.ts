@@ -36,6 +36,9 @@ export type View =
   | { kind: "video-review"; video?: number }
   /** Staff: the video editing board, with a card's panel open over it. */
   | { kind: "video-edits"; cardId?: string; filter?: "all" | "due" | "unread" }
+  /** The Job board (Affiliates · Brands); an affiliate campaign opens over it as its own page. */
+  | { kind: "jobs"; section?: "affiliates" | "brands" }
+  | { kind: "affiliate-campaign"; id: string }
   | { kind: "threads" }
   | { kind: "mentions" }
   | { kind: "saved" }
