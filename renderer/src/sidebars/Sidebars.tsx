@@ -4,7 +4,7 @@ import {
   Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
   Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen,
 } from "lucide-react";
-import { api, keys, queryClient, useChannels, useConversations, type Conversation, type Workspace } from "../lib/api";
+import { api, keys, queryClient, useChannels, useConversations, type Channel, type Conversation, type Workspace } from "../lib/api";
 import type { SessionUser } from "../lib/bridge";
 import { commands } from "../lib/commands";
 import { nav, useNav } from "../lib/nav";
@@ -92,11 +92,16 @@ function ChannelList({ workspace, isOwner = false }: { workspace: Workspace; isO
   // A plan without channels (UGC Starter, The Weekend Starter): one locked row, nothing asked for.
   const locked = useAreaLocked("channels") && workspace === "creatorhive";
   const { data, isLoading, isError } = useChannels(workspace, !locked);
-  // Welcome first (Nov 27 2026), then A–Z; coming-soon channels last.
-  const channels = useMemo(
-    () => soonLast((data ?? []).filter((c) => c.joined || !c.isPrivate).sort((a, b) => Number(Boolean(b.isWelcome)) - Number(Boolean(a.isWelcome)) || channelName(a.name).localeCompare(channelName(b.name))), (c) => c, data),
-    [data],
-  );
+  /*
+    A–Z, coming-soon channels last. Welcome goes on top only when the server
+    listed it first, which it does for a member's first 14 days
+    (creatorhive-app lib/channels/server.ts), so the Mac matches web and phones.
+  */
+  const channels = useMemo(() => {
+    const welcomeFirst = Boolean(data?.[0]?.isWelcome);
+    const pinned = (c: Channel) => Number(welcomeFirst && Boolean(c.isWelcome));
+    return soonLast((data ?? []).filter((c) => c.joined || !c.isPrivate).sort((a, b) => pinned(b) - pinned(a) || channelName(a.name).localeCompare(channelName(b.name))), (c) => c, data);
+  }, [data]);
   // Rename channel (Nov 19 2026): the owner, CreatorHive's community channels, never a brand's; the server checks again.
   const canRename = isOwner && workspace === "creatorhive";
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
