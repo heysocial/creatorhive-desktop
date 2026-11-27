@@ -73,7 +73,7 @@ export function Courses() {
                 {c.description ? <span className="muted">{c.description}</span> : null}
               </div>
               <div className="cc-foot">
-                <span className="muted">{c.lessonCount ? `${plural(c.moduleCount, "module")} · ${plural(c.lessonCount, "lesson")}` : "Coming soon"}</span>
+                <span className="muted">{c.lessonCount ? `${plural(c.moduleCount, "module")} · ${plural(c.lessonCount, "lesson")}` : c.moduleCount ? `${plural(c.moduleCount, "module")} · Lessons coming soon` : "Coming soon"}</span>
                 <span className="muted">{percent(c)}%</span>
               </div>
               <span className="bar"><i style={{ width: `${percent(c)}%` }} /></span>
@@ -236,6 +236,17 @@ export function CoursePage({ id, lessonId: requested }: { id: string; lessonId?:
           <h1>{course.data.title}</h1>
         </div>
         <div className="empty-state"><div><b>Coming soon</b><p className="muted">This course's lessons aren't up yet. Check back soon.</p></div></div>
+        {/* Its modules are in (the 10-Day course's days): each one, saying "Coming soon" until it has lessons. */}
+        {course.data.modules.length ? (
+          <div className="ll-empty-modules">
+            {course.data.modules.map((m, mi) => (
+              <div key={m.id} className="ll-row" style={{ cursor: "default" }}>
+                <span>Module {mi + 1} · {m.title}</span>
+                <span className="faint">Coming soon</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -280,6 +291,7 @@ export function CoursePage({ id, lessonId: requested }: { id: string; lessonId?:
           {course.data?.modules.map((m, mi) => (
             <div key={m.id}>
               <div className="section-label ll-mod">Module {mi + 1} · {m.title}</div>
+              {m.lessons.length === 0 ? <div className="ll-row faint" style={{ cursor: "default" }}><span>Coming soon</span></div> : null}
               {m.lessons.map((l) => (
                 <button key={l.id} className={`ll-row ${l.id === lessonId ? "on" : ""}`} onClick={() => go(l.id)}>
                   {l.completed ? <CheckCircle2 className="done" /> : l.id === lessonId ? <PlayCircle /> : <Circle />}

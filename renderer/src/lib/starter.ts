@@ -48,7 +48,11 @@ export interface StarterStep {
  * day, Eastern (`period: "day"`), with the line to show in `label`
  * ("1 script left today" / the used-up sentence). Older servers send neither.
  */
-export interface ScriptAllowance { used: number; limit: number; remaining: number; resetsAt: string; period?: "day" | "month"; label?: string }
+export interface ScriptAllowance {
+  used: number; limit: number; remaining: number; resetsAt: string; period?: "day" | "month"; label?: string;
+  /** A Challenger's free month (servers from Nov 27 2026): unlimited on the $20/month plan, its checkout and price. */
+  unlimited?: boolean; upgradeUrl?: string | null; priceLabel?: string;
+}
 
 export interface StarterTrack {
   /** The heading: "Your first 3 videos" on The Weekend Starter (two steps; no Hub). Older servers leave it out. */

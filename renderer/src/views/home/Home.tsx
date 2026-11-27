@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { TEN_DAY, WEEKEND_STARTER, openUpgrade, useFeedAccess, useHubReady } from "../../lib/access";
+import { CURRENT_COMMERCE, TEN_DAY, WEEKEND_STARTER, openUpgrade, useFeedAccess, useHubReady } from "../../lib/access";
 import { ArrowUp, ChevronRight, Download, FileText, Image as ImageIcon, Loader2, Lock, MessageCircle, MoreHorizontal, Pin, Play, SquarePen, Wallet, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
@@ -876,9 +876,14 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
     The tabs: the Weekend Starter group first on The Weekend Starter (after
     All for the team); a limited plan's other tabs locked.
   */
-  const tabs = CATEGORIES.filter((c) => (c.key !== WEEKEND_STARTER || access.group) && (c.key !== TEN_DAY || access.tenDayGroup));
+  // A Current Commerce creator: their own feed's one tab, nothing else (no All).
+  const ownFeed = access.ownFeed;
+  const tabs = ownFeed
+    ? CATEGORIES.filter((c) => c.key === ownFeed.key)
+    : CATEGORIES.filter((c) => (c.key !== WEEKEND_STARTER || access.group) && (c.key !== TEN_DAY || access.tenDayGroup)
+      && (c.key !== CURRENT_COMMERCE || access.canRead(c.key)));
   // A group's tab, where a limited plan may post (the Weekend Starter group, the 10-Day Challenge group).
-  const groupTab = filter === WEEKEND_STARTER || filter === TEN_DAY;
+  const groupTab = filter === WEEKEND_STARTER || filter === TEN_DAY || filter === CURRENT_COMMERCE;
   const lockedTab = (key: string) => access.limited && (key === "all" || !access.canRead(key));
   // Who gets a composer, and for what: a limited plan only in the group, on its tab, for its 30 days.
   const allowed = CATEGORIES.map((c) => c.key).filter((key) => access.canWrite(key) && (!access.limited || (groupTab && key === filter)));
@@ -973,7 +978,7 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
       <div className="mhead">
         <h1>Home</h1>
         <div className="seg home-tabs">
-          {access.limited && access.group ? null : <button className={`${filter === "all" ? "on" : ""} ${lockedTab("all") ? "locked" : ""}`} onClick={() => (lockedTab("all") ? openUpgrade() : setFilter("all"))}>{lockedTab("all") ? <Lock className="tab-lock" /> : null}All</button>}
+          {(access.limited && access.group) || ownFeed ? null : <button className={`${filter === "all" ? "on" : ""} ${lockedTab("all") ? "locked" : ""}`} onClick={() => (lockedTab("all") ? openUpgrade() : setFilter("all"))}>{lockedTab("all") ? <Lock className="tab-lock" /> : null}All</button>}
           {tabs.map((c, index) => (
             <span key={c.key} style={{ display: "contents" }}>
               <button className={`${filter === c.key ? "on" : ""} ${lockedTab(c.key) ? "locked" : ""}`} title={lockedTab(c.key) ? `${c.label}: part of the UGC Academy` : c.label}
@@ -1000,7 +1005,7 @@ export function Home({ user, openPostId, commentId }: { user: SessionUser; openP
             <PaidCard />
             {allowed.length ? (
               <NewPost key={draft?.text ?? "blank"} user={user} open={writing} draft={draft} onOpen={() => setWriting(true)} onClose={() => { setWriting(false); setDraft(null); }}
-                allowed={allowed} start={start} prompt={access.limited && start === TEN_DAY ? "Share with the 10-Day Challenge group…" : access.limited && start === WEEKEND_STARTER ? "Share with the Weekend Starter group…" : undefined} />
+                allowed={allowed} start={start} prompt={access.limited && start === TEN_DAY ? "Share with the 10-Day Challenge group…" : ownFeed && start === CURRENT_COMMERCE ? "Share with the Current Commerce creators…" : access.limited && start === WEEKEND_STARTER ? "Share with the Weekend Starter group…" : undefined} />
             ) : access.groupEnded && filter === WEEKEND_STARTER ? (
               <div className="card group-ended"><span className="ge-mark"><Lock /></span><p><b>{access.endsAt ? `Your 30 days in the Weekend Starter group ended ${new Date(access.endsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.` : "Your 30 days in the Weekend Starter group have ended."}</b><br />You can still read the group. Join the UGC Academy to post again.</p></div>
             ) : null}

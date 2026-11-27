@@ -108,7 +108,9 @@ export function ScriptWriter({ chatId }: { chatId?: string }) {
 
   return (
     <div className="page sw">
-      <div className="mhead"><h1><Sparkles />AI Script Writer</h1><span className="sub">{allowance ? (allowance.period === "day" && allowance.label ? allowance.label : `${allowance.remaining} of ${allowance.limit} scripts left this month · resets ${resetsLabel(allowance.resetsAt)}`) : "Scripts, hooks and shot lists for your next brand video"}</span>
+      <div className="mhead"><h1><Sparkles />AI Script Writer</h1><span className="sub">{allowance ? (allowance.period === "day" && allowance.label ? allowance.label : allowance.unlimited ? "Unlimited scripts" : `${allowance.remaining} of ${allowance.limit} ${allowance.upgradeUrl ? "free " : ""}scripts left this month · resets ${resetsLabel(allowance.resetsAt)}`) : "Scripts, hooks and shot lists for your next brand video"}
+          {/* A Challenger's free month: the same $20/month unlimited plan as Marketplace Creators. */}
+          {allowance?.upgradeUrl && !allowance.unlimited ? <> · <a href={allowance.upgradeUrl} onClick={(event) => { event.preventDefault(); ch.app.openExternal(allowance.upgradeUrl!); }}>Upgrade: {allowance.priceLabel || "$20/month"} for unlimited</a></> : null}</span>
         <div className="acts"><button className="btn" onClick={() => nav.open({ kind: "script-writer" }, "learn", "ch")}><Plus />New chat</button></div></div>
       <div className="sw-body">
         <aside className="sw-chats scroll">
