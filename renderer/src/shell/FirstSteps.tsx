@@ -6,7 +6,7 @@ import { ch, type SessionUser } from "../lib/bridge";
 import { ME_ACCESS_KEY, useMeAccess } from "../lib/access";
 import { Avatar } from "../lib/ui";
 import { photoError } from "../lib/photo-error";
-import { AGE_RANGES, ETHNICITIES, GENDERS, ageLabel, toggleEthnicity, type Gender } from "../lib/profileFields";
+import { AGE_RANGES, ETHNICITIES, GENDERS, GENDERS_WITH_UNSPECIFIED, ageLabel, toggleEthnicity, type Gender } from "../lib/profileFields";
 
 /*
   The Weekend Starter's simpler sign-up (creatorhive-app docs/weekend-signup.md).
@@ -126,7 +126,7 @@ function CreatePassword({ email, onDone }: { email: string; onDone: () => void }
 const BIO_MAX = 160;
 const PHOTO_NEEDED = "Show us that face! Add a photo so the hive knows who you are.";
 
-interface Profile { name: string; avatarUrl: string | null; bio: string | null; gender: Gender | "unspecified" | null; ageRange?: string | null; ethnicities?: string[] }
+interface Profile { name: string; avatarUrl: string | null; bio: string | null; gender: Gender | null; ageRange?: string | null; ethnicities?: string[]; askProfileFields?: boolean }
 
 function Welcome({ user, onUser, firstTime, onDone }: { user: SessionUser; onUser: (patch: Partial<SessionUser>) => void; firstTime: boolean; onDone: () => void }) {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -144,7 +144,7 @@ function Welcome({ user, onUser, firstTime, onDone }: { user: SessionUser; onUse
   useEffect(() => {
     void api<{ profile: Profile }>("/api/profile").then(({ profile: p }) => {
       setProfile(p);
-      setGender(p.gender === "female" || p.gender === "male" ? p.gender : null);
+      setGender(p.askProfileFields && p.gender === "unspecified" ? null : p.gender);
       setAgeRange(p.ageRange ?? null);
       setEthnicities(Array.isArray(p.ethnicities) ? p.ethnicities : []);
       setBio(p.bio ?? "");
@@ -175,7 +175,7 @@ function Welcome({ user, onUser, firstTime, onDone }: { user: SessionUser; onUse
         if (!upload.ok) throw new Error(photoError(upload.error, upload.data));
         avatarUrl = (upload.data as { avatarUrl?: string } | undefined)?.avatarUrl ?? avatarUrl;
       }
-      await api("/api/profile", { method: "PATCH", body: { gender, ageRange, ethnicities, bio } });
+      await api("/api/profile", { method: "PATCH", body: ask ? { gender, ageRange, ethnicities, bio } : { gender, bio } });
       // The profile step is done: the Welcome channel next when the server names it (Nov 27 2026), else Home.
       // It answers 409 PROFILE_FIELDS while gender, age range or ethnicity is missing (servers from Nov 30 2026).
       const welcome = await api<{ welcomeChannel?: { id: string; slug: string } | null }>("/api/me/welcome", { method: "POST" }).catch((caught) => {
@@ -201,14 +201,16 @@ function Welcome({ user, onUser, firstTime, onDone }: { user: SessionUser; onUse
   const name = profile?.name || user.name || "Creator";
   const avatar = preview ?? profile?.avatarUrl ?? user.image ?? null;
   const bioLength = [...bio].length;
-  const fieldsSet = Boolean(gender && ageRange && ethnicities.length);
+    // Students (`askProfileFields`): gender Female or Male, age range and ethnicity, all required.
+  const ask = profile?.askProfileFields === true;
+  const fieldsSet = !ask || Boolean(gender && gender !== "unspecified" && ageRange && ethnicities.length);
   return (
     <div className="signin first-steps">
       <div className="signin-card fs-wide">
         <div className="mark"><img src="./ch-logo.svg" alt="" /></div>
         <span className="fs-eyebrow">One last step</span>
         <h1>Complete your profile</h1>
-        <p>Add a photo so the hive can recognize you, then tell us a little about you. Only the bio is optional.</p>
+        <p>{ask ? "Add a photo so the hive can recognize you, then tell us a little about you. Only the bio is optional." : "Add a photo so the hive can recognize you. The rest is up to you."}</p>
         <div className="signin-form fs-form">
           <div className={`fs-photo ${photoPrompt ? "needs" : ""}`}>
             <Avatar name={name} src={avatar} size={88} seed={user.id} />
@@ -223,37 +225,41 @@ function Welcome({ user, onUser, firstTime, onDone }: { user: SessionUser; onUse
             <legend>Gender</legend>
             <small className="fs-hint">So we can celebrate you as a King or Queen Bee 🐝</small>
             <div>
-              {GENDERS.map((option) => (
+              {(ask ? GENDERS : GENDERS_WITH_UNSPECIFIED).map((option) => (
                 <button key={option.value} type="button" className={`chip ${gender === option.value ? "on" : ""}`} aria-pressed={gender === option.value} onClick={() => setGender(option.value)}>
                   {gender === option.value ? <Check /> : null}{option.label}
                 </button>
               ))}
             </div>
           </fieldset>
-          <fieldset className="fs-gender" disabled={saving}>
-            <legend>Age range</legend>
-            <div>
-              {AGE_RANGES.map((range) => (
-                <button key={range} type="button" className={`chip ${ageRange === range ? "on" : ""}`} aria-pressed={ageRange === range} onClick={() => setAgeRange(range)}>
-                  {ageRange === range ? <Check /> : null}{ageLabel(range)}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-          <fieldset className="fs-gender" disabled={saving}>
-            <legend>Ethnicity</legend>
-            <small className="fs-hint">Choose all that apply.</small>
-            <div>
-              {ETHNICITIES.map((value) => {
-                const on = ethnicities.includes(value);
-                return (
-                  <button key={value} type="button" className={`chip ${on ? "on" : ""}`} aria-pressed={on} onClick={() => setEthnicities(toggleEthnicity(ethnicities, value))}>
-                    {on ? <Check /> : null}{value}
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
+          {ask ? (
+            <>
+              <fieldset className="fs-gender" disabled={saving}>
+                <legend>Age range</legend>
+                <div>
+                  {AGE_RANGES.map((range) => (
+                    <button key={range} type="button" className={`chip ${ageRange === range ? "on" : ""}`} aria-pressed={ageRange === range} onClick={() => setAgeRange(range)}>
+                      {ageRange === range ? <Check /> : null}{ageLabel(range)}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+              <fieldset className="fs-gender" disabled={saving}>
+                <legend>Ethnicity</legend>
+                <small className="fs-hint">Choose all that apply.</small>
+                <div>
+                  {ETHNICITIES.map((value) => {
+                    const on = ethnicities.includes(value);
+                    return (
+                      <button key={value} type="button" className={`chip ${on ? "on" : ""}`} aria-pressed={on} onClick={() => setEthnicities((list) => toggleEthnicity(list, value))}>
+                        {on ? <Check /> : null}{value}
+                      </button>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            </>
+          ) : null}
           <label htmlFor="welcome-bio">Short bio <span className="fs-optional">Optional</span></label>
           <textarea id="welcome-bio" className="field area" rows={3} maxLength={BIO_MAX} disabled={saving} value={bio}
             placeholder="UGC creator, storyteller, and matcha enthusiast." onChange={(event) => setBio(event.target.value)} />

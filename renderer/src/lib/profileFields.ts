@@ -1,15 +1,19 @@
 /*
-  Every member's gender, age range and ethnicity (creatorhive-app
+  A student's gender, age range and ethnicity (creatorhive-app
   docs/affiliate-job-board-v2.md §4): the same options as an affiliate
   campaign's "Creator wanted". Asked in the welcome step, editable in
-  Settings → Account → Profile.
+  Settings → Account → Profile, only when GET /api/profile says
+  `askProfileFields` (Academy, Weekend Starter, Challenger students).
 */
 
-export type Gender = "female" | "male";
+export type Gender = "female" | "male" | "unspecified";
+/** Students asked for the three fields (`askProfileFields`): Female or Male. */
 export const GENDERS: { value: Gender; label: string }[] = [
   { value: "female", label: "Female" },
   { value: "male", label: "Male" },
 ];
+/** Everyone else keeps the choice they had. */
+export const GENDERS_WITH_UNSPECIFIED: { value: Gender; label: string }[] = [...GENDERS, { value: "unspecified", label: "Prefer not to say" }];
 
 export const AGE_RANGES = ["18-24", "25-34", "35-44", "45-54", "55+"] as const;
 /** "25–34": stored with a hyphen, shown with an en dash. */

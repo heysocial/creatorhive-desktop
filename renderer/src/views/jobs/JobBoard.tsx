@@ -32,8 +32,9 @@ export function JobBoardSoonItem() {
     <button className={`sb-item locked ${on ? "on" : ""}`} aria-label="Job board, coming soon" title="Job board · Coming soon"
       aria-current={on ? "page" : undefined} onClick={() => nav.open({ kind: "jobs" }, "home", "ch")}>
       <Briefcase />
-      <span className="label">Job board · Coming soon</span>
-      <Lock className="sb-lock" aria-hidden />
+      <span className="label">Job board</span>
+      <span className="meta">Coming soon</span>
+      <Lock className="sb-lock jb-soon-lock" aria-hidden />
     </button>
   );
 }
@@ -417,7 +418,7 @@ export function UploadDialog({ campaign, onClose }: { campaign: AffiliateCampaig
   );
 
   return (
-    <Modal title={`Upload videos to ${campaign.brand.name}`} onClose={close} width={640} foot={foot}>
+    <Modal title={`Upload videos to ${campaign.brand.name}`} onClose={close} width={560} foot={foot}>
       <div className={`jb-up ${over ? "over" : ""}`} {...dropProps}>
         <input ref={picker} type="file" multiple accept={CAMPAIGN_VIDEO_ACCEPT} hidden
           onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ""; void add(files); }} />

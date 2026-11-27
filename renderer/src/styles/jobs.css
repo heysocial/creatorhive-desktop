@@ -63,5 +63,8 @@
 .jb-up-foot { display: flex; align-items: center; gap: 8px; width: 100%; }
 .jb-up-progress { flex: 1; min-width: 0; font-size: 13px; }
 
+/* The sidebar's "Job board · Coming soon" row: the lock right after the note. */
+.sb-item .sb-lock.jb-soon-lock { margin-left: 6px; }
+
 /* The profile step's and Settings' age range and ethnicity (shell/FirstSteps.tsx, views/settings/Settings.tsx). */
 .set-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; max-width: 360px; }
