@@ -28,6 +28,8 @@ export function screenFor(location: Location): string {
     case "profile": return "Profile";
     case "leaderboard": return "Leaderboard";
     case "members": return "Members";
+    case "jobs": return view.section === "brands" ? "Job board → Brands" : "Job board";
+    case "affiliate-campaign": return "Job board → Affiliate campaign";
     case "channel": return `${hs}Channel${view.threadId ? " → Thread" : ""}`;
     case "dm": return `${hs}DM${view.threadId ? " → Thread" : ""}`;
     case "dms-home": return `${hs}DMs`;

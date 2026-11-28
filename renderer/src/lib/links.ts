@@ -46,6 +46,9 @@ export function locationForPath(target: string): Location | null {
     return { ws: "ch", section: "learn", view: { kind: "video-review", video: video >= 1 && video <= 3 ? video : undefined } };
   }
   if (/^\/(library|improve)\/videos\/?$/.test(url.pathname)) return { ws: "ch", section: "learn", view: { kind: "learn", page: "improve" } };
+  // A campaign video's notification (approved, bought, not accepted): the campaign's page (docs/affiliate-job-board-v2.md).
+  const campaign = /^\/jobs\/affiliates\/([^/]+)\/?$/.exec(url.pathname)?.[1];
+  if (campaign) return { ws: "ch", section: "home", view: { kind: "affiliate-campaign", id: decodeURIComponent(campaign) } };
   const editCard = /^\/video-edits(?:\/([0-9a-f-]{36}))?\/?$/i.exec(url.pathname);
   if (editCard) return { ws: "ch", section: "edits", view: { kind: "video-edits", cardId: editCard[1] } };
   if (/^\/(library|improve)\/video-editor\/?$/.test(url.pathname)) return { ws: "ch", section: "learn", view: { kind: "video-editor" } };

@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { contactLabel, useAreaHidden, useAreaLocked, useHubHidden, useMeAccess, useStarterContacts, type StarterContact } from "../lib/access";
+import { useJobBoardAccess } from "../lib/jobs";
+import { JobBoardSoonItem } from "../views/jobs/JobBoard";
 import {
   Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
   Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen, Briefcase, ExternalLink,
@@ -186,8 +188,9 @@ function CreatorHiveHome({ isOwner }: { isOwner: boolean }) {
   const eventsLocked = useAreaLocked("events");
   const leaderboardLocked = useAreaLocked("leaderboard");
   const membersLocked = useAreaLocked("members");
-  // An agency's creator (Current Commerce): the Job board, on the website for now (servers from Nov 27 2026).
-  const jobBoard = useMeAccess().data?.jobBoard === true;
+  // The Job board (docs/affiliate-job-board-v2.md): native with its Affiliates section; an agency's
+  // creator without it (Current Commerce) keeps the website's Brands; "Coming soon" while it's locked.
+  const jobBoard = useJobBoardAccess();
   return (
     <>
       <SidebarHead title="CreatorHive" action={() => commands.run("new-message")} />
@@ -198,7 +201,9 @@ function CreatorHiveHome({ isOwner }: { isOwner: boolean }) {
         <SidebarItem icon={<Calendar />} label="Events" view={{ kind: "events" }} meta={nextEvent} locked={eventsLocked} />
         <SidebarItem icon={<Trophy />} label="Leaderboard" view={{ kind: "leaderboard" }} locked={leaderboardLocked} />
         <SidebarItem icon={<Users />} label="Members" view={{ kind: "members" }} locked={membersLocked} />
-        {jobBoard ? (
+        {jobBoard === "native" ? <SidebarItem icon={<Briefcase />} label="Job board" view={{ kind: "jobs" }} /> : null}
+        {jobBoard === "soon" ? <JobBoardSoonItem /> : null}
+        {jobBoard === "website" ? (
           <button className="sb-item" title="Opens the Job board on the website" onClick={() => ch.app.openSite("/jobs")}>
             <Briefcase />
             <span className="label">Job board</span>

@@ -61,6 +61,12 @@ export interface MeAccessResponse {
   access: MeAccess;
   /** An agency's creator: their Job board is open (servers from Nov 27 2026: Current Commerce). */
   jobBoard?: boolean;
+  /** The Job board with its Affiliates section (and Brands): the native Job board (servers from Nov 30 2026). */
+  affiliateJobs?: boolean;
+  /** "Job board · Coming soon": the board isn't open for this member yet. */
+  jobBoardLocked?: boolean;
+  /** Gender, age range or ethnicity still missing: the profile step comes back first (docs/affiliate-job-board-v2.md §4). */
+  profileFieldsRequired?: boolean;
   mustChangePassword?: boolean;
   welcomePending?: boolean;
 }

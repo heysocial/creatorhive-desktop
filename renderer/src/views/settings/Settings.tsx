@@ -10,6 +10,8 @@ import { ThemePicker } from "../heysocial/ThemePicker";
 import { MemberTitles } from "./MemberTitles";
 import { setHelpButtonHidden, useSupport } from "../../lib/support";
 import { photoError } from "../../lib/photo-error";
+import { AGE_RANGES, ETHNICITIES, ageLabel, toggleEthnicity } from "../../lib/profileFields";
+import "../../styles/jobs.css";
 
 /* The Settings window (⌘,): what this Mac does, and your account on the server. */
 
@@ -195,7 +197,7 @@ function Help() {
   );
 }
 
-interface Profile { name: string; avatarUrl: string | null; bio: string | null; instagram: string | null; location: string | null; headline: string | null; gender: "male" | "female" | "unspecified" | null }
+interface Profile { name: string; avatarUrl: string | null; bio: string | null; instagram: string | null; location: string | null; headline: string | null; gender: "male" | "female" | "unspecified" | null; ageRange?: string | null; ethnicities?: string[]; askProfileFields?: boolean }
 
 function Account({ user }: { user: SessionUser }) {
   const profile = useQuery({ queryKey: ["my-profile"], queryFn: async () => (await api<{ profile: Profile }>("/api/profile")).profile });
@@ -205,7 +207,7 @@ function Account({ user }: { user: SessionUser }) {
   const [avatarBusy, setAvatarBusy] = useState(false);
   const picker = useRef<HTMLInputElement>(null);
   const v = { ...(profile.data ?? {}), ...draft } as Profile;
-  const field = (key: keyof Profile, label: string, max: number, area = false) => (
+  const field = (key: "name" | "headline" | "location" | "instagram" | "bio", label: string, max: number, area = false) => (
     <Row title={label}>
       {area ? <textarea className="field area" maxLength={max} value={v[key] ?? ""} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
         : <input className="field" maxLength={max} value={v[key] ?? ""} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />}
@@ -245,10 +247,41 @@ function Account({ user }: { user: SessionUser }) {
         {field("instagram", "Instagram", 60)}
         {field("bio", "Bio", 160, true)}
         <Row title="Gender" sub="Sets King Bee or Queen Bee at the top tier">
-          <select value={v.gender ?? ""} onChange={(e) => setDraft({ ...draft, gender: (e.target.value || null) as Profile["gender"] })}>
-            <option value="">Not set</option><option value="female">Female</option><option value="male">Male</option><option value="unspecified">Prefer not to say</option>
-          </select>
+          {v.askProfileFields ? (
+            <select value={v.gender === "female" || v.gender === "male" ? v.gender : ""} onChange={(e) => setDraft({ ...draft, gender: (e.target.value || null) as Profile["gender"] })}>
+              <option value="" disabled>Not set</option><option value="female">Female</option><option value="male">Male</option>
+            </select>
+          ) : (
+            <select value={v.gender ?? ""} onChange={(e) => setDraft({ ...draft, gender: (e.target.value || null) as Profile["gender"] })}>
+              <option value="">Not set</option><option value="female">Female</option><option value="male">Male</option><option value="unspecified">Prefer not to say</option>
+            </select>
+          )}
+          {errors.gender ? <small className="late-text">{errors.gender}</small> : null}
         </Row>
+        {v.askProfileFields ? (
+          <>
+        <Row title="Age range">
+              <select value={v.ageRange ?? ""} onChange={(e) => setDraft({ ...draft, ageRange: e.target.value || null })}>
+                <option value="" disabled>Not set</option>
+                {AGE_RANGES.map((range) => <option key={range} value={range}>{ageLabel(range)}</option>)}
+              </select>
+              {errors.ageRange ? <small className="late-text">{errors.ageRange}</small> : null}
+            </Row>
+            <Row title="Ethnicity" sub="Choose all that apply">
+              <span className="set-chips">
+                {ETHNICITIES.map((value) => {
+                  const list = Array.isArray(v.ethnicities) ? v.ethnicities : [];
+                  const on = list.includes(value);
+                  return (
+                    <button key={value} type="button" className={`chip ${on ? "on" : ""}`} aria-pressed={on}
+                      onClick={() => setDraft({ ...draft, ethnicities: toggleEthnicity(list, value) })}>{value}</button>
+                  );
+                })}
+              </span>
+              {errors.ethnicities ? <small className="late-text">{errors.ethnicities}</small> : null}
+            </Row>
+          </>
+        ) : null}
         <div className="set-row" style={{ justifyContent: "flex-end" }}>
           <button className="btn honey" disabled={busy || Object.keys(draft).length === 0} onClick={async () => {
             setBusy(true);

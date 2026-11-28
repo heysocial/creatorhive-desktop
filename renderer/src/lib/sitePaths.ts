@@ -44,6 +44,10 @@ export function sitePathFor({ ws, view }: Location): string {
       return "/leaderboard";
     case "members":
       return "/members";
+    case "jobs":
+      return view.section === "brands" ? "/jobs?section=brands" : "/jobs";
+    case "affiliate-campaign":
+      return "/jobs?section=affiliates";
     case "hub":
       return view.page === "deals" || view.page === "invoices" ? "/hub" : `/hub/${view.page}`;
     case "learn":

@@ -33,6 +33,7 @@ import { Activity } from "./activity/Activity";
 import { HsMentions, HsSaved, HsThreads } from "./heysocial/Lists";
 import { HsPeople } from "./heysocial/People";
 import { Admin } from "./admin/Admin";
+import { AffiliateCampaignPage, JobBoard } from "./jobs/JobBoard";
 
 /** The screen for a place in the app. */
 function Built({ location, user }: { location: Location; user: SessionUser }) {
@@ -52,6 +53,10 @@ function Built({ location, user }: { location: Location; user: SessionUser }) {
       return <Leaderboard />;
     case "members":
       return <Members user={user} />;
+    case "jobs":
+      return <JobBoard section={view.section} />;
+    case "affiliate-campaign":
+      return <AffiliateCampaignPage key={view.id} id={view.id} />;
     case "profile":
       return <ProfilePage key={view.id} id={view.id} user={user} />;
     case "channel":
