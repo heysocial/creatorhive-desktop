@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Bell, BellOff, ExternalLink, Hash, Info, Lock, Pin, SquareArrowOutUpRight, Star, Upload, Users, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ch, type SessionUser } from "../../lib/bridge";
-import { ADMINS_ONLY_TEXT, api, ApiError, keys, queryClient, rateLimitMessage, useChannels, useConversations, type Conversation as Convo, type Workspace } from "../../lib/api";
+import { ADMINS_ONLY_TEXT, api, ApiError, keys, queryClient, rateLimitMessage, useChannels, useBrandConversations, useConversations, type Conversation as Convo, type Workspace } from "../../lib/api";
 import {
   addMessage, retryVideoSend, sendVideoJobs, uploadVideo, watchVideos, deleteMessage, editMessage, flatten, markRead, removeMessage, sendMessage, toggleReaction, patchMessage, useChannelMembers, useHsMembers, useMembers, useMessages, useReplies,
   type Author, type Message, type Thread,
@@ -384,8 +384,12 @@ export function Conversation({ where, user, workspace, popout = false, threadId:
   const huddles = useHuddles(heySocial).data;
   const channels = useChannels(workspace, where.kind === "channel").data;
   const conversations = useConversations(workspace, where.kind === "dm").data;
+  // A brand's or the agency's DM (Current Commerce's team): not in the DM list, found here.
+  const brandConversations = useBrandConversations(where.kind === "dm" && workspace === "creatorhive").data;
   const channel = where.kind === "channel" ? channels?.find((c) => c.id === where.id) : undefined;
-  const conversation = where.kind === "dm" ? conversations?.find((c) => c.id === where.id) : undefined;
+  const conversation = where.kind === "dm"
+    ? conversations?.find((c) => c.id === where.id) ?? brandConversations?.find((c) => c.id === where.id)
+    : undefined;
   const realtimeChannel = where.kind === "channel" ? `channel:${where.id}` : conversation?.realtimeChannel ?? null;
   const [threadId, setThreadId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<Message | null>(null);

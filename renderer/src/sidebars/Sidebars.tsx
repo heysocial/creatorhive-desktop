@@ -4,7 +4,7 @@ import {
   Calendar, ChartNoAxesCombined, Contact, Download, GraduationCap, Hash, House, Kanban,
   Lightbulb, Lock, Receipt, Search, Sun, Trophy, Users, BookOpen, Briefcase, ExternalLink,
 } from "lucide-react";
-import { api, keys, queryClient, useChannels, useConversations, type Channel, type Conversation, type Workspace } from "../lib/api";
+import { api, keys, queryClient, useBrandConversations, useChannels, useConversations, type Channel, type Conversation, type Workspace } from "../lib/api";
 import { ch, type SessionUser } from "../lib/bridge";
 import { commands } from "../lib/commands";
 import { nav, useNav } from "../lib/nav";
@@ -147,6 +147,35 @@ function DmList({ workspace, limit = 12 }: { workspace: Workspace; limit?: numbe
           view={{ kind: "dm", id: conversation.id }} count={conversation.unreadCount} />
       ))}
     </SidebarSection>
+    {workspace === "creatorhive" ? <BrandDms /> : null}
+    </>
+  );
+}
+
+/** A brand's or the agency's team writing to this creator (Current Commerce, Nov 28 2026): a section per brand. */
+function BrandDms() {
+  const { data } = useBrandConversations();
+  const groups = useMemo(() => {
+    const byBrand = new Map<string, { name: string; conversations: Conversation[] }>();
+    for (const c of data ?? []) {
+      const brand = (c as { brand?: { id: string; name: string } }).brand;
+      const key = brand?.id ?? "brand";
+      const group = byBrand.get(key) ?? { name: brand?.name || "Brands", conversations: [] };
+      group.conversations.push(c);
+      byBrand.set(key, group);
+    }
+    return [...byBrand.entries()].map(([id, group]) => [id, { ...group, conversations: [...group.conversations].sort(byRecent) }] as const);
+  }, [data]);
+  return (
+    <>
+      {groups.map(([id, group]) => (
+        <SidebarSection key={id} id={`brand-dms-${id}`} title={group.name}>
+          {group.conversations.map((conversation) => (
+            <SidebarItem key={conversation.id} icon={dmAvatar(conversation)} label={conversation.displayName}
+              view={{ kind: "dm", id: conversation.id }} count={conversation.unreadCount} />
+          ))}
+        </SidebarSection>
+      ))}
     </>
   );
 }

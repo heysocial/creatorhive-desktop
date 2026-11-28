@@ -148,6 +148,19 @@ export function useChannels(workspace: Workspace, enabled = true) {
   return useQuery({ queryKey: keys.channels(workspace), enabled, queryFn: () => fetchChannels(workspace) });
 }
 
+/**
+ * The viewer's brand and agency DMs (servers from Nov 28 2026): a brand's or Current Commerce's team writing to
+ * a creator. Listed beside the DMs; opened like any DM. Older servers answer CreatorHive's DMs, filtered out here.
+ */
+export function useBrandConversations(enabled = true) {
+  return useQuery({
+    queryKey: ["conversations", "brand"],
+    enabled,
+    queryFn: async () => (await api<{ conversations: Conversation[] }>("/api/dms?workspace=brand")).conversations
+      .filter((c) => (c.workspace as string) === "brand"),
+  });
+}
+
 export function useConversations(workspace: Workspace, enabled = true) {
   return useQuery({
     queryKey: keys.conversations(workspace),
